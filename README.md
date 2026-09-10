@@ -81,12 +81,51 @@ fails, which is why:
 *server*, which is the only place that question can be answered. Use it
 before concluding anything about a failure.
 
+#### Beta is computed, not quoted
+
+Because the quote endpoint answers only when the crumb happens to mint,
+trusting Yahoo's published beta left the figure — and the valuation —
+depending on which endpoint Yahoo felt like serving. AAPL came back 1.085
+quoted and 1.088 computed on the same afternoon; before that, most requests
+lost beta entirely and fell back to 1.0, which moves WACC by several hundred
+basis points.
+
+`fetch_beta()` therefore computes it from the chart endpoint, using Yahoo's
+own convention — five years of monthly returns against `^GSPC`. Checked
+against their published figure for fifteen tickers: **mean absolute
+difference 0.037**, max 0.162. The computed value is preferred even when a
+quoted one is available, because determinism is the point; a quoted beta is
+used only if the computation fails, and 1.0 only if both do.
+
+`wacc_inputs` in the response says which path produced the number.
+
 Errors distinguish a symbol Yahoo positively denies (404) from one it will
 not currently serve (429/502). An empty response is never reported as an
 unknown ticker.
 
 ## The app
 
-`app/lib/valuation_api.dart` holds `kBackendBaseUrl`. It points at
-`http://10.0.2.2:8000` — the Android emulator's alias for the host machine.
-Change it to the deployed HTTPS URL to run against the server.
+`app/lib/valuation_api.dart` holds `kBackendBaseUrl`, which defaults to the
+deployed service — a distributed build cannot reach a server on the
+developer's machine. To run against a local backend:
+
+```bash
+flutter run --dart-define=BACKEND_BASE_URL=http://10.0.2.2:8000
+```
+
+`10.0.2.2` is the Android emulator's alias for the host machine; `localhost`
+would resolve to the emulator itself.
+
+### Cold starts
+
+The free instance sleeps after about fifteen minutes idle and takes roughly a
+minute to wake, so the app:
+
+- allows **90 seconds** for a valuation and 120 for an Excel export (at the
+  old 30 seconds the first request of a session failed reliably);
+- pings `/health` on launch, so the spin-up overlaps with the user typing a
+  ticker rather than being paid for by their first valuation;
+- switches the spinner to *"Waking up the server — this can take up to a
+  minute on the first use after a while"* once a request passes four seconds.
+
+The wait is the same either way; only one version of it is legible.
