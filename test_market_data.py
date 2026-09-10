@@ -394,6 +394,32 @@ def test_fallback_profile_is_not_used_for_an_unknown_ticker(monkeypatch):
         M.fetch_financials("ZZZZ")
 
 
+def test_unrecognised_quote_type_is_not_mistaken_for_a_fund(monkeypatch):
+    """
+    Yahoo answers quoteType "NONE" in a degraded response.
+
+    Treating anything that is not "EQUITY" as a fund produced
+    "'HOLX' is a none, not a company" for an ordinary listed business during
+    a throttle. Only recognised fund-like types justify a 404.
+    """
+    install(monkeypatch, FakeTicker(
+        info={"symbol": "HOLX", "longName": "Hologic", "quoteType": "NONE",
+              "currentPrice": 60.0}))
+
+    with pytest.raises(DataUnavailableError) as excinfo:
+        M.fetch_financials("HOLX")
+    assert not isinstance(excinfo.value, TickerNotFoundError)
+
+
+def test_a_real_etf_is_still_a_404(monkeypatch):
+    """The allow-list must not let funds through as transient errors."""
+    install(monkeypatch, FakeTicker(
+        info={"symbol": "SPY", "quoteType": "ETF", "longName": "SPDR",
+              "currentPrice": 762.4}))
+    with pytest.raises(TickerNotFoundError, match="etf"):
+        M.fetch_financials("SPY")
+
+
 def test_symbol_probe_requires_an_exact_match(monkeypatch):
     """
     Yahoo's search is fuzzy: querying ZZZZ returns ZZZZIX, a test fund.

@@ -708,6 +708,16 @@ def _call(description: str, ticker: str, fn: Callable[[], Any]) -> Any:
     ) from last
 
 
+# Quote types that genuinely publish no income statement. An allow-list
+# rather than "anything that is not EQUITY", because Yahoo puts arbitrary
+# values here in a degraded response and an unrecognised one must not be
+# mistaken for a fund.
+_NON_COMPANY_QUOTE_TYPES = frozenset({
+    "ETF", "MUTUALFUND", "INDEX", "CURRENCY", "CRYPTOCURRENCY",
+    "FUTURE", "OPTION", "ECNQUOTE",
+})
+
+
 def _is_empty_frame(frame) -> bool:
     return frame is None or bool(getattr(frame, "empty", True))
 
@@ -995,7 +1005,12 @@ def fetch_financials(ticker: str,
 
         if not income:
             quote_type = (info.get("quoteType") or "").upper()
-            if quote_type and quote_type != "EQUITY":
+            # Only a type we positively recognise as not-a-company justifies a
+            # 404. Yahoo answers "NONE" - and other junk - in a degraded
+            # response, and treating anything that merely is not "EQUITY" as
+            # a fund produced the memorable "'HOLX' is a none, not a company"
+            # for a perfectly ordinary listed business during a throttle.
+            if quote_type in _NON_COMPANY_QUOTE_TYPES:
                 raise TickerNotFoundError(
                     f"'{ticker}' is a {quote_type.lower()}, not a company.\n"
                     "  ETFs and funds publish no income statement, so there "
