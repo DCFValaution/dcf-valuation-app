@@ -713,6 +713,84 @@ def _looks_like_a_real_quote(info: dict) -> bool:
                 or info.get("longName") or info.get("shortName"))
 
 
+_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{}"
+
+
+def crumb_free_profile(ticker: str) -> dict | None:
+    """
+    Build a profile from endpoints that need no crumb, or None if that fails.
+
+    Yahoo mints the crumb that authenticates its quote endpoint only rarely
+    for a datacentre IP - measured at roughly one attempt in fourteen from
+    Render - while serving the chart, search and fundamentals endpoints
+    normally. Since the financial statements arrive over the unauthenticated
+    path, the profile is the only thing standing between a cloud deployment
+    and a working valuation, so it is rebuilt from what is actually served.
+
+    What is recoverable: price, currency, exchange, company name, quote type.
+    What is not: beta, sector, industry, marketCap and sharesOutstanding.
+
+    Beta's absence is the one with teeth - it drives the CAPM cost of equity,
+    and its loss makes WACC fall back to the documented global default. That
+    is reported in the valuation's assumption sourcing rather than hidden,
+    and it is a far better outcome than refusing to value the company. The
+    share count is unaffected: it comes from the income statement's diluted
+    average, which the statements carry.
+    """
+    session = _browser_session()
+
+    name = quote_type = None
+    try:
+        found = session.get(
+            _SEARCH_URL,
+            params={"q": ticker, "quotesCount": 1, "newsCount": 0},
+            timeout=20)
+        if found.status_code == 200:
+            quotes = found.json().get("quotes") or []
+            if quotes:
+                name = quotes[0].get("shortname") or quotes[0].get("longname")
+                quote_type = quotes[0].get("quoteType")
+    except Exception:
+        pass
+
+    try:
+        chart = session.get(_CHART_URL.format(ticker),
+                            params={"range": "1d", "interval": "1d"},
+                            timeout=20)
+        if chart.status_code != 200:
+            return None
+        meta = chart.json()["chart"]["result"][0]["meta"]
+    except Exception:
+        return None
+
+    price = meta.get("regularMarketPrice") or meta.get("previousClose")
+    if not price:
+        return None
+
+    return {
+        "symbol": meta.get("symbol") or ticker,
+        "companyName": meta.get("longName") or meta.get("shortName")
+                       or name or ticker,
+        "sector": None,
+        "industry": None,
+        "exchange": meta.get("fullExchangeName") or meta.get("exchangeName"),
+        # Unavailable without the quote endpoint. WACC falls back to the
+        # global default, which the report labels as defaulted rather than
+        # derived.
+        "beta": None,
+        "marketCap": None,
+        "price": float(price),
+        "sharesOutstanding": None,
+        "currency": meta.get("currency"),
+        # Unknown here. _check_currency() treats an unknown reporting
+        # currency as "do not block", which is the existing behaviour.
+        "financialCurrency": None,
+        "quoteType": quote_type or "EQUITY",
+        "profileSource": "crumb-free fallback (chart + search); "
+                         "beta and sector unavailable",
+    }
+
+
 def _empty_quote_error(ticker: str) -> MarketDataError:
     """
     Decide what an empty profile for *ticker* actually means.
@@ -808,13 +886,31 @@ def fetch_financials(ticker: str,
         handle = yf.Ticker(ticker, session=_browser_session())
         info = _call("a company profile", ticker, lambda: handle.info) or {}
 
-        if not _looks_like_a_real_quote(info):
+        profile: dict | None = None
+
+        if _looks_like_a_real_quote(info):
+            _check_currency(info, ticker)
+            profile = _profile_from(info, ticker)
+        else:
             # An empty profile is ambiguous - an unknown symbol and a refused
             # request look identical here. Ask Yahoo directly before deciding,
             # so a block is never reported as a missing company.
-            raise _empty_quote_error(ticker)
+            error = _empty_quote_error(ticker)
 
-        _check_currency(info, ticker)
+            if isinstance(error, TickerNotFoundError):
+                raise error
+
+            # The symbol is real; Yahoo simply would not authenticate the
+            # quote endpoint. The statements come over a path that needs no
+            # crumb, so rebuild the profile from what is served rather than
+            # failing a valuation we can very nearly complete.
+            profile = crumb_free_profile(ticker)
+            if profile is None:
+                raise error
+            logging.getLogger(__name__).warning(
+                "%s: quote endpoint unavailable, using crumb-free profile "
+                "(beta unavailable, WACC will fall back to the default)",
+                ticker)
 
         income_frame = _call("an income statement", ticker,
                              lambda: handle.income_stmt)
@@ -859,7 +955,7 @@ def fetch_financials(ticker: str,
 
         financials = CompanyFinancials(
             ticker=ticker,
-            profile=_profile_from(info, ticker),
+            profile=profile,
             income=income,
             balance=balance,
             cashflow=cashflow,

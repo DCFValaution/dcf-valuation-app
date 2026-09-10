@@ -345,6 +345,50 @@ def test_genuinely_absent_symbol_is_still_a_404(monkeypatch):
         M.fetch_financials("ZZZZ")
 
 
+def test_blocked_quote_endpoint_still_produces_a_valuation(monkeypatch):
+    """
+    The case that actually happens on a cloud IP.
+
+    Yahoo withholds the crumb-authenticated quote endpoint but serves the
+    statements, so the profile is rebuilt from the crumb-free chart and
+    search endpoints and the valuation completes - without a beta, which
+    makes WACC fall back to its documented default.
+    """
+    # Statements arrive; the profile does not.
+    install(monkeypatch, FakeTicker(
+        info={"trailingPegRatio": None},
+        income=frame(AAPL_INCOME), balance=frame(AAPL_BALANCE),
+        cashflow=frame(AAPL_CASHFLOW)))
+    monkeypatch.setattr(M, "probe_symbol", lambda ticker: ("found", "1 match(es)"))
+    monkeypatch.setattr(M, "crumb_free_profile", lambda ticker: {
+        "symbol": "AAPL", "companyName": "Apple Inc.", "sector": None,
+        "industry": None, "exchange": "NMS", "beta": None, "marketCap": None,
+        "price": 315.34, "sharesOutstanding": None, "currency": "USD",
+        "financialCurrency": None, "quoteType": "EQUITY",
+    })
+
+    base, meta = M.fetch_with_meta("AAPL")
+
+    assert meta["company_name"] == "Apple Inc."
+    assert base.current_price == pytest.approx(315.34)
+    assert base.revenue == pytest.approx(416_161, abs=1)
+    # The share count is unaffected: it comes from the income statement.
+    assert base.shares == pytest.approx(15_004.7, abs=0.1)
+
+
+def test_fallback_profile_is_not_used_for_an_unknown_ticker(monkeypatch):
+    """A symbol Yahoo says does not exist must still 404, not be invented."""
+    install(monkeypatch, FakeTicker(info={"trailingPegRatio": None}))
+    monkeypatch.setattr(M, "probe_symbol", lambda ticker: ("absent", "no match"))
+
+    def must_not_run(ticker):
+        raise AssertionError("should not fabricate a profile for a real 404")
+
+    monkeypatch.setattr(M, "crumb_free_profile", must_not_run)
+    with pytest.raises(TickerNotFoundError):
+        M.fetch_financials("ZZZZ")
+
+
 def test_transient_failures_are_retried(monkeypatch):
     """One blip must not fail a valuation outright."""
     real = FakeTicker(info=AAPL_INFO, income=frame(AAPL_INCOME),
