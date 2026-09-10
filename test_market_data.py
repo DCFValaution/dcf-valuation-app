@@ -389,6 +389,43 @@ def test_fallback_profile_is_not_used_for_an_unknown_ticker(monkeypatch):
         M.fetch_financials("ZZZZ")
 
 
+def test_empty_statements_are_retried_not_reported_as_missing(monkeypatch):
+    """
+    A throttled statement request returns an empty DataFrame, not an error.
+
+    That is the commonest cloud failure, and because it raises nothing the
+    exception retry never saw it: one empty frame became "this company files
+    no statements". Emptiness must itself trigger a retry.
+    """
+    attempts = {"n": 0}
+
+    class SometimesEmpty(FakeTicker):
+        @property
+        def income_stmt(self):
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                return pd.DataFrame()      # throttled: empty, no exception
+            return frame(AAPL_INCOME)
+
+    monkeypatch.setattr(M.yf, "Ticker", lambda symbol, **kwargs: SometimesEmpty(
+        info=AAPL_INFO, balance=frame(AAPL_BALANCE),
+        cashflow=frame(AAPL_CASHFLOW)))
+
+    fin = M.fetch_financials("AAPL")
+
+    assert fin.years_available > 0
+    assert attempts["n"] == 3, "should have retried past the empty frames"
+
+
+def test_statements_that_stay_empty_are_transient_not_missing(monkeypatch):
+    """When retries do not rescue it, the error still must not read as a 404."""
+    install(monkeypatch, FakeTicker(info=AAPL_INFO))  # quotes fine, no statements
+
+    with pytest.raises(DataUnavailableError) as excinfo:
+        M.fetch_financials("AAPL")
+    assert not isinstance(excinfo.value, TickerNotFoundError)
+
+
 def test_transient_failures_are_retried(monkeypatch):
     """One blip must not fail a valuation outright."""
     real = FakeTicker(info=AAPL_INFO, income=frame(AAPL_INCOME),

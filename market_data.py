@@ -699,6 +699,50 @@ def _call(description: str, ticker: str, fn: Callable[[], Any]) -> Any:
     ) from last
 
 
+def _is_empty_frame(frame) -> bool:
+    return frame is None or bool(getattr(frame, "empty", True))
+
+
+def _fetch_statement(description: str, ticker: str, attribute: str,
+                     handle: Any, required: bool = False) -> Any:
+    """
+    Fetch one statement, retrying while it comes back empty.
+
+    A throttled statement request is not an error in yfinance's eyes: it
+    returns an empty DataFrame and no exception. _call() only retries on
+    exceptions, so without this the commonest cloud failure got exactly one
+    attempt and was reported as "no financial statements" - which reads to
+    the user as though the company files none.
+
+    Each retry builds a fresh Ticker on a fresh session. Both matter: a
+    Ticker memoises the frame it fetched, so re-reading the same handle
+    would return the cached empty result without asking Yahoo again, and the
+    old session carries the cookie that was just refused.
+
+    `required` marks the income statement, the one the model cannot proceed
+    without. The balance sheet and cash flow are fetched once and allowed to
+    stay empty - _aligned_rows() already contributes empty rows for a period
+    a statement does not cover, and retrying them would triple the request
+    volume that provoked the throttling in the first place.
+    """
+    frame = _call(description, ticker, lambda: getattr(handle, attribute))
+    if not _is_empty_frame(frame) or not required:
+        return frame
+
+    for delay in _RETRY_BACKOFF:
+        if delay:
+            time.sleep(delay)
+        reset_session()
+        fresh = yf.Ticker(ticker, session=_browser_session())
+        frame = _call(description, ticker, lambda: getattr(fresh, attribute))
+        if not _is_empty_frame(frame):
+            logging.getLogger(__name__).info(
+                "%s: %s arrived on retry", ticker, description)
+            return frame
+
+    return frame
+
+
 def _looks_like_a_real_quote(info: dict) -> bool:
     """
     Is this a real security, or Yahoo's empty-response stub?
@@ -912,12 +956,16 @@ def fetch_financials(ticker: str,
                 "(beta unavailable, WACC will fall back to the default)",
                 ticker)
 
-        income_frame = _call("an income statement", ticker,
-                             lambda: handle.income_stmt)
-        balance_frame = _call("a balance sheet", ticker,
-                              lambda: handle.balance_sheet)
-        cashflow_frame = _call("a cash flow statement", ticker,
-                               lambda: handle.cashflow)
+        # Throttled statement requests do not raise - yfinance hands back an
+        # empty DataFrame. The exception retry above therefore never fires
+        # for the single most common cloud failure mode, so emptiness is
+        # retried explicitly here.
+        income_frame = _fetch_statement(
+            "an income statement", ticker, "income_stmt", handle, required=True)
+        balance_frame = _fetch_statement(
+            "a balance sheet", ticker, "balance_sheet", handle)
+        cashflow_frame = _fetch_statement(
+            "a cash flow statement", ticker, "cashflow", handle)
 
         income, balance, cashflow = _aligned_rows(
             income_frame, balance_frame, cashflow_frame, years)
