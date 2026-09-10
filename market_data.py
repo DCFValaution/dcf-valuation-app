@@ -593,6 +593,44 @@ def probe_symbol(ticker: str) -> tuple[str, str]:
     return "absent", "HTTP 200 with no matches"
 
 
+def endpoint_report(ticker: str) -> dict:
+    """
+    Raw status of each Yahoo endpoint the fetch depends on, from this machine.
+
+    Yahoo does not refuse everything equally: the public search endpoint is
+    served freely while the crumb-authenticated ones are withheld. Knowing
+    which is which is the difference between "try a different header" and
+    "this data source is not available from this IP", so the diagnosis is
+    measured rather than assumed.
+    """
+    session = _browser_session()
+    out: dict[str, str] = {}
+
+    def check(name: str, url: str, **kwargs) -> None:
+        try:
+            r = session.get(url, timeout=20, **kwargs)
+            body = (r.text or "")[:80].replace("\n", " ")
+            out[name] = f"HTTP {r.status_code} len={len(r.text or '')} {body!r}"
+        except Exception as e:
+            out[name] = f"EXC {type(e).__name__}: {e}"
+
+    check("search (no crumb needed)", _SEARCH_URL,
+          params={"q": ticker, "quotesCount": 1, "newsCount": 0})
+    check("getcrumb", "https://query2.finance.yahoo.com/v1/test/getcrumb")
+    check("chart (no crumb needed)",
+          f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+          params={"range": "5d", "interval": "1d"})
+    check("quoteSummary (crumb required)",
+          f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}",
+          params={"modules": "price"})
+    check("fundamentals-timeseries (crumb required)",
+          "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/"
+          f"finance/timeseries/{ticker}",
+          params={"symbol": ticker, "type": "annualTotalRevenue",
+                  "period1": 0, "period2": 9999999999})
+    return out
+
+
 def _validate_ticker(ticker: str) -> str:
     ticker = (ticker or "").upper().strip()
     if not ticker:

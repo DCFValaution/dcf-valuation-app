@@ -424,9 +424,12 @@ def upstream_diagnostics(ticker: str = "AAPL") -> dict:
     except Exception as e:
         profile_detail = f"{type(e).__name__}: {e}"
 
+    from market_data import endpoint_report
+
     return {
         "ticker": ticker.upper(),
         "symbol_probe": {"verdict": verdict, "detail": detail},
+        "endpoints": endpoint_report(ticker),
         "full_fetch": {"succeeded": profile_ok, "detail": profile_detail},
         "interpretation": {
             "found+succeeded": "Yahoo is serving this server normally.",
