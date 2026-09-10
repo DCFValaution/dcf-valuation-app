@@ -623,6 +623,17 @@ def endpoint_report(ticker: str) -> dict:
     check("quoteSummary (crumb required)",
           f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}",
           params={"modules": "price"})
+    # Does yfinance's own statement path work when .info does not? This is
+    # the difference between "the data source is unusable here" and "only
+    # the profile call is blocked".
+    try:
+        handle = yf.Ticker(ticker, session=session)
+        frame = handle.income_stmt
+        rows = 0 if frame is None or getattr(frame, "empty", True) else len(frame.columns)
+        out["yfinance income_stmt"] = f"{rows} period(s) returned"
+    except Exception as e:
+        out["yfinance income_stmt"] = f"EXC {type(e).__name__}: {e}"
+
     check("fundamentals-timeseries (crumb required)",
           "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/"
           f"finance/timeseries/{ticker}",
