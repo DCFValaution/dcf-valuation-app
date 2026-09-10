@@ -62,6 +62,7 @@ AAPL_INFO = {
 # Captured before the autouse fixture stubs the module attribute, so the
 # probe's own behaviour can still be tested directly.
 REAL_PROBE_SYMBOL = M.probe_symbol
+REAL_FETCH_BETA = M.fetch_beta
 
 
 def frame(rows: dict) -> pd.DataFrame:
@@ -128,6 +129,10 @@ def _offline(monkeypatch):
                         lambda ticker: ("absent", "stubbed: no match"))
     monkeypatch.setattr(M, "_browser_session", lambda: None)
     monkeypatch.setattr(M, "_RETRY_BACKOFF", (0.0, 0.0))
+    # Beta is now computed from five years of chart data when Yahoo does not
+    # quote one. Stubbed off by default so no unit test reaches the network;
+    # the beta tests below call the real implementation deliberately.
+    monkeypatch.setattr(M, "fetch_beta", lambda ticker: None)
 
 
 @pytest.fixture
@@ -714,6 +719,170 @@ def test_cache_evicts_when_full():
     cache.put("b", 2)
     cache.put("c", 3)
     assert len(cache._data) <= 2
+
+
+# ---------------------------------------------------------------------------
+# Beta, computed from price history
+#
+# Yahoo publishes beta only through the quote endpoint it will not serve a
+# datacentre IP. Computing it from the chart endpoint keeps WACC both
+# available and - the point of the exercise - identical between requests.
+# ---------------------------------------------------------------------------
+
+_MONTH = 30 * 24 * 3600
+
+
+def _chart_payload(returns: list[float], start: float = 100.0) -> dict:
+    """A chart response whose adjusted closes produce exactly *returns*."""
+    prices = [start]
+    for r in returns:
+        prices.append(prices[-1] * (1.0 + r))
+    stamps = [1_600_000_000 + i * _MONTH for i in range(len(prices))]
+    return {"chart": {"result": [{
+        "timestamp": stamps,
+        "indicators": {"adjclose": [{"adjclose": prices}]},
+    }]}}
+
+
+def _install_chart(monkeypatch, by_symbol: dict[str, dict], status=200):
+    class Response:
+        def __init__(self, payload):
+            self.status_code = status
+            self._payload = payload
+            self.text = ""
+
+        def json(self):
+            return self._payload
+
+    class Session:
+        @staticmethod
+        def get(url, **kwargs):
+            for symbol, payload in by_symbol.items():
+                if f"/{symbol}" in url:
+                    return Response(payload)
+            raise AssertionError(f"unexpected chart request: {url}")
+
+    monkeypatch.setattr(M, "_browser_session", lambda: Session())
+
+
+def test_beta_matches_the_textbook_covariance_ratio(monkeypatch):
+    """
+    A series built to move exactly twice the market must return beta 2.
+
+    Pins the arithmetic itself - covariance over variance on overlapping
+    months - independently of any live data.
+    """
+    market = [0.03, -0.02, 0.05, -0.01, 0.04, -0.03, 0.02, 0.01,
+              -0.04, 0.06, -0.02, 0.03] * 3          # 36 months
+    stock = [2.0 * r for r in market]
+
+    _install_chart(monkeypatch, {
+        M.MARKET_INDEX: _chart_payload(market),
+        "TWOX": _chart_payload(stock),
+    })
+
+    beta, source = REAL_FETCH_BETA("TWOX")
+    assert beta == pytest.approx(2.0, abs=1e-9)
+    assert "monthly returns" in source and M.MARKET_INDEX in source
+
+
+def test_beta_is_identical_across_repeated_calls(monkeypatch):
+    """
+    The instability this fixes: the same ticker must not value differently
+    between two requests because one of them got a beta and the other did not.
+    """
+    market = [0.03, -0.02, 0.05, -0.01, 0.04, -0.03] * 6
+    stock = [0.6 * r + 0.001 for r in market]
+    _install_chart(monkeypatch, {
+        M.MARKET_INDEX: _chart_payload(market),
+        "STEADY": _chart_payload(stock),
+    })
+
+    values = {REAL_FETCH_BETA("STEADY")[0] for _ in range(5)}
+    assert len(values) == 1, "beta must be deterministic across requests"
+
+
+def test_beta_needs_enough_history(monkeypatch):
+    """A company with a year of trading has no meaningful five-year beta."""
+    market = [0.03, -0.02, 0.05, -0.01, 0.04, -0.03]      # 6 months
+    _install_chart(monkeypatch, {
+        M.MARKET_INDEX: _chart_payload(market),
+        "NEWCO": _chart_payload([0.01] * 6),
+    })
+    assert REAL_FETCH_BETA("NEWCO") is None
+
+
+def test_beta_returns_none_when_the_chart_is_refused(monkeypatch):
+    """A blocked chart endpoint must fall back, not raise."""
+    _install_chart(monkeypatch, {
+        M.MARKET_INDEX: _chart_payload([0.01] * 30),
+        "BLOCKED": _chart_payload([0.01] * 30),
+    }, status=429)
+    assert REAL_FETCH_BETA("BLOCKED") is None
+
+
+def test_computed_beta_reaches_the_profile_and_says_so(monkeypatch):
+    """The valuation must be able to report which path produced its beta."""
+    profile = {"beta": None}
+    monkeypatch.setattr(M, "fetch_beta",
+                        lambda ticker: (1.23, "computed from 59 monthly returns"))
+
+    M._with_computed_beta(profile, "AAPL")
+
+    assert profile["beta"] == pytest.approx(1.23)
+    assert "computed" in profile["betaSource"]
+
+
+def test_a_quoted_beta_is_left_alone(monkeypatch):
+    """
+    Switching between quoted and computed depending on which endpoint
+    answered is the very instability being removed.
+    """
+    def must_not_run(ticker):
+        raise AssertionError("should not recompute a beta Yahoo supplied")
+
+    monkeypatch.setattr(M, "fetch_beta", must_not_run)
+    profile = {"beta": 1.085}
+
+    M._with_computed_beta(profile, "AAPL")
+
+    assert profile["beta"] == pytest.approx(1.085)
+    assert "quoted" in profile["betaSource"]
+
+
+def test_beta_falls_back_to_the_default_when_uncomputable(monkeypatch):
+    """With no beta at all, WACC still has to produce a number."""
+    profile = {"beta": None}
+    monkeypatch.setattr(M, "fetch_beta", lambda ticker: None)
+
+    M._with_computed_beta(profile, "AAPL")
+
+    assert profile["beta"] is None
+    assert "unavailable" in profile["betaSource"]
+
+
+def test_the_market_series_is_fetched_once_for_many_tickers(monkeypatch):
+    """Thirty valuations must not mean thirty index downloads."""
+    market = [0.03, -0.02, 0.05, -0.01, 0.04, -0.03] * 6
+    fetches = {"n": 0}
+    real_closes = M._monthly_closes
+
+    def counting(symbol):
+        if symbol == M.MARKET_INDEX:
+            fetches["n"] += 1
+        return real_closes(symbol)
+
+    _install_chart(monkeypatch, {
+        M.MARKET_INDEX: _chart_payload(market),
+        "AAA": _chart_payload([0.5 * r for r in market]),
+        "BBB": _chart_payload([1.5 * r for r in market]),
+    })
+    monkeypatch.setattr(M, "_monthly_closes", counting)
+
+    REAL_FETCH_BETA("AAA")
+    REAL_FETCH_BETA("BBB")
+
+    assert fetches["n"] == 1, "the market series should be cached across tickers"
 
 
 # ---------------------------------------------------------------------------

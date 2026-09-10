@@ -64,6 +64,20 @@ class _ValuationScreenState extends State<ValuationScreen> {
   ValuationResult? _result;
   bool _loading = false;
 
+  /// True once a request has been running long enough that a cold start is
+  /// the likely explanation, so the spinner can say so.
+  ///
+  /// The free tier sleeps after about fifteen minutes idle and takes roughly
+  /// a minute to wake. Without this the user watches an unexplained spinner
+  /// for a minute and concludes the app is broken - the wait is the same
+  /// either way, but only one of them is legible.
+  bool _wakingServer = false;
+  Timer? _wakingTimer;
+
+  /// Set while the launch ping is still in flight, so a valuation started
+  /// immediately after opening the app explains itself too.
+  bool _serverAwake = false;
+
   /// The ticker the displayed result belongs to, so the header cannot drift
   /// out of sync with the text field while the user types a new one.
   String _resultTicker = '';
@@ -116,8 +130,44 @@ class _ValuationScreenState extends State<ValuationScreen> {
   static const double _tolerance = 0.001;
 
   @override
+  void initState() {
+    super.initState();
+    _pingServer();
+  }
+
+  /// Start waking the server as soon as the app opens.
+  ///
+  /// `/health` touches no upstream service, so this costs the backend
+  /// essentially nothing, and the spin-up then overlaps with the user typing
+  /// a ticker rather than being paid for in full by their first valuation.
+  /// Failure is deliberately silent: the real request will report anything
+  /// genuinely wrong, and an error about a ping the user never asked for
+  /// would be noise.
+  Future<void> _pingServer() async {
+    final awake = await _api.wakeUp();
+    if (!mounted) return;
+    setState(() => _serverAwake = awake);
+  }
+
+  /// Start the timer that explains a long wait as a cold start.
+  void _beginWaitingFeedback() {
+    _wakingTimer?.cancel();
+    _wakingServer = false;
+    _wakingTimer = Timer(ValuationApi.wakingThreshold, () {
+      if (mounted) setState(() => _wakingServer = true);
+    });
+  }
+
+  void _endWaitingFeedback() {
+    _wakingTimer?.cancel();
+    _wakingTimer = null;
+    _wakingServer = false;
+  }
+
+  @override
   void dispose() {
     _confirmTimer?.cancel();
+    _wakingTimer?.cancel();
     _controller.dispose();
     _api.dispose();
     super.dispose();
@@ -195,13 +245,16 @@ class _ValuationScreenState extends State<ValuationScreen> {
     });
     _confirmTimer?.cancel();
     _confirmSeq++;
+    _beginWaitingFeedback();
 
     final result = await _api.value(ticker);
     if (!mounted) return;
 
+    _endWaitingFeedback();
     setState(() {
       _result = result;
       _loading = false;
+      _serverAwake = result is! ValuationFailure;
       if (result is ValuationSuccess) {
         // Every assumption, including those without sliders, so the local
         // engine has the complete set to work from.
@@ -457,24 +510,39 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
   Widget _buildResultArea() {
     if (_loading) {
+      // Once a request has run past the threshold, a sleeping free-tier
+      // instance is the likeliest cause. Saying so turns an alarming silent
+      // wait into an expected one - the delay is identical either way, but
+      // an unexplained minute reads as a broken app.
+      final waking = _wakingServer && !_serverAwake;
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 26,
-              height: 26,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Valuing $_resultTicker',
-                style: context.text.titleMedium),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Reading filings and deriving assumptions',
-              style: context.text.bodySmall,
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                waking ? 'Waking up the server' : 'Valuing $_resultTicker',
+                style: context.text.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                waking
+                    ? 'This can take up to a minute on the first use after a '
+                        'while. Later valuations are quick.'
+                    : 'Reading filings and deriving assumptions',
+                style: context.text.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       );
     }

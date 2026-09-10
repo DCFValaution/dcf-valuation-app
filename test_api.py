@@ -288,6 +288,29 @@ def test_health_reports_the_data_source_and_needs_no_key(client):
     assert body["requires_api_key"] is False
 
 
+def test_health_touches_no_upstream_so_it_can_wake_a_sleeping_instance(
+        client, monkeypatch):
+    """
+    The app pings /health on launch to wake the free-tier instance.
+
+    If it called Yahoo it would be slow exactly when it matters most - on a
+    cold start - and would report the service unhealthy whenever Yahoo was
+    throttling, which Render would answer by restarting a healthy process.
+    """
+    import market_data as M
+
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("/health must not touch the data source")
+
+    monkeypatch.setattr(M, "fetch_financials", must_not_run)
+    monkeypatch.setattr(M, "probe_symbol", must_not_run)
+    monkeypatch.setattr(M, "_browser_session", must_not_run)
+    monkeypatch.setattr(M, "fetch_risk_free_rate", must_not_run)
+    monkeypatch.setattr(M, "fetch_beta", must_not_run)
+
+    assert client.get("/health").status_code == 200
+
+
 def test_assumptions_endpoint_lists_override_names(client):
     body = client.get("/assumptions").json()
     assert "wacc" in body["assumptions"]

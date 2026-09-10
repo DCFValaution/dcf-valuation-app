@@ -386,6 +386,13 @@ def health() -> dict:
     """
     Liveness plus which data source is in use.
 
+    Deliberately touches nothing: no Yahoo call, no cache read, no disk. The
+    app pings this on launch to wake a sleeping free-tier instance, so it
+    has to return the moment the process is up - and it must not fail when
+    Yahoo is down, or Render would judge a perfectly healthy service
+    unhealthy and restart it. **Keep it that way**: anything added here is
+    paid for on every cold start, by a user staring at a spinner.
+
     The old `fmp_key_configured` flag is gone: the backend reads Yahoo
     Finance, which needs no credentials, so there is no key to report on.
     """

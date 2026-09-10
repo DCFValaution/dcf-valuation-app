@@ -219,13 +219,15 @@ def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
     # --- Beta --------------------------------------------------------------
     raw_beta = num(fin.profile, "beta")
     if SANE_BETA[0] <= raw_beta <= SANE_BETA[1]:
-        beta = record_input("beta", raw_beta, "derived", "profile.beta (Yahoo)")
+        # Either quoted by Yahoo or computed from price history when the
+        # quote endpoint was unavailable; the profile records which, so the
+        # report can say rather than imply.
+        source = fin.profile.get("betaSource") or "profile.beta (Yahoo)"
+        beta = record_input("beta", raw_beta, "derived", source)
     else:
-        # Left over from FMP, and now actively wrong: beta also goes missing
-        # when Yahoo withholds the quote endpoint and the profile is rebuilt
-        # from the crumb-free endpoints, which carry no beta.
-        reason = ("not reported by the quote endpoint" if raw_beta == 0
-                  else f"reported {raw_beta:g}, outside plausible range")
+        reason = (fin.profile.get("betaSource")
+                  or "not reported by the quote endpoint") if raw_beta == 0 \
+            else f"reported {raw_beta:g}, outside plausible range"
         beta = record_input("beta", DEFAULT_BETA, "default",
                             f"beta {reason}; used market beta of 1.0")
 

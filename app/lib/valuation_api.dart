@@ -17,11 +17,23 @@ import 'dcf_engine.dart';
 
 /// Where the backend lives, as seen from the app.
 ///
-/// 10.0.2.2 is the Android emulator's alias for the *host machine's* loopback.
-/// Using localhost or 127.0.0.1 here would resolve to the emulator itself and
-/// fail to connect. A physical device would need the host's LAN address
-/// instead, or `adb reverse tcp:8000 tcp:8000`.
-const String kBackendBaseUrl = 'http://10.0.2.2:8000';
+/// Defaults to the deployed service, because that is what a distributed build
+/// has to talk to - a shipped app cannot reach a server on the developer's
+/// machine.
+///
+/// To run against a local backend instead:
+///
+/// ```
+/// flutter run --dart-define=BACKEND_BASE_URL=http://10.0.2.2:8000
+/// ```
+///
+/// 10.0.2.2 is the Android emulator's alias for the *host machine's* loopback:
+/// localhost or 127.0.0.1 would resolve to the emulator itself. A physical
+/// device needs the host's LAN address, or `adb reverse tcp:8000 tcp:8000`.
+const String kBackendBaseUrl = String.fromEnvironment(
+  'BACKEND_BASE_URL',
+  defaultValue: 'https://dcf-valuation-api.onrender.com',
+);
 
 /// The outcome of a valuation request.
 sealed class ValuationResult {
@@ -230,11 +242,43 @@ class ValuationApi {
   final http.Client _client;
   final String baseUrl;
 
-  static const Duration _timeout = Duration(seconds: 30);
+  /// Long enough to survive a free-tier cold start.
+  ///
+  /// The backend sleeps after about fifteen minutes idle and takes roughly a
+  /// minute to wake. At the old thirty seconds the first request of a session
+  /// failed reliably, which read to the user as a broken app rather than a
+  /// sleeping server.
+  static const Duration _timeout = Duration(seconds: 90);
 
   /// Building a workbook does more work than a valuation - it refetches,
-  /// re-derives, and writes every formula - so it gets a longer budget.
-  static const Duration _excelTimeout = Duration(seconds: 60);
+  /// re-derives, and writes every formula - so it gets a longer budget, and
+  /// it may also be the request that wakes the server.
+  static const Duration _excelTimeout = Duration(seconds: 120);
+
+  /// How long a request may run before the UI starts saying the server is
+  /// probably waking up. Comfortably past a warm response, well short of the
+  /// timeout.
+  static const Duration wakingThreshold = Duration(seconds: 4);
+
+  /// Wake a sleeping instance without blocking the user.
+  ///
+  /// `/health` touches no upstream service, so this returns as soon as the
+  /// process is up and costs the backend essentially nothing. Called on app
+  /// launch so the spin-up overlaps with the user typing a ticker instead of
+  /// being paid for in full by their first valuation.
+  ///
+  /// Returns true if the server answered. Never throws: failing to wake the
+  /// server is not itself an error worth showing anyone, since the real
+  /// request that follows will report any genuine problem.
+  Future<bool> wakeUp() async {
+    try {
+      final response =
+          await _client.get(Uri.parse('$baseUrl/health')).timeout(_timeout);
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Value [ticker], optionally overriding assumptions.
   ///
@@ -272,17 +316,16 @@ class ValuationApi {
     } on TimeoutException {
       return const ValuationFailure(
         ValuationFailureKind.backendUnreachable,
-        'The backend did not respond within 30 seconds. It may be starting up, '
-        'or fetching data from the market data provider.',
+        'The server did not respond within 90 seconds.\n\n'
+        'The free hosting tier puts the server to sleep when it is idle, and '
+        'waking it usually takes under a minute. Trying again will often '
+        'succeed.',
       );
     } on SocketException {
-      // By far the most common setup problem: the backend is not running, or
-      // the app is looking at the wrong address for it.
       return ValuationFailure(
         ValuationFailureKind.backendUnreachable,
-        'Could not reach the backend at $baseUrl.\n\n'
-        'Check that the API server is running on the host machine:\n'
-        'python -m uvicorn api:app --port 8000',
+        'Could not reach the server.\n\n'
+        'Check your internet connection and try again.',
       );
     } catch (e) {
       return ValuationFailure(
@@ -395,12 +438,15 @@ class ValuationApi {
     } on TimeoutException {
       return const ExcelFailure(
         ValuationFailureKind.backendUnreachable,
-        'The backend did not return the workbook within 60 seconds.',
+        'The server did not return the workbook within two minutes.\n\n'
+        'If the server had gone to sleep it may still be waking up; '
+        'try the export again.',
       );
     } on SocketException {
       return ExcelFailure(
         ValuationFailureKind.backendUnreachable,
-        'Could not reach the backend at $baseUrl to build the workbook.',
+        'Could not reach the server to build the workbook.\n\n'
+        'Check your internet connection and try again.',
       );
     } catch (e) {
       return ExcelFailure(
