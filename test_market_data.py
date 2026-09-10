@@ -833,15 +833,28 @@ def test_computed_beta_reaches_the_profile_and_says_so(monkeypatch):
     assert "computed" in profile["betaSource"]
 
 
-def test_a_quoted_beta_is_left_alone(monkeypatch):
+def test_the_computed_beta_wins_over_a_quoted_one(monkeypatch):
     """
-    Switching between quoted and computed depending on which endpoint
-    answered is the very instability being removed.
-    """
-    def must_not_run(ticker):
-        raise AssertionError("should not recompute a beta Yahoo supplied")
+    Determinism beats deference to Yahoo's published figure.
 
-    monkeypatch.setattr(M, "fetch_beta", must_not_run)
+    The quote endpoint answers only when the crumb happens to mint, so
+    preferring it would leave beta depending on which endpoint Yahoo felt
+    like serving - the very instability being removed. AAPL returned 1.085
+    quoted and 1.088 computed on the same afternoon.
+    """
+    monkeypatch.setattr(M, "fetch_beta",
+                        lambda ticker: (1.088, "computed from 59 monthly returns"))
+    profile = {"beta": 1.085}
+
+    M._with_computed_beta(profile, "AAPL")
+
+    assert profile["beta"] == pytest.approx(1.088)
+    assert "computed" in profile["betaSource"]
+
+
+def test_a_quoted_beta_is_used_when_the_computation_fails(monkeypatch):
+    """Yahoo's number still beats falling back to a market beta of 1.0."""
+    monkeypatch.setattr(M, "fetch_beta", lambda ticker: None)
     profile = {"beta": 1.085}
 
     M._with_computed_beta(profile, "AAPL")
