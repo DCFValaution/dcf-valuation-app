@@ -378,10 +378,20 @@ class ValuationApi {
         return ValuationFailure(ValuationFailureKind.planLimited, message);
 
       case 429:
+        // Shared status, separated by `code`: "rate_limited" is our own
+        // server asking this user to slow down, "upstream_rate_limited" is
+        // the market data provider throttling everybody. The user can act on
+        // the first and can only wait out the second, so they read
+        // differently.
         return ValuationFailure(
           ValuationFailureKind.rateLimited,
-          'The market data provider’s rate limit has been reached. '
-          'Wait a moment and try again.',
+          code == 'rate_limited'
+              ? 'You’re going a little fast.\n\nThis is a free service with a '
+                  'shared limit, so it asks for a short pause after about 30 '
+                  'valuations a minute. Wait a moment and try again.'
+              : 'The market data provider is rate-limiting requests right '
+                  'now.\n\nThis affects everyone using the service, not just '
+                  'you. Wait a moment and try again.',
         );
 
       case 400:
@@ -487,8 +497,13 @@ class ValuationApi {
       404 => ExcelFailure(ValuationFailureKind.tickerNotFound,
           '$cleaned was not found, so there is nothing to export.'),
       402 => ExcelFailure(ValuationFailureKind.planLimited, message),
+      429 when code == 'rate_limited' => const ExcelFailure(
+          ValuationFailureKind.rateLimited,
+          'You’re going a little fast. This is a free service with a shared '
+          'limit — wait a moment and try the export again.'),
       429 => const ExcelFailure(ValuationFailureKind.rateLimited,
-          'The market data provider rate limit has been reached. Try again shortly.'),
+          'The market data provider is rate-limiting requests right now. '
+          'Try the export again shortly.'),
       502 => ExcelFailure(ValuationFailureKind.upstreamError, message),
       _ => ExcelFailure(ValuationFailureKind.unexpected,
           'Unexpected response building the workbook (HTTP ${response.statusCode}).'),

@@ -82,10 +82,78 @@ void main() {
           greaterThanOrEqualTo(2000));
     });
   });
+
+  rateLimitTests();
 }
 
 /// Stands in for a connection failure without importing dart:io, which is
 /// awkward to construct portably in tests.
 class SocketExceptionStub implements Exception {
   const SocketExceptionStub();
+}
+
+/// A 429 body as the backend sends it.
+http.Response _tooManyRequests(String code, String message) => http.Response(
+      '{"code":"$code","message":"$message"}',
+      429,
+      headers: {'content-type': 'application/json', 'retry-after': '60'},
+    );
+
+void rateLimitTests() {
+  group('rate limiting', () {
+    test('our own limit reads as a friendly pause, not a failure', () async {
+      final api = apiReturning((_) async => _tooManyRequests(
+            'rate_limited',
+            'Too many requests - please slow down.',
+          ));
+
+      final result = await api.value('AAPL');
+
+      expect(result, isA<ValuationFailure>());
+      final failure = result as ValuationFailure;
+      expect(failure.kind, ValuationFailureKind.rateLimited);
+      // Addressed to the user, and tells them what to do about it.
+      expect(failure.message.toLowerCase(), contains('wait a moment'));
+      expect(failure.message, contains('going a little fast'));
+    });
+
+    test("the provider's limit is worded as nobody's fault", () async {
+      final api = apiReturning((_) async => _tooManyRequests(
+            'upstream_rate_limited',
+            'Yahoo Finance is rate-limiting requests right now.',
+          ));
+
+      final failure = await api.value('AAPL') as ValuationFailure;
+
+      expect(failure.kind, ValuationFailureKind.rateLimited);
+      // The distinction matters: the user cannot fix this one by slowing
+      // down, so blaming their pace would be wrong.
+      expect(failure.message, contains('affects everyone'));
+      expect(failure.message, isNot(contains('going a little fast')));
+    });
+
+    test('a 429 never surfaces as a crash or an unexpected error', () async {
+      for (final code in ['rate_limited', 'upstream_rate_limited', 'unknown']) {
+        final api = apiReturning((_) async => _tooManyRequests(code, 'slow'));
+        final failure = await api.value('AAPL') as ValuationFailure;
+        expect(failure.kind, ValuationFailureKind.rateLimited,
+            reason: '$code should be handled, not fall through to unexpected');
+      }
+    });
+
+    test('the Excel export handles both 429s too', () async {
+      final ours = apiReturning(
+          (_) async => _tooManyRequests('rate_limited', 'slow down'));
+      final theirs = apiReturning(
+          (_) async => _tooManyRequests('upstream_rate_limited', 'throttled'));
+
+      final a = await ours.downloadExcel('AAPL') as ExcelFailure;
+      final b = await theirs.downloadExcel('AAPL') as ExcelFailure;
+
+      expect(a.kind, ValuationFailureKind.rateLimited);
+      expect(a.message, contains('going a little fast'));
+      expect(b.kind, ValuationFailureKind.rateLimited);
+      expect(b.message, contains('market data provider'));
+    });
+  });
 }

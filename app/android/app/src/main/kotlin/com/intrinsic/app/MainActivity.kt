@@ -1,4 +1,4 @@
-package com.dcfvaluation.dcf_app
+package com.intrinsic.app
 
 import io.flutter.embedding.android.FlutterActivity
 

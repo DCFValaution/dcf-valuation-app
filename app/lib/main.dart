@@ -452,6 +452,16 @@ class _ValuationScreenState extends State<ValuationScreen> {
             const Text('Intrinsic'),
           ],
         ),
+        actions: [
+          // Always reachable, including before the first valuation - the
+          // disclaimer should not depend on having searched something.
+          IconButton(
+            icon: const Icon(Icons.info_outline_rounded),
+            tooltip: 'About and disclaimer',
+            onPressed: () => showDisclaimerSheet(context),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -744,6 +754,10 @@ class _EmptyState extends StatelessWidget {
               _TickerHint('GOOGL'),
             ],
           ),
+          const SizedBox(height: AppSpacing.xxl),
+          // Present before the first valuation too, so the framing is set
+          // before anyone sees a number rather than after.
+          const DisclaimerLine(),
         ],
       ),
     );
@@ -1139,7 +1153,151 @@ class _SuccessCard extends StatelessWidget {
               ],
             ),
           ),
+
+        // Sits directly under the figure, where someone about to act on it
+        // will actually read it - not buried in a settings screen they will
+        // never open.
+        const SizedBox(height: AppSpacing.lg),
+        const DisclaimerLine(),
       ],
+    );
+  }
+}
+
+/// The short form of the disclaimer, shown beneath every valuation.
+///
+/// Deliberately quiet - secondary text, no icon, no tinted box. A warning
+/// styled like an error is one people learn to dismiss; this needs to be
+/// read once and remembered, and it sits next to the number it qualifies.
+/// Tapping opens the full text.
+class DisclaimerLine extends StatelessWidget {
+  const DisclaimerLine({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return InkWell(
+      onTap: () => showDisclaimerSheet(context),
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.sm, horizontal: AppSpacing.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                'Educational estimate, not investment advice. '
+                'Do your own research or speak to a licensed professional.',
+                style: context.text.labelSmall?.copyWith(
+                  color: colors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Icon(Icons.chevron_right_rounded,
+                size: 16, color: colors.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The full disclaimer, as a bottom sheet.
+///
+/// Reachable from the header on every screen and from the line under each
+/// valuation, so it is never more than one tap away.
+Future<void> showDisclaimerSheet(BuildContext context) {
+  final colors = context.colors;
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => SafeArea(
+      child: SingleChildScrollView(
+        // The text is long enough to overflow a short viewport - a small
+        // phone in landscape, or a device with a large font scale - and an
+        // unscrollable sheet would simply cut the disclaimer off.
+        padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, 0, AppSpacing.xxl,
+            AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('About these valuations',
+                style: context.text.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: AppSpacing.lg),
+            _DisclaimerParagraph(
+              'Every figure here is an educational estimate produced by a '
+              'discounted cash flow model from assumptions you can change. '
+              'It is not investment advice, a recommendation, or an offer to '
+              'buy or sell anything.',
+            ),
+            _DisclaimerParagraph(
+              'The model derives its assumptions from the company’s own '
+              'published financials, but a valuation is only ever as good as '
+              'those assumptions. Move a slider and the answer moves with it '
+              '— often a great deal. Treat the output as one view among '
+              'many, not a fact about the company.',
+            ),
+            _DisclaimerParagraph(
+              'Market data comes from a third party and may be delayed, '
+              'incomplete or wrong. Nothing here has been reviewed by a '
+              'financial adviser.',
+            ),
+            _DisclaimerParagraph(
+              'Do your own research, and consider speaking to a licensed '
+              'financial professional before making any investment decision. '
+              'You are responsible for what you do with these numbers.',
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                color: context.scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.school_outlined,
+                      size: 18, color: colors.textSecondary),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Text(
+                      'Built to make the mechanics of a DCF visible and '
+                      'arguable — that is the point of it.',
+                      style: context.text.bodySmall
+                          ?.copyWith(color: colors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _DisclaimerParagraph extends StatelessWidget {
+  const _DisclaimerParagraph(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Text(
+        text,
+        style: context.text.bodyMedium
+            ?.copyWith(color: context.colors.textSecondary, height: 1.5),
+      ),
     );
   }
 }
@@ -1385,7 +1543,8 @@ class _FailureCard extends StatelessWidget {
           ),
         ValuationFailureKind.backendUnreachable => (
             icon: Icons.cloud_off_rounded,
-            title: 'Can’t reach the backend',
+            // "Backend" is our word, not the user's.
+            title: 'Can’t reach the server',
             severe: true,
           ),
         ValuationFailureKind.upstreamError => (

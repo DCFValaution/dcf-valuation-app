@@ -19,6 +19,61 @@ void main() {
     expect(find.text('Value any listed company'), findsOneWidget);
   });
 
+  group('disclaimer', () {
+    testWidgets('is visible before any valuation, not hidden behind a menu',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(const DcfApp());
+
+      expect(find.byType(DisclaimerLine), findsOneWidget);
+      expect(
+        find.textContaining('not investment advice'),
+        findsOneWidget,
+        reason: 'the framing should be set before anyone sees a number',
+      );
+    });
+
+    testWidgets('names the two things a user must be told', (tester) async {
+      await tester.pumpWidget(const DcfApp());
+
+      final text = tester
+          .widget<Text>(find.descendant(
+            of: find.byType(DisclaimerLine),
+            matching: find.byType(Text),
+          ))
+          .data!;
+
+      expect(text.toLowerCase(), contains('educational estimate'));
+      expect(text.toLowerCase(), contains('not investment advice'));
+      expect(text.toLowerCase(), contains('licensed professional'));
+    });
+
+    testWidgets('the full text is one tap away from the header',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(const DcfApp());
+
+      await tester.tap(find.byTooltip('About and disclaimer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('About these valuations'), findsOneWidget);
+      expect(find.textContaining('not investment advice'), findsWidgets);
+      expect(find.textContaining('licensed financial professional'),
+          findsOneWidget);
+    });
+
+    testWidgets('tapping the short line opens the full text', (tester) async {
+      await tester.pumpWidget(const DcfApp());
+
+      // On the first-run screen the line sits below the feature list, so it
+      // has to be scrolled into view before it can be tapped.
+      await tester.ensureVisible(find.byType(DisclaimerLine));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DisclaimerLine));
+      await tester.pumpAndSettle();
+
+      expect(find.text('About these valuations'), findsOneWidget);
+    });
+  });
+
   testWidgets('typed text is upper-cased as the user types',
       (WidgetTester tester) async {
     await tester.pumpWidget(const DcfApp());

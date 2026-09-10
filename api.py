@@ -10,25 +10,29 @@ OUTCOME -> STATUS MAPPING
 -------------------------
     200  a valuation was produced
     404  ticker is malformed, unknown, or has no usable statements
-    402  the ticker is real but gated behind a paid FMP plan
     422  a valuation was refused: the company fails the suitability guard
     400  the caller supplied an unknown or non-numeric assumption override
-    429  the upstream FMP quota or rate limit was exhausted
-    502  any other upstream failure (network, bad credentials, malformed data)
+    429  this client exceeded the request limit, or Yahoo is throttling us
+    502  any other upstream failure (network, malformed data)
+
+The two 429s are distinguishable by `code`: "rate_limited" is ours,
+"upstream_rate_limited" is Yahoo's.
 
 Every error body carries a machine-readable `code` alongside the human
 message, so clients never have to parse prose - including for 422, which
 FastAPI also uses for its own request-validation errors (those carry
 code "validation_error", the suitability refusal carries "not_suitable").
 
-SECRET HANDLING
----------------
-The FMP API key is read from the server's environment by fmp.py and never
-leaves it. It is not accepted as a request parameter, never echoed in a
-response, and fmp.py redacts it from any upstream error text before raising.
+CREDENTIALS
+-----------
+There are none. Market data comes from Yahoo Finance, which needs no key, so
+there is no secret to leak, misconfigure, or rotate.
 """
 
 import os
+import threading
+import time
+from collections import defaultdict, deque
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Path, Request, Response, status
@@ -74,6 +78,110 @@ app = FastAPI(
         "422 rather than given a misleading number."
     ),
 )
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+#
+# A single free Render instance serving a public app: one client looping a
+# request can exhaust the instance and, worse, burn the shared Yahoo quota
+# that every other user depends on. This caps each client to a sustainable
+# rate and says so plainly when it trips.
+#
+# IN-MEMORY AND PER-PROCESS, BY DESIGN. The counters live in this process's
+# memory, so **they reset on every restart or redeploy**, and a second
+# instance would count separately. That is the right trade for one free
+# instance - no Redis, no dependency, nothing to provision - but it is not a
+# quota anyone should rely on for billing or abuse prevention.
+# ---------------------------------------------------------------------------
+
+RATE_LIMIT_REQUESTS = 30
+RATE_LIMIT_WINDOW_SECONDS = 60
+
+# Paths that must never be throttled. /health is the app's wake-up ping and
+# Render's own health check: throttling it would let a burst of user traffic
+# convince Render the service is down and restart it mid-request.
+_RATE_LIMIT_EXEMPT = ("/health", "/docs", "/redoc", "/openapi.json")
+
+_rate_lock = threading.Lock()
+_rate_history: dict[str, deque[float]] = defaultdict(deque)
+
+
+def reset_rate_limits() -> None:
+    """
+    Forget every recorded request.
+
+    Exists for tests: the history is process-global, so without this one test
+    making a few dozen requests would throttle whichever test ran next and
+    the failure would look like anything but a rate limit.
+    """
+    with _rate_lock:
+        _rate_history.clear()
+
+
+def _client_key(request: Request) -> str:
+    """
+    Identify the caller.
+
+    Render terminates TLS at its proxy, so `request.client.host` is the
+    proxy's address and would put every user in one bucket. The real client
+    is the first entry of X-Forwarded-For.
+
+    That header is client-supplied and therefore spoofable, which would let a
+    determined caller evade this limit. Acceptable here: the aim is to stop
+    accidental hammering and casual abuse from taking the instance down, not
+    to be a security control.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(key: str, now: float) -> bool:
+    """Record a request for *key*, returning True if it exceeds the limit."""
+    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+    with _rate_lock:
+        history = _rate_history[key]
+        while history and history[0] <= cutoff:
+            history.popleft()
+
+        if len(history) >= RATE_LIMIT_REQUESTS:
+            return True
+
+        history.append(now)
+
+        # Stop the dict growing without bound as addresses come and go. Only
+        # runs when the map is already large, so the usual path stays cheap.
+        if len(_rate_history) > 2048:
+            for stale in [k for k, v in _rate_history.items() if not v]:
+                del _rate_history[stale]
+
+        return False
+
+
+@app.middleware("http")
+async def _rate_limit_middleware(request: Request, call_next):
+    if request.url.path in _RATE_LIMIT_EXEMPT:
+        return await call_next(request)
+
+    if _rate_limited(_client_key(request), time.monotonic()):
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "code": "rate_limited",
+                "message": (
+                    f"Too many requests - please slow down. This service "
+                    f"allows about {RATE_LIMIT_REQUESTS} requests a minute "
+                    f"per user. Wait a moment and try again."
+                ),
+            },
+            # Tells a well-behaved client exactly how long to wait, instead of
+            # leaving it to guess or retry straight into the same wall.
+            headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+        )
+
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------

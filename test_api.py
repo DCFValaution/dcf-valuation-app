@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import analysis
+import api
 import assumptions as A
 from api import app
 from market_data import (CompanyFinancials, DataUnavailableError,
@@ -97,6 +98,10 @@ def _mock_market_data(monkeypatch):
     monkeypatch.setattr(analysis, "fetch_financials", fake_fetch_financials)
     monkeypatch.setattr(A, "fetch_risk_free_rate",
                         lambda tenor="year10": (0.045, "pinned for test"))
+    # The rate-limit history is process-global. Without clearing it, a test
+    # that makes several dozen requests would throttle whichever test ran
+    # next, and that failure would look like anything but a rate limit.
+    api.reset_rate_limits()
 
 
 @pytest.fixture
@@ -316,6 +321,125 @@ def test_health_touches_no_upstream_so_it_can_wake_a_sleeping_instance(
     monkeypatch.setattr(M, "fetch_beta", must_not_run)
 
     assert client.get("/health").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+def test_requests_under_the_limit_all_succeed(client):
+    """A normal session must never be throttled."""
+    for _ in range(api.RATE_LIMIT_REQUESTS - 1):
+        assert client.get(f"/valuation/{PROFITABLE}").status_code == 200
+
+
+def test_exceeding_the_limit_returns_a_clear_429(client):
+    for _ in range(api.RATE_LIMIT_REQUESTS):
+        client.get(f"/valuation/{PROFITABLE}")
+
+    r = client.get(f"/valuation/{PROFITABLE}")
+
+    assert r.status_code == 429
+    body = r.json()
+    assert body["code"] == "rate_limited"
+    assert "slow down" in body["message"].lower()
+    # A well-behaved client should be told how long to wait rather than
+    # retrying straight back into the same wall.
+    assert r.headers["retry-after"] == str(api.RATE_LIMIT_WINDOW_SECONDS)
+
+
+def test_our_rate_limit_is_distinguishable_from_yahoos(client, monkeypatch):
+    """
+    Both are 429, and a client needs to tell them apart: ours means "you are
+    asking too fast", Yahoo's means "the data source is throttling everyone".
+    """
+    def throttled(ticker, years=5):
+        raise RateLimitedError("Yahoo is rate-limiting requests right now.")
+
+    monkeypatch.setattr(analysis, "fetch_financials", throttled)
+
+    upstream = client.get(f"/valuation/{PROFITABLE}")
+    assert upstream.status_code == 429
+    assert upstream.json()["code"] == "upstream_rate_limited"
+
+    api.reset_rate_limits()
+    monkeypatch.setattr(analysis, "fetch_financials", fake_fetch_financials)
+    for _ in range(api.RATE_LIMIT_REQUESTS):
+        client.get(f"/valuation/{PROFITABLE}")
+    ours = client.get(f"/valuation/{PROFITABLE}")
+    assert ours.json()["code"] == "rate_limited"
+
+
+def test_health_is_never_rate_limited(client):
+    """
+    The wake-up ping and Render's health check must always get through.
+
+    Throttling /health would let a burst of user traffic convince Render the
+    service is down and restart it mid-request.
+    """
+    for _ in range(api.RATE_LIMIT_REQUESTS * 2):
+        client.get(f"/valuation/{PROFITABLE}")
+
+    # Valuations are being refused by now...
+    assert client.get(f"/valuation/{PROFITABLE}").status_code == 429
+    # ...but health is not.
+    for _ in range(20):
+        assert client.get("/health").status_code == 200
+
+
+def test_the_limit_applies_to_the_excel_endpoints_too(client):
+    """Excel is the most expensive endpoint; exempting it would be perverse."""
+    for _ in range(api.RATE_LIMIT_REQUESTS):
+        client.get(f"/valuation/{PROFITABLE}")
+
+    r = client.get(f"/valuation/{PROFITABLE}/excel")
+    assert r.status_code == 429
+    assert r.json()["code"] == "rate_limited"
+
+
+def test_clients_are_counted_separately(client):
+    """One noisy client must not lock everyone else out."""
+    noisy = {"X-Forwarded-For": "203.0.113.7"}
+    quiet = {"X-Forwarded-For": "198.51.100.9"}
+
+    for _ in range(api.RATE_LIMIT_REQUESTS + 1):
+        client.get(f"/valuation/{PROFITABLE}", headers=noisy)
+
+    assert client.get(f"/valuation/{PROFITABLE}",
+                      headers=noisy).status_code == 429
+    assert client.get(f"/valuation/{PROFITABLE}",
+                      headers=quiet).status_code == 200
+
+
+def test_the_forwarded_client_ip_is_used_not_the_proxys(client):
+    """
+    Render terminates TLS at its proxy, so request.client.host is the proxy.
+
+    Using it would put every user of the service in one bucket, and the limit
+    would then throttle the whole world at once.
+    """
+    first = {"X-Forwarded-For": "203.0.113.1, 10.0.0.1"}
+    second = {"X-Forwarded-For": "203.0.113.2, 10.0.0.1"}
+
+    for _ in range(api.RATE_LIMIT_REQUESTS + 1):
+        client.get(f"/valuation/{PROFITABLE}", headers=first)
+
+    # Same proxy hop, different real client: must not be throttled.
+    assert client.get(f"/valuation/{PROFITABLE}",
+                      headers=second).status_code == 200
+
+
+def test_the_window_rolls_forward(client, monkeypatch):
+    """Once the window passes, the client is served again."""
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(api.time, "monotonic", lambda: clock["now"])
+
+    for _ in range(api.RATE_LIMIT_REQUESTS):
+        client.get(f"/valuation/{PROFITABLE}")
+    assert client.get(f"/valuation/{PROFITABLE}").status_code == 429
+
+    clock["now"] += api.RATE_LIMIT_WINDOW_SECONDS + 1
+    assert client.get(f"/valuation/{PROFITABLE}").status_code == 200
 
 
 def test_assumptions_endpoint_lists_override_names(client):
