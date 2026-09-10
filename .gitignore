@@ -1,0 +1,101 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+
+# Test and tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# ---------------------------------------------------------------------------
+# Secrets and local configuration
+#
+# There is no API key any more - the backend reads Yahoo Finance, which needs
+# no credentials. These stay as a guard so a future key cannot be committed
+# by accident.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+secrets.json
+credentials.json
+local_settings.py
+
+# Claude Code's local project settings, which include machine-specific
+# permission rules and absolute paths.
+.claude/
+
+# ---------------------------------------------------------------------------
+# Flutter / Dart (app/)
+#
+# app/build and app/.dart_tool alone are over a gigabyte of regenerable
+# artefacts. Without these rules the first push would exceed GitHub's limits.
+# ---------------------------------------------------------------------------
+app/build/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/.pub-cache/
+app/.pub/
+app/**/*.iml
+app/.idea/
+app/android/.gradle/
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+app/android/local.properties
+app/android/key.properties
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+
+# ---------------------------------------------------------------------------
+# Generated output
+#
+# The reference workbook (AAPL_DCF_Model.xlsx) is deliberately NOT ignored -
+# it is the source of truth the engine is tested against. Only exports
+# produced at runtime are excluded.
+# ---------------------------------------------------------------------------
+*_DCF_Model_generated.xlsx
+*_DCF_Model_scrollfix.xlsx
+device_export.xlsx
+/exports/
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

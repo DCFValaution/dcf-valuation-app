@@ -1,0 +1,612 @@
+{
+  "ticker": "AAPL",
+  "cases": [
+    {
+      "label": "derived (no overrides)",
+      "overrides": {},
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 93.41535206040733,
+        "current_price": 315.34,
+        "upside_downside": -0.7037630745848693,
+        "enterprise_value": 1367906.0528147377,
+        "equity_value": 1401669.0528147377,
+        "terminal_value": 1540507.85328777,
+        "pv_terminal_value": 929628.1879193606,
+        "pv_ufcf_sum": 438277.8648953771,
+        "tv_pct_of_ev": 0.6795994403317878
+      },
+      "note": "$93.42 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "high growth",
+      "overrides": {
+        "revenue_growth": 0.12
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.12,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 145.28973809501872,
+        "current_price": 315.34,
+        "upside_downside": -0.5392600428267307,
+        "enterprise_value": 2146265.497325113,
+        "equity_value": 2180028.497325113,
+        "terminal_value": 2564306.2588690785,
+        "pv_terminal_value": 1547445.1335091167,
+        "pv_ufcf_sum": 598820.3638159963,
+        "tv_pct_of_ev": 0.7209942737455803
+      },
+      "note": "$145.29 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "zero growth",
+      "overrides": {
+        "revenue_growth": 0.0
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.0,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 86.09237849995193,
+        "current_price": 315.34,
+        "upside_downside": -0.7269855441746942,
+        "enterprise_value": 1258027.0534010932,
+        "equity_value": 1291790.0534010932,
+        "terminal_value": 1398837.000877254,
+        "pv_terminal_value": 844136.1097541627,
+        "pv_ufcf_sum": 413890.94364693045,
+        "tv_pct_of_ev": 0.6709999657575163
+      },
+      "note": "$86.09 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "low WACC",
+      "overrides": {
+        "wacc": 0.05
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.05,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 297.7973187943097,
+        "current_price": 315.34,
+        "upside_downside": -0.05563100528220416,
+        "enterprise_value": 4434595.535921022,
+        "equity_value": 4468358.535921022,
+        "terminal_value": 5009419.827591804,
+        "pv_terminal_value": 3925011.513744094,
+        "pv_ufcf_sum": 509584.02217692824,
+        "tv_pct_of_ev": 0.885088951619329
+      },
+      "note": "$297.80 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 5.00%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "high WACC",
+      "overrides": {
+        "wacc": 0.18
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.18,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 50.21673644925069,
+        "current_price": 315.34,
+        "upside_downside": -0.8407536739733282,
+        "enterprise_value": 719723.9147498625,
+        "equity_value": 753486.9147498625,
+        "terminal_value": 807970.939934162,
+        "pv_terminal_value": 353171.5442916085,
+        "pv_ufcf_sum": 366552.370458254,
+        "tv_pct_of_ev": 0.4907041951139723
+      },
+      "note": "$50.22 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 18.00%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "thin margin",
+      "overrides": {
+        "operating_margin": 0.05
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.05,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 17.418173269960675,
+        "current_price": 315.34,
+        "upside_downside": -0.9447638318324327,
+        "enterprise_value": 227591.4122092591,
+        "equity_value": 261354.4122092591,
+        "terminal_value": 256308.79922475351,
+        "pv_terminal_value": 154670.99636173368,
+        "pv_ufcf_sum": 72920.41584752544,
+        "tv_pct_of_ev": 0.6795994403317877
+      },
+      "note": "$17.42 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "fat margin",
+      "overrides": {
+        "operating_margin": 0.55
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.55,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 160.7537822591846,
+        "current_price": 315.34,
+        "upside_downside": -0.4902207704091311,
+        "enterprise_value": 2378298.7944030403,
+        "equity_value": 2412061.7944030403,
+        "terminal_value": 2678391.5187038975,
+        "pv_terminal_value": 1616290.5296180716,
+        "pv_ufcf_sum": 762008.2647849687,
+        "tv_pct_of_ev": 0.6795994403317877
+      },
+      "note": "$160.75 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "terminal growth near zero",
+      "overrides": {
+        "terminal_growth": 0.001
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.001,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 78.17367170307796,
+        "current_price": 315.34,
+        "upside_downside": -0.7520971912758357,
+        "enterprise_value": 1139209.2572821588,
+        "equity_value": 1172972.2572821588,
+        "terminal_value": 1161529.2313849605,
+        "pv_terminal_value": 700931.3923867816,
+        "pv_ufcf_sum": 438277.8648953771,
+        "tv_pct_of_ev": 0.6152788769106493
+      },
+      "note": "$78.17 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 0.10% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "terminal growth close to WACC",
+      "overrides": {
+        "wacc": 0.09,
+        "terminal_growth": 0.085
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.09,
+        "terminal_growth": 0.085,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 1181.1484270781257,
+        "current_price": 315.34,
+        "upside_downside": 2.7456346390503135,
+        "enterprise_value": 17689011.26033387,
+        "equity_value": 17722774.26033387,
+        "terminal_value": 26513270.794815205,
+        "pv_terminal_value": 17231806.842977677,
+        "pv_ufcf_sum": 457204.417356194,
+        "tv_pct_of_ev": 0.9741531954145206
+      },
+      "note": "$1,181.15 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.00%, an equity risk premium of 5.50%, and 8.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "no D&A",
+      "overrides": {
+        "da_pct": 0.0
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.0,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 83.47290510473783,
+        "current_price": 315.34,
+        "upside_downside": -0.7352923666368433,
+        "enterprise_value": 1218722.6488063445,
+        "equity_value": 1252485.6488063445,
+        "terminal_value": 1372500.5511910832,
+        "pv_terminal_value": 828243.2300484655,
+        "pv_ufcf_sum": 390479.4187578789,
+        "tv_pct_of_ev": 0.6795994403317877
+      },
+      "note": "$83.47 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "negative NWC swing",
+      "overrides": {
+        "nwc_pct": -0.1
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 93.41535206040733,
+        "current_price": 315.34,
+        "upside_downside": -0.7037630745848693,
+        "enterprise_value": 1367906.0528147377,
+        "equity_value": 1401669.0528147377,
+        "terminal_value": 1540507.85328777,
+        "pv_terminal_value": 929628.1879193606,
+        "pv_ufcf_sum": 438277.8648953771,
+        "tv_pct_of_ev": 0.6795994403317878
+      },
+      "note": "$93.42 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "high tax",
+      "overrides": {
+        "tax_rate": 0.34
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.34,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10618216514980185,
+        "terminal_growth": 0.025,
+        "projection_years": 5.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 73.82967189244621,
+        "current_price": 315.34,
+        "upside_downside": -0.7658727979563449,
+        "enterprise_value": 1074028.8563555721,
+        "equity_value": 1107791.8563555721,
+        "terminal_value": 1209556.0183137993,
+        "pv_terminal_value": 730285.5814721371,
+        "pv_ufcf_sum": 343743.27488343493,
+        "tv_pct_of_ev": 0.6799496839872299
+      },
+      "note": "$73.83 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.62%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "short horizon",
+      "overrides": {
+        "projection_years": 1
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 1.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 95.46988437967431,
+        "current_price": 315.34,
+        "upside_downside": -0.6972477821409453,
+        "enterprise_value": 1398733.687742046,
+        "equity_value": 1432496.687742046,
+        "terminal_value": 1433702.0299355972,
+        "pv_terminal_value": 1295949.187018417,
+        "pv_ufcf_sum": 102784.50072362913,
+        "tv_pct_of_ev": 0.9265160325911986
+      },
+      "note": "$95.47 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "long horizon",
+      "overrides": {
+        "projection_years": 15
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.01812535743479393,
+        "operating_margin": 0.31510222870075566,
+        "tax_rate": 0.15610002335586043,
+        "da_pct": 0.029268479803598143,
+        "capex_pct": 0.02859230076835775,
+        "nwc_pct": -0.1,
+        "wacc": 0.10629494141981558,
+        "terminal_growth": 0.025,
+        "projection_years": 15.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 90.4737689009353,
+        "current_price": 315.34,
+        "upside_downside": -0.7130913651901589,
+        "enterprise_value": 1323768.4888065571,
+        "equity_value": 1357531.4888065571,
+        "terminal_value": 1843641.4252670316,
+        "pv_terminal_value": 405146.93649023486,
+        "pv_ufcf_sum": 918621.5523163222,
+        "tv_pct_of_ev": 0.3060557340018683
+      },
+      "note": "$90.47 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.63%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    },
+    {
+      "label": "everything moved",
+      "overrides": {
+        "revenue_growth": 0.09,
+        "operating_margin": 0.28,
+        "tax_rate": 0.22,
+        "da_pct": 0.05,
+        "capex_pct": 0.07,
+        "nwc_pct": 0.04,
+        "wacc": 0.11,
+        "terminal_growth": 0.02,
+        "projection_years": 7
+      },
+      "company_name": "Apple Inc.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 315.34,
+        "fiscal_year": "2025"
+      },
+      "assumptions": {
+        "revenue_growth": 0.09,
+        "operating_margin": 0.28,
+        "tax_rate": 0.22,
+        "da_pct": 0.05,
+        "capex_pct": 0.07,
+        "nwc_pct": 0.04,
+        "wacc": 0.11,
+        "terminal_growth": 0.02,
+        "projection_years": 7.0,
+        "risk_free_rate": 0.04836999893188477,
+        "equity_risk_premium": 0.055
+      },
+      "expected": {
+        "intrinsic_value_per_share": 91.49085343747865,
+        "current_price": 315.34,
+        "upside_downside": -0.709866006730898,
+        "enterprise_value": 1339029.5341007756,
+        "equity_value": 1372792.5341007756,
+        "terminal_value": 1682114.94369623,
+        "pv_terminal_value": 810204.8107163988,
+        "pv_ufcf_sum": 528824.7233843767,
+        "tv_pct_of_ev": 0.6050686635978431
+      },
+      "note": "$91.49 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 11.00%, an equity risk premium of 5.50%, and 2.00% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much."
+    }
+  ]
+}

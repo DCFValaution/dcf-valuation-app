@@ -1,0 +1,41 @@
+# Render Blueprint for the DCF valuation API.
+#
+# With this file in the repository root, Render can configure the whole
+# service from "New > Blueprint" - no build or start command typed by hand,
+# and the settings live in version control alongside the code.
+#
+# NO SECRETS ARE NEEDED. The backend reads Yahoo Finance via yfinance, which
+# requires no credentials, so there is no environment variable to set and
+# nothing to leak. The previous FMP_API_KEY is gone entirely.
+
+services:
+  - type: web
+    name: dcf-valuation-api
+    runtime: python
+    plan: free
+
+    # Free instances are available in these regions; change if you prefer
+    # one closer to you.
+    region: oregon
+
+    buildCommand: pip install -r requirements.txt
+
+    # Render assigns the port at runtime and expects the process to bind it.
+    # Binding 0.0.0.0 rather than 127.0.0.1 is what makes the service
+    # reachable from outside its container - a loopback bind produces a
+    # service that starts cleanly and then times out on every request.
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+
+    # Cheap endpoint that touches no upstream service, so a Yahoo outage
+    # cannot make Render think the app itself is unhealthy.
+    healthCheckPath: /health
+
+    envVars:
+      # The code needs 3.10+ for PEP 604 unions and uses nothing newer than
+      # 3.11 syntax; 3.13 has the widest wheel coverage for pandas/numpy.
+      - key: PYTHON_VERSION
+        value: "3.13.4"
+
+      # Keeps pip from spending build minutes checking for its own upgrade.
+      - key: PIP_DISABLE_PIP_VERSION_CHECK
+        value: "1"

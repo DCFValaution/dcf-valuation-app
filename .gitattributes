@@ -1,0 +1,15 @@
+# Normalise line endings in the repository to LF.
+#
+# Without this, files committed from Windows carry CRLF, which shows up as a
+# whole-file diff the first time anyone edits them on Linux - and the server
+# this deploys to runs Linux.
+* text=auto eol=lf
+
+# Binary files must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.ico binary
+*.xlsx binary
+*.pdf binary
+*.jar binary
+*.keystore binary

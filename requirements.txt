@@ -1,0 +1,27 @@
+# Runtime dependencies for the DCF valuation API.
+#
+# Pinned to the exact versions the backend was built and tested against, so a
+# deploy cannot pick up a breaking release of pandas or yfinance on its own.
+#
+# Only direct dependencies are pinned. yfinance's own transitives
+# (curl_cffi, requests, beautifulsoup4, lxml, peewee, platformdirs,
+# protobuf, multitasking, websockets, frozendict) are left to the resolver:
+# pinning them here would risk build-time conflicts on every yfinance bump
+# for no benefit, since none of our code touches them directly.
+#
+# Test-only packages live in requirements-dev.txt and are deliberately not
+# installed on the server.
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+
+# Market data. The mapping in market_data.py depends on yfinance's DataFrame
+# shape and its row labels, so this pin is load-bearing.
+yfinance==1.7.0
+
+# yfinance returns pandas DataFrames; market_data.py reads them directly.
+pandas==3.0.5
+numpy==2.5.2
+
+# Builds the downloadable .xlsx model.
+openpyxl==3.1.5
