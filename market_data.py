@@ -568,7 +568,9 @@ def probe_symbol(ticker: str) -> tuple[str, str]:
     try:
         response = _browser_session().get(
             _SEARCH_URL,
-            params={"q": ticker, "quotesCount": 1, "newsCount": 0},
+            # More than one, so the exact match is not crowded out of the
+            # results by Yahoo's fuzzy near-misses.
+            params={"q": ticker, "quotesCount": 8, "newsCount": 0},
             timeout=20,
         )
     except Exception as e:
@@ -587,10 +589,17 @@ def probe_symbol(ticker: str) -> tuple[str, str]:
         # A consent interstitial or a CAPTCHA page - HTML where JSON belongs.
         return "blocked", "HTTP 200 but the body was not JSON"
 
-    quotes = payload.get("quotes") or []
-    if quotes:
-        return "found", f"{len(quotes)} match(es)"
-    return "absent", "HTTP 200 with no matches"
+    # The search is fuzzy: querying ZZZZ returns ZZZZIX, a Nasdaq test fund.
+    # Accepting any match would call an unknown symbol "real" and downgrade a
+    # legitimate 404 into a confusing upstream error, so the symbol has to
+    # come back exactly. Yahoo writes it in upper case; _validate_ticker has
+    # already upper-cased what we send.
+    wanted = ticker.upper()
+    for quote in payload.get("quotes") or []:
+        if (quote.get("symbol") or "").upper() == wanted:
+            return "found", f"exact match ({quote.get('quoteType') or 'unknown type'})"
+
+    return "absent", "HTTP 200 with no exact match"
 
 
 def endpoint_report(ticker: str) -> dict:
@@ -787,13 +796,17 @@ def crumb_free_profile(ticker: str) -> dict | None:
     try:
         found = session.get(
             _SEARCH_URL,
-            params={"q": ticker, "quotesCount": 1, "newsCount": 0},
+            params={"q": ticker, "quotesCount": 8, "newsCount": 0},
             timeout=20)
         if found.status_code == 200:
-            quotes = found.json().get("quotes") or []
-            if quotes:
-                name = quotes[0].get("shortname") or quotes[0].get("longname")
-                quote_type = quotes[0].get("quoteType")
+            wanted = ticker.upper()
+            for quote in found.json().get("quotes") or []:
+                # Exact only - the search is fuzzy, and naming a company
+                # after a near-miss would be worse than leaving it blank.
+                if (quote.get("symbol") or "").upper() == wanted:
+                    name = quote.get("shortname") or quote.get("longname")
+                    quote_type = quote.get("quoteType")
+                    break
     except Exception:
         pass
 

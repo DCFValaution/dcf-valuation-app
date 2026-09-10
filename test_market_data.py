@@ -59,6 +59,11 @@ AAPL_INFO = {
 }
 
 
+# Captured before the autouse fixture stubs the module attribute, so the
+# probe's own behaviour can still be tested directly.
+REAL_PROBE_SYMBOL = M.probe_symbol
+
+
 def frame(rows: dict) -> pd.DataFrame:
     return pd.DataFrame(rows, index=PERIODS).T
 
@@ -387,6 +392,34 @@ def test_fallback_profile_is_not_used_for_an_unknown_ticker(monkeypatch):
     monkeypatch.setattr(M, "crumb_free_profile", must_not_run)
     with pytest.raises(TickerNotFoundError):
         M.fetch_financials("ZZZZ")
+
+
+def test_symbol_probe_requires_an_exact_match(monkeypatch):
+    """
+    Yahoo's search is fuzzy: querying ZZZZ returns ZZZZIX, a test fund.
+
+    Treating that as a hit called an unknown symbol real and turned an
+    honest 404 into a confusing upstream error, so only an exact symbol
+    match counts.
+    """
+    class Response:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json():
+            return {"quotes": [{"symbol": "ZZZZIX", "quoteType": "MUTUALFUND"},
+                               {"symbol": "ZZZZ", "quoteType": "EQUITY"}]}
+
+    class Session:
+        @staticmethod
+        def get(*args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(M, "_browser_session", lambda: Session())
+
+    assert REAL_PROBE_SYMBOL("ZZZZ")[0] == "found"    # exact, further down
+    assert REAL_PROBE_SYMBOL("ZZZZI")[0] == "absent"  # only fuzzy neighbours
 
 
 def test_empty_statements_are_retried_not_reported_as_missing(monkeypatch):

@@ -61,6 +61,30 @@ Two things to know about the free tier:
   limited where a laptop is not. `market_data.py` caches responses to keep
   request volume down, and surfaces throttling as HTTP 429.
 
+### Yahoo from a datacentre IP
+
+Yahoo does not refuse a cloud host everything. Measured from Render, it
+serves the search, chart and fundamentals endpoints normally but mints the
+crumb that authenticates its quote endpoint roughly once in fourteen
+attempts. The statements therefore arrive fine while `yfinance`'s `.info`
+fails, which is why:
+
+- requests go out on a shared `curl_cffi` session impersonating Chrome, as
+  Yahoo fingerprints the TLS handshake and not merely the User-Agent;
+- an unavailable profile falls back to `crumb_free_profile()`, which
+  rebuilds it from chart and search. **Beta is not recoverable this way, so
+  WACC falls back to its documented default** and the response says so;
+- an empty statement frame is retried, because a throttled request returns
+  an empty DataFrame rather than raising.
+
+`GET /diagnostics/upstream?ticker=AAPL` reports what Yahoo returns to the
+*server*, which is the only place that question can be answered. Use it
+before concluding anything about a failure.
+
+Errors distinguish a symbol Yahoo positively denies (404) from one it will
+not currently serve (429/502). An empty response is never reported as an
+unknown ticker.
+
 ## The app
 
 `app/lib/valuation_api.dart` holds `kBackendBaseUrl`. It points at
