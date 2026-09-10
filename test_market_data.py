@@ -94,7 +94,8 @@ class FakeTicker:
 
 
 def install(monkeypatch, ticker: FakeTicker):
-    monkeypatch.setattr(M.yf, "Ticker", lambda symbol: ticker)
+    # **kwargs absorbs the session= that market_data now passes.
+    monkeypatch.setattr(M.yf, "Ticker", lambda symbol, **kwargs: ticker)
 
 
 @pytest.fixture(autouse=True)
@@ -102,6 +103,26 @@ def _clear_caches():
     M.clear_caches()
     yield
     M.clear_caches()
+
+
+@pytest.fixture(autouse=True)
+def _offline(monkeypatch):
+    """
+    Keep the suite offline and fast.
+
+    An empty profile now makes market_data ask Yahoo whether the symbol is
+    real before calling it missing. Left alone that would be a live request
+    from a unit test, so the probe is stubbed to "absent" - Yahoo answering
+    normally with no match - which is the case these tests were written
+    against. Tests about blocking override it explicitly.
+
+    Retry backoff is zeroed so the failure paths do not each sleep for
+    several seconds.
+    """
+    monkeypatch.setattr(M, "probe_symbol",
+                        lambda ticker: ("absent", "stubbed: no match"))
+    monkeypatch.setattr(M, "_browser_session", lambda: None)
+    monkeypatch.setattr(M, "_RETRY_BACKOFF", (0.0, 0.0))
 
 
 @pytest.fixture
@@ -243,12 +264,110 @@ def test_etf_is_reported_as_having_nothing_to_value(monkeypatch):
         M.fetch_financials("SPY")
 
 
-def test_equity_without_statements_is_not_found(monkeypatch):
+def test_equity_without_statements_is_transient_not_not_found(monkeypatch):
+    """
+    A quoting company whose statements come back empty is reported as a
+    temporary upstream problem, not as an unknown ticker.
+
+    This used to raise TickerNotFoundError. That was wrong in the case that
+    actually bites in production: when Yahoo throttles the statement
+    endpoints, the profile still loads and the statements come back empty,
+    and a 404 tells the user their real company does not exist. A genuinely
+    uncovered company still surfaces - as a 502 that says "try again", whose
+    message names the newly-listed possibility.
+    """
     install(monkeypatch, FakeTicker(
         info={"symbol": "NEW", "quoteType": "EQUITY", "longName": "Newly Listed",
               "currentPrice": 10.0}))
-    with pytest.raises(TickerNotFoundError, match="no financial statements"):
+    with pytest.raises(DataUnavailableError, match="no financial statements"):
         M.fetch_financials("NEW")
+    # Specifically NOT a not-found.
+    assert not issubclass(DataUnavailableError, TickerNotFoundError)
+
+
+# ---------------------------------------------------------------------------
+# Blocked is not the same as missing
+#
+# Yahoo returns an empty profile both for a symbol that does not exist and
+# for a request it refuses to serve. Deployed on a shared cloud IP the second
+# case is the common one, and reporting it as "no such ticker" tells users
+# their real company is unknown. These tests pin the distinction.
+# ---------------------------------------------------------------------------
+
+def _empty_profile(monkeypatch):
+    """Yahoo's empty-response stub for a refused or unknown symbol."""
+    install(monkeypatch, FakeTicker(info={"trailingPegRatio": None}))
+
+
+def test_blocked_request_is_not_reported_as_a_missing_ticker(monkeypatch):
+    _empty_profile(monkeypatch)
+    monkeypatch.setattr(M, "probe_symbol",
+                        lambda ticker: ("blocked", "HTTP 429"))
+
+    with pytest.raises(RateLimitedError) as excinfo:
+        M.fetch_financials("AAPL")
+
+    assert not isinstance(excinfo.value, TickerNotFoundError)
+    # The message must not send the user off checking spelling that is fine.
+    assert "not a problem with the ticker" in str(excinfo.value)
+
+
+def test_recognised_symbol_with_no_data_is_transient(monkeypatch):
+    """Yahoo knows the symbol but withheld the profile - throttling."""
+    _empty_profile(monkeypatch)
+    monkeypatch.setattr(M, "probe_symbol",
+                        lambda ticker: ("found", "1 match(es)"))
+
+    with pytest.raises(DataUnavailableError) as excinfo:
+        M.fetch_financials("AAPL")
+
+    assert not isinstance(excinfo.value, TickerNotFoundError)
+    assert "not an unknown ticker" in str(excinfo.value)
+
+
+def test_unreachable_yahoo_is_transient(monkeypatch):
+    _empty_profile(monkeypatch)
+    monkeypatch.setattr(M, "probe_symbol",
+                        lambda ticker: ("unreachable", "ConnectionError: boom"))
+
+    with pytest.raises(DataUnavailableError) as excinfo:
+        M.fetch_financials("AAPL")
+    assert not isinstance(excinfo.value, TickerNotFoundError)
+
+
+def test_genuinely_absent_symbol_is_still_a_404(monkeypatch):
+    """The fix must not make every unknown ticker look like an outage."""
+    _empty_profile(monkeypatch)
+    monkeypatch.setattr(M, "probe_symbol",
+                        lambda ticker: ("absent", "HTTP 200 with no matches"))
+
+    with pytest.raises(TickerNotFoundError):
+        M.fetch_financials("ZZZZ")
+
+
+def test_transient_failures_are_retried(monkeypatch):
+    """One blip must not fail a valuation outright."""
+    real = FakeTicker(info=AAPL_INFO, income=frame(AAPL_INCOME),
+                      balance=frame(AAPL_BALANCE), cashflow=frame(AAPL_CASHFLOW))
+    attempts = {"n": 0}
+
+    class Flaky:
+        @property
+        def info(self):
+            attempts["n"] += 1
+            if attempts["n"] < 2:
+                raise RuntimeError("connection reset")
+            return AAPL_INFO
+
+        income_stmt = real.income_stmt
+        balance_sheet = real.balance_sheet
+        cashflow = real.cashflow
+
+    monkeypatch.setattr(M.yf, "Ticker", lambda symbol, **kwargs: Flaky())
+
+    fin = M.fetch_financials("AAPL")
+    assert fin.company_name == "Apple Inc."
+    assert attempts["n"] == 2, "should have retried once and then succeeded"
 
 
 def test_rate_limiting_is_its_own_error(monkeypatch):
@@ -292,7 +411,7 @@ def test_missing_revenue_is_reported_clearly(monkeypatch):
 
 @pytest.mark.parametrize("bad", ["", "   ", "AAPL; DROP TABLE"])
 def test_malformed_tickers_never_reach_the_network(monkeypatch, bad):
-    def explode(symbol):
+    def explode(symbol, **kwargs):
         raise AssertionError("should not have called Yahoo")
 
     monkeypatch.setattr(M.yf, "Ticker", explode)
@@ -398,7 +517,7 @@ def test_repeat_fetches_hit_yahoo_once(monkeypatch):
     real = FakeTicker(info=AAPL_INFO, income=frame(AAPL_INCOME),
                       balance=frame(AAPL_BALANCE), cashflow=frame(AAPL_CASHFLOW))
 
-    def counting(symbol):
+    def counting(symbol, **kwargs):
         calls["n"] += 1
         return real
 
@@ -414,7 +533,7 @@ def test_failures_are_cached_too(monkeypatch):
     """Repeatedly asking about a delisted ticker is how you earn a rate limit."""
     calls = {"n": 0}
 
-    def counting(symbol):
+    def counting(symbol, **kwargs):
         calls["n"] += 1
         return FakeTicker(info={"trailingPegRatio": None})
 
@@ -431,7 +550,7 @@ def test_clearing_the_cache_forces_a_refetch(monkeypatch):
     real = FakeTicker(info=AAPL_INFO, income=frame(AAPL_INCOME),
                       balance=frame(AAPL_BALANCE), cashflow=frame(AAPL_CASHFLOW))
 
-    def counting(symbol):
+    def counting(symbol, **kwargs):
         calls["n"] += 1
         return real
 
@@ -481,27 +600,27 @@ class FakeRateTicker:
 
 
 def test_risk_free_rate_converts_percent_to_decimal(monkeypatch):
-    monkeypatch.setattr(M.yf, "Ticker", lambda s: FakeRateTicker(close=4.837))
+    monkeypatch.setattr(M.yf, "Ticker", lambda s, **kwargs: FakeRateTicker(close=4.837))
     rate, source = M.fetch_risk_free_rate("year10")
     assert rate == pytest.approx(0.04837)
     assert "10-year" in source and "^TNX" in source
 
 
 def test_risk_free_rate_returns_none_when_unavailable(monkeypatch):
-    monkeypatch.setattr(M.yf, "Ticker", lambda s: FakeRateTicker(raises=RuntimeError()))
+    monkeypatch.setattr(M.yf, "Ticker", lambda s, **kwargs: FakeRateTicker(raises=RuntimeError()))
     assert M.fetch_risk_free_rate("year10") is None
 
 
 def test_absurd_risk_free_rate_is_rejected(monkeypatch):
     """A bad quote must not silently become a 90% discount rate."""
-    monkeypatch.setattr(M.yf, "Ticker", lambda s: FakeRateTicker(close=9000.0))
+    monkeypatch.setattr(M.yf, "Ticker", lambda s, **kwargs: FakeRateTicker(close=9000.0))
     assert M.fetch_risk_free_rate("year10") is None
 
 
 def test_risk_free_rate_is_cached(monkeypatch):
     calls = {"n": 0}
 
-    def counting(symbol):
+    def counting(symbol, **kwargs):
         calls["n"] += 1
         return FakeRateTicker(close=4.5)
 

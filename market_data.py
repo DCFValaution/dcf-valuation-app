@@ -495,6 +495,104 @@ def _check_currency(info: dict, ticker: str) -> None:
 # Fetching
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Talking to Yahoo like a browser
+#
+# Yahoo does not serve its finance API to anything that looks automated. It
+# fingerprints the TLS handshake as well as the headers, so a plain requests
+# Session with a spoofed User-Agent is still recognisable and still refused.
+# curl_cffi reproduces a real Chrome handshake, which is what gets us served
+# from a datacentre IP at all.
+#
+# The session is shared and reused: Yahoo issues a cookie and a crumb on first
+# contact, and carrying them across requests means one handshake per process
+# instead of one per ticker - both faster and far less likely to be throttled.
+# ---------------------------------------------------------------------------
+
+_IMPERSONATE = "chrome"
+
+_session_lock = threading.Lock()
+_session: Any = None
+
+
+def _browser_session() -> Any:
+    """The shared impersonating session, created on first use."""
+    global _session
+    with _session_lock:
+        if _session is None:
+            from curl_cffi import requests as _creq
+            _session = _creq.Session(impersonate=_IMPERSONATE)
+        return _session
+
+
+def reset_session() -> None:
+    """
+    Drop the shared session so the next call starts a fresh handshake.
+
+    Used after a block or a rate limit: the cookie and crumb we hold may have
+    been invalidated, and reusing them just repeats the failure.
+    """
+    global _session
+    with _session_lock:
+        old, _session = _session, None
+    if old is not None:
+        try:
+            old.close()
+        except Exception:
+            pass
+
+
+_SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
+
+
+def probe_symbol(ticker: str) -> tuple[str, str]:
+    """
+    Ask Yahoo whether *ticker* exists, via an endpoint that needs no crumb.
+
+    This is what separates "no such company" from "Yahoo refused to talk to
+    us". The distinction matters: an empty `info` dict is produced by BOTH,
+    so believing it on its own turns every blocked request into a confident,
+    wrong 404.
+
+    Returns (verdict, detail) where verdict is one of:
+
+      "found"      - Yahoo returned a match. The symbol is real.
+      "absent"     - Yahoo answered normally and had no match. A true 404.
+      "blocked"    - Yahoo refused or answered with something other than JSON.
+      "unreachable"- the request itself failed.
+
+    Only "absent" is a genuine not-found, and only because Yahoo answered
+    with HTTP 200 and an empty result list - a positive statement that the
+    symbol does not exist, rather than an absence of evidence.
+    """
+    try:
+        response = _browser_session().get(
+            _SEARCH_URL,
+            params={"q": ticker, "quotesCount": 1, "newsCount": 0},
+            timeout=20,
+        )
+    except Exception as e:
+        return "unreachable", f"{type(e).__name__}: {e}"
+
+    code = response.status_code
+    if code in (401, 403, 429) or code >= 500:
+        return "blocked", f"HTTP {code}"
+
+    if code != 200:
+        return "blocked", f"HTTP {code}"
+
+    try:
+        payload = response.json()
+    except Exception:
+        # A consent interstitial or a CAPTCHA page - HTML where JSON belongs.
+        return "blocked", "HTTP 200 but the body was not JSON"
+
+    quotes = payload.get("quotes") or []
+    if quotes:
+        return "found", f"{len(quotes)} match(es)"
+    return "absent", "HTTP 200 with no matches"
+
+
 def _validate_ticker(ticker: str) -> str:
     ticker = (ticker or "").upper().strip()
     if not ticker:
@@ -505,25 +603,51 @@ def _validate_ticker(ticker: str) -> str:
     return ticker
 
 
+_RETRY_ATTEMPTS = 3
+_RETRY_BACKOFF = (0.75, 2.0)  # seconds before the 2nd and 3rd attempts
+
+
+def _is_rate_limit(e: Exception) -> bool:
+    if isinstance(e, YFRateLimitError):
+        return True
+    message = str(e).lower()
+    return ("too many requests" in message
+            or "rate limit" in message
+            or "429" in message)
+
+
 def _call(description: str, ticker: str, fn: Callable[[], Any]) -> Any:
-    """Run a yfinance call, translating its failure modes into ours."""
-    try:
-        return fn()
-    except YFRateLimitError as e:
+    """
+    Run a yfinance call, translating its failure modes into ours.
+
+    Retried with backoff. Yahoo's refusals from a datacentre IP are often
+    intermittent - the same request a second later succeeds - so a single
+    attempt reports a hard failure for what is frequently a blip. The session
+    is reset between attempts on a throttle, since a stale crumb will
+    otherwise fail identically however many times we retry.
+    """
+    last: Exception | None = None
+
+    for attempt in range(_RETRY_ATTEMPTS):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            if attempt == _RETRY_ATTEMPTS - 1:
+                break
+            if _is_rate_limit(e):
+                reset_session()
+            time.sleep(_RETRY_BACKOFF[attempt])
+
+    assert last is not None
+    if _is_rate_limit(last):
         raise RateLimitedError(
             "Yahoo Finance is rate-limiting requests right now. "
             "Wait a moment and try again."
-        ) from e
-    except Exception as e:
-        message = str(e).lower()
-        if "too many requests" in message or "rate limit" in message or "429" in message:
-            raise RateLimitedError(
-                "Yahoo Finance is rate-limiting requests right now. "
-                "Wait a moment and try again."
-            ) from e
-        raise DataUnavailableError(
-            f"Yahoo Finance did not return {description} for '{ticker}': {e}"
-        ) from e
+        ) from last
+    raise DataUnavailableError(
+        f"Yahoo Finance did not return {description} for '{ticker}': {last}"
+    ) from last
 
 
 def _looks_like_a_real_quote(info: dict) -> bool:
@@ -538,6 +662,53 @@ def _looks_like_a_real_quote(info: dict) -> bool:
         return False
     return bool(info.get("symbol") or info.get("quoteType")
                 or info.get("longName") or info.get("shortName"))
+
+
+def _empty_quote_error(ticker: str) -> MarketDataError:
+    """
+    Decide what an empty profile for *ticker* actually means.
+
+    Yahoo returns an empty dict both for a symbol that does not exist and for
+    a request it has decided not to serve. Guessing "not found" is the more
+    damaging error of the two: it tells the user their perfectly real ticker
+    is unknown, and invites them to correct spelling that was never wrong.
+    So we corroborate against an endpoint that answers without a crumb.
+    """
+    verdict, detail = probe_symbol(ticker)
+
+    if verdict == "found":
+        # Yahoo knows the symbol but would not give us its profile. That is a
+        # fault on the data source's side, not a missing company.
+        reset_session()
+        return DataUnavailableError(
+            f"Yahoo Finance recognises '{ticker}' but returned no data for it "
+            f"just now ({detail}).\n"
+            "  This is a temporary upstream problem, not an unknown ticker. "
+            "Try again shortly."
+        )
+
+    if verdict == "blocked":
+        reset_session()
+        return RateLimitedError(
+            f"Yahoo Finance is refusing requests from this server right now "
+            f"({detail}).\n"
+            "  This is throttling, not a problem with the ticker. Try again "
+            "shortly."
+        )
+
+    if verdict == "unreachable":
+        reset_session()
+        return DataUnavailableError(
+            f"Could not reach Yahoo Finance to look up '{ticker}' ({detail}).\n"
+            "  Try again shortly."
+        )
+
+    # "absent": Yahoo answered normally and positively had no such symbol.
+    return TickerNotFoundError(
+        f"No security found for '{ticker}' on Yahoo Finance.\n"
+        "  Check the spelling. Delisted companies and some foreign "
+        "listings are not covered."
+    )
 
 
 def _profile_from(info: dict, ticker: str) -> dict:
@@ -585,15 +756,14 @@ def fetch_financials(ticker: str,
         raise failure
 
     try:
-        handle = yf.Ticker(ticker)
+        handle = yf.Ticker(ticker, session=_browser_session())
         info = _call("a company profile", ticker, lambda: handle.info) or {}
 
         if not _looks_like_a_real_quote(info):
-            raise TickerNotFoundError(
-                f"No security found for '{ticker}' on Yahoo Finance.\n"
-                "  Check the spelling. Delisted companies and some foreign "
-                "listings are not covered."
-            )
+            # An empty profile is ambiguous - an unknown symbol and a refused
+            # request look identical here. Ask Yahoo directly before deciding,
+            # so a block is never reported as a missing company.
+            raise _empty_quote_error(ticker)
 
         _check_currency(info, ticker)
 
@@ -625,9 +795,17 @@ def fetch_financials(ticker: str,
                     "  ETFs and funds publish no income statement, so there "
                     "is nothing to build a discounted cash flow from."
                 )
-            raise TickerNotFoundError(
-                f"Yahoo Finance returned no financial statements for '{ticker}'.\n"
-                "  The company may be newly listed, delisted, or not covered."
+            # The profile loaded, so the symbol is real and Yahoo is talking
+            # to us - but the statement endpoints came back empty. For a
+            # listed company that is far more often throttling of those
+            # heavier endpoints than a genuine absence of filings, so report
+            # it as transient rather than as an unknown ticker.
+            raise DataUnavailableError(
+                f"Yahoo Finance returned no financial statements for '{ticker}' "
+                "just now.\n"
+                "  The symbol is valid and quoting, so this is most likely a "
+                "temporary upstream limit. Try again shortly - if it persists, "
+                "the company may be newly listed or not covered."
             )
 
         financials = CompanyFinancials(
@@ -788,7 +966,7 @@ def fetch_risk_free_rate(tenor: str = "year10") -> tuple[float, str] | None:
     as_of = date.today().isoformat()
 
     try:
-        handle = yf.Ticker(symbol)
+        handle = yf.Ticker(symbol, session=_browser_session())
         history = handle.history(period="5d")
         if history is not None and not history.empty and "Close" in history:
             rate = float(history["Close"].iloc[-1])

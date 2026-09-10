@@ -396,6 +396,49 @@ def health() -> dict:
     }
 
 
+@app.get("/diagnostics/upstream", tags=["meta"],
+         summary="What Yahoo Finance actually returns to this server")
+def upstream_diagnostics(ticker: str = "AAPL") -> dict:
+    """
+    Report Yahoo's raw response to *this* machine.
+
+    Exists because "is Yahoo blocking the server?" cannot be answered from a
+    laptop - the whole question is what happens from the deployed IP. Returns
+    the symbol-probe verdict and whether a profile actually came back, so a
+    block is distinguishable from a genuinely unknown ticker without reading
+    server logs.
+
+    Discloses nothing sensitive: no credentials exist, and the only input is
+    a ticker symbol.
+    """
+    from market_data import fetch_financials, probe_symbol
+
+    verdict, detail = probe_symbol(ticker)
+
+    profile_ok, profile_detail = False, ""
+    try:
+        financials = fetch_financials(ticker)
+        profile_ok = True
+        profile_detail = (f"{financials.profile.get('companyName')}, "
+                          f"{len(financials.income)} year(s) of statements")
+    except Exception as e:
+        profile_detail = f"{type(e).__name__}: {e}"
+
+    return {
+        "ticker": ticker.upper(),
+        "symbol_probe": {"verdict": verdict, "detail": detail},
+        "full_fetch": {"succeeded": profile_ok, "detail": profile_detail},
+        "interpretation": {
+            "found+succeeded": "Yahoo is serving this server normally.",
+            "found+failed": "Yahoo knows the symbol but withheld the data - throttling.",
+            "blocked": "Yahoo is refusing this server's requests outright.",
+            "absent": "Yahoo answered normally: the symbol genuinely does not exist.",
+        }.get(verdict if verdict != "found"
+              else f"found+{'succeeded' if profile_ok else 'failed'}",
+              "Yahoo could not be reached."),
+    }
+
+
 @app.get("/assumptions", tags=["meta"], summary="Overridable assumption names")
 def overridable_assumptions() -> dict:
     """The names accepted in `overrides`, for building sliders against."""

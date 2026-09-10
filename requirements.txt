@@ -4,7 +4,7 @@
 # deploy cannot pick up a breaking release of pandas or yfinance on its own.
 #
 # Only direct dependencies are pinned. yfinance's own transitives
-# (curl_cffi, requests, beautifulsoup4, lxml, peewee, platformdirs,
+# (requests, beautifulsoup4, lxml, peewee, platformdirs,
 # protobuf, multitasking, websockets, frozendict) are left to the resolver:
 # pinning them here would risk build-time conflicts on every yfinance bump
 # for no benefit, since none of our code touches them directly.
@@ -18,6 +18,12 @@ uvicorn[standard]==0.52.4
 # Market data. The mapping in market_data.py depends on yfinance's DataFrame
 # shape and its row labels, so this pin is load-bearing.
 yfinance==1.7.0
+
+# Promoted from a yfinance transitive to a direct dependency: market_data.py
+# imports it to build the browser-impersonating session that Yahoo will serve
+# from a datacentre IP, and to probe whether a symbol really is unknown.
+# Without it the backend still imports, but every cloud request is refused.
+curl_cffi==0.16.3
 
 # yfinance returns pandas DataFrames; market_data.py reads them directly.
 pandas==3.0.5
