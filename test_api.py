@@ -160,6 +160,13 @@ def test_projection_and_valuation_blocks_present(client):
     assert body["valuation"]["enterprise_value"] > 0
     assert body["wacc_build_up"]["cost_of_equity"] > 0
 
+    # Beta's provenance must reach the client: a computed beta, a quoted one
+    # and a defaulted 1.0 are three different claims, and the response has to
+    # say which it is making.
+    beta = next(a for a in body["wacc_inputs"] if a["name"] == "beta")
+    assert beta["source"] in {"derived", "default", "override"}
+    assert beta["detail"]
+
 
 # ---------------------------------------------------------------------------
 # Not-suitable case

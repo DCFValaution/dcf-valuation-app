@@ -183,6 +183,12 @@ class ValuationResponse(BaseModel):
         ..., description="The judgement-call inputs users will most want to adjust"
     )
     wacc_build_up: dict[str, Any]
+    wacc_inputs: list[AssumptionOut] = Field(
+        ...,
+        description="Where each WACC input came from - notably whether beta "
+                    "was computed from price history, quoted by Yahoo, or "
+                    "defaulted.",
+    )
     sensitivity: SensitivityOut
     projection: list[ProjectionYearOut]
     warnings: list[str]
@@ -261,6 +267,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
         assumptions=_assumption_list(report.derived.provenance),
         global_levers=_assumption_list(levers),
         wacc_build_up=report.derived.diagnostics.get("wacc_components", {}),
+        wacc_inputs=_assumption_list(report.derived.wacc_inputs),
         sensitivity=SensitivityOut(
             waccs=r.sensitivity_waccs,
             growth_rates=r.sensitivity_gs,
