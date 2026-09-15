@@ -200,6 +200,11 @@ def build_workbook(report: ValuationReport) -> Workbook:
     the guard refused would hand the user exactly the misleading artefact the
     guard exists to prevent.
     """
+    if getattr(report, "method", "dcf") != "dcf":
+        raise ValueError(
+            f"Refusing to build a workbook for {report.ticker}: the export builds "
+            f"DCF models, and this company was valued with a {report.method.upper()}."
+        )
     if report.result is None:
         raise ValueError(
             f"Refusing to build a workbook for {report.ticker}: the suitability "

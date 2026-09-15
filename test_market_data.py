@@ -320,6 +320,8 @@ def test_blocked_request_is_not_reported_as_a_missing_ticker(monkeypatch):
     assert not isinstance(excinfo.value, TickerNotFoundError)
     # The message must not send the user off checking spelling that is fine.
     assert "not a problem with the ticker" in str(excinfo.value)
+    # It reaches the screen: the status code is for the log, not the reader.
+    assert "HTTP 429" not in str(excinfo.value)
 
 
 def test_recognised_symbol_with_no_data_is_transient(monkeypatch):
@@ -333,6 +335,8 @@ def test_recognised_symbol_with_no_data_is_transient(monkeypatch):
 
     assert not isinstance(excinfo.value, TickerNotFoundError)
     assert "not an unknown ticker" in str(excinfo.value)
+    assert "match(es)" not in str(excinfo.value)
+    assert "upstream" not in str(excinfo.value)
 
 
 def test_unreachable_yahoo_is_transient(monkeypatch):
@@ -343,6 +347,9 @@ def test_unreachable_yahoo_is_transient(monkeypatch):
     with pytest.raises(DataUnavailableError) as excinfo:
         M.fetch_financials("AAPL")
     assert not isinstance(excinfo.value, TickerNotFoundError)
+    # A raw exception is for the log; the reader gets a sentence.
+    assert "ConnectionError" not in str(excinfo.value)
+    assert "boom" not in str(excinfo.value)
 
 
 def test_genuinely_absent_symbol_is_still_a_404(monkeypatch):
@@ -363,6 +370,10 @@ def test_blocked_quote_endpoint_still_produces_a_valuation(monkeypatch):
     statements, so the profile is rebuilt from the crumb-free chart and
     search endpoints and the valuation completes - without a beta, which
     makes WACC fall back to its documented default.
+
+    Search supplies the sector here, which is the ordinary case and the one
+    that keeps this fallback worth having. When it does not, the company
+    cannot be routed to a method at all - see the test below.
     """
     # Statements arrive; the profile does not.
     install(monkeypatch, FakeTicker(
@@ -371,7 +382,7 @@ def test_blocked_quote_endpoint_still_produces_a_valuation(monkeypatch):
         cashflow=frame(AAPL_CASHFLOW)))
     monkeypatch.setattr(M, "probe_symbol", lambda ticker: ("found", "1 match(es)"))
     monkeypatch.setattr(M, "crumb_free_profile", lambda ticker: {
-        "symbol": "AAPL", "companyName": "Apple Inc.", "sector": None,
+        "symbol": "AAPL", "companyName": "Apple Inc.", "sector": "Technology",
         "industry": None, "exchange": "NMS", "beta": None, "marketCap": None,
         "price": 315.34, "sharesOutstanding": None, "currency": "USD",
         "financialCurrency": None, "quoteType": "EQUITY",
@@ -384,6 +395,68 @@ def test_blocked_quote_endpoint_still_produces_a_valuation(monkeypatch):
     assert base.revenue == pytest.approx(416_161, abs=1)
     # The share count is unaffected: it comes from the income statement.
     assert base.shares == pytest.approx(15_004.7, abs=0.1)
+
+
+def _sectorless_profile(monkeypatch, ticker="TRV", name="The Travelers Companies, Inc."):
+    """The crumb-free fallback with search throttled: everything but a sector."""
+    install(monkeypatch, FakeTicker(
+        info={"trailingPegRatio": None},
+        income=frame(AAPL_INCOME), balance=frame(AAPL_BALANCE),
+        cashflow=frame(AAPL_CASHFLOW)))
+    monkeypatch.setattr(M, "probe_symbol", lambda t: ("found", "1 match(es)"))
+    monkeypatch.setattr(M, "crumb_free_profile", lambda t: {
+        "symbol": ticker, "companyName": name, "sector": None,
+        "industry": None, "exchange": "NYSE", "beta": None, "marketCap": None,
+        "price": 375.20, "sharesOutstanding": None, "currency": "USD",
+        "financialCurrency": None, "quoteType": "EQUITY",
+    })
+
+
+def test_a_profile_with_no_sector_is_refused_rather_than_valued(monkeypatch):
+    """
+    The TRV bug: an insurer arrived with no sector during a throttle, was read
+    as "not financial", and came back as a DCF at $1,205 against a $375 price.
+
+    Without a sector nothing can be said about which model applies, and the
+    unsafe reading is the one that used to be the default.
+    """
+    _sectorless_profile(monkeypatch)
+
+    with pytest.raises(DataUnavailableError) as excinfo:
+        M.fetch_financials("TRV")
+
+    message = str(excinfo.value)
+    # Transient and retryable, not a verdict on the company or the ticker.
+    assert not isinstance(excinfo.value, TickerNotFoundError)
+    assert "sector" in message
+    assert "try again" in message.lower()
+
+
+def test_a_missing_sector_is_not_cached(monkeypatch):
+    """
+    One throttled search must not cost the ticker a quarter of an hour.
+
+    The financials cache holds entries for fifteen minutes, so caching this
+    would turn a single unlucky request into a long run of identical wrong
+    answers - which is how the TRV figure survived a retry.
+    """
+    M.clear_caches()
+    _sectorless_profile(monkeypatch)
+
+    with pytest.raises(DataUnavailableError):
+        M.fetch_financials("TRV")
+
+    # The very next request retries Yahoo, and succeeds once search answers.
+    monkeypatch.setattr(M, "crumb_free_profile", lambda t: {
+        "symbol": "TRV", "companyName": "The Travelers Companies, Inc.",
+        "sector": "Financial Services", "industry": "Insurance - Property & Casualty",
+        "exchange": "NYSE", "beta": None, "marketCap": None, "price": 375.20,
+        "sharesOutstanding": None, "currency": "USD", "financialCurrency": None,
+        "quoteType": "EQUITY",
+    })
+
+    fin = M.fetch_financials("TRV")
+    assert fin.sector == "Financial Services"
 
 
 def test_fallback_profile_is_not_used_for_an_unknown_ticker(monkeypatch):
@@ -425,22 +498,14 @@ def test_a_real_etf_is_still_a_404(monkeypatch):
         M.fetch_financials("SPY")
 
 
-def test_symbol_probe_requires_an_exact_match(monkeypatch):
-    """
-    Yahoo's search is fuzzy: querying ZZZZ returns ZZZZIX, a test fund.
-
-    Treating that as a hit called an unknown symbol real and turned an
-    honest 404 into a confusing upstream error, so only an exact symbol
-    match counts.
-    """
+def _chart_session(monkeypatch, status, payload):
     class Response:
-        status_code = 200
-        text = ""
+        status_code = status
 
-        @staticmethod
-        def json():
-            return {"quotes": [{"symbol": "ZZZZIX", "quoteType": "MUTUALFUND"},
-                               {"symbol": "ZZZZ", "quoteType": "EQUITY"}]}
+        def json(self):
+            if payload is None:
+                raise ValueError("not JSON")
+            return payload
 
     class Session:
         @staticmethod
@@ -449,8 +514,219 @@ def test_symbol_probe_requires_an_exact_match(monkeypatch):
 
     monkeypatch.setattr(M, "_browser_session", lambda: Session())
 
-    assert REAL_PROBE_SYMBOL("ZZZZ")[0] == "found"    # exact, further down
-    assert REAL_PROBE_SYMBOL("ZZZZI")[0] == "absent"  # only fuzzy neighbours
+
+def test_symbol_probe_uses_an_exact_symbol_lookup(monkeypatch):
+    """
+    The probe asks the chart endpoint, which describes exactly the symbol
+    requested. Search, used before, is fuzzy - ZZZZ returns ZZZZIX, a test
+    fund - and not even deterministic: it left BAC out of one response and
+    ranked it first in the next.
+    """
+    _chart_session(monkeypatch, 200, {"chart": {"result": [
+        {"meta": {"symbol": "BAC", "instrumentType": "EQUITY"}}], "error": None}})
+    assert REAL_PROBE_SYMBOL("BAC")[0] == "found"
+
+
+def test_absent_requires_yahoos_own_not_found(monkeypatch):
+    _chart_session(monkeypatch, 404, {"chart": {"result": None, "error": {
+        "code": "Not Found", "description": "No data found, symbol may be delisted"}}})
+    assert REAL_PROBE_SYMBOL("ZZZZ")[0] == "absent"
+
+
+@pytest.mark.parametrize("status, payload", [
+    (404, None),     # a bare 404 is not a statement about the symbol
+    (429, {"chart": {"result": None, "error": {"code": "Too Many Requests"}}}),
+    (500, None),
+    (200, None),     # a consent page where JSON belongs
+    (200, {"chart": {"result": [{"meta": {"symbol": "OTHER"}}]}}),
+])
+def test_anything_short_of_a_clear_answer_is_blocked_not_absent(monkeypatch, status, payload):
+    _chart_session(monkeypatch, status, payload)
+    assert REAL_PROBE_SYMBOL("BAC")[0] == "blocked"
+
+
+def test_a_network_failure_is_unreachable_not_absent(monkeypatch):
+    class Session:
+        @staticmethod
+        def get(*args, **kwargs):
+            raise ConnectionError("boom")
+
+    monkeypatch.setattr(M, "_browser_session", lambda: Session())
+    assert REAL_PROBE_SYMBOL("BAC")[0] == "unreachable"
+
+
+# ---------------------------------------------------------------------------
+# Sector on the crumb-free path
+# ---------------------------------------------------------------------------
+
+def _profile_session(monkeypatch, search_quotes):
+    chart = {"chart": {"result": [{"meta": {
+        "symbol": "JPM", "longName": "JPMorgan Chase & Co.",
+        "regularMarketPrice": 353.56, "currency": "USD", "exchangeName": "NYQ"}}]}}
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class Session:
+        @staticmethod
+        def get(url, **kwargs):
+            return Response({"quotes": search_quotes} if "search" in url else chart)
+
+    monkeypatch.setattr(M, "_browser_session", lambda: Session())
+
+
+def test_crumb_free_profile_carries_sector_so_financials_route_correctly(monkeypatch):
+    """
+    Sector decides DCF or dividend discount model. It used to be hard-coded
+    to None on this path - the one a cloud deployment uses most - so a bank
+    arriving through it would have been sent down the DCF.
+    """
+    _profile_session(monkeypatch, [
+        {"symbol": "JPMX"},
+        {"symbol": "JPM", "shortname": "JPMorgan Chase & Co.", "quoteType": "EQUITY",
+         "sector": "Financial Services", "industry": "Banks—Diversified"},
+    ])
+    profile = M.crumb_free_profile("JPM")
+    assert profile["sector"] == "Financial Services"
+    assert profile["industry"] == "Banks - Diversified"
+    assert "sector unavailable" not in profile["profileSource"]
+
+
+def test_crumb_free_profile_says_so_when_sector_is_missing(monkeypatch):
+    _profile_session(monkeypatch, [{"symbol": "JPMX", "sector": "Technology"}])
+    profile = M.crumb_free_profile("JPM")
+    assert profile["sector"] is None
+    assert "sector unavailable" in profile["profileSource"]
+
+
+# ---------------------------------------------------------------------------
+# Dividends
+# ---------------------------------------------------------------------------
+
+def _dividend_session(monkeypatch, status=200, events=None, calls=None):
+    class Response:
+        status_code = status
+
+        def json(self):
+            dividends = {str(t): {"amount": a, "date": t} for t, a in (events or [])}
+            return {"chart": {"result": [{"meta": {}, "events": {"dividends": dividends}}]}}
+
+    class Session:
+        @staticmethod
+        def get(url, **kwargs):
+            if calls is not None:
+                calls.append((url, kwargs.get("params")))
+            return Response()
+
+    monkeypatch.setattr(M, "_browser_session", lambda: Session())
+
+
+def test_dividends_come_from_the_crumb_free_chart_oldest_first(monkeypatch):
+    calls = []
+    _dividend_session(monkeypatch, events=[(1783344600, 1.5), (1775482200, 1.5),
+                                           (1767700000, 0.0)], calls=calls)
+    assert M.fetch_dividends("JPM") == [(1775482200, 1.5), (1783344600, 1.5)]
+    url, params = calls[0]
+    assert "/chart/JPM" in url and params["events"] == "div"
+
+
+def test_dividends_are_cached(monkeypatch):
+    calls = []
+    _dividend_session(monkeypatch, events=[(1783344600, 1.5)], calls=calls)
+    M.fetch_dividends("JPM")
+    M.fetch_dividends("JPM")
+    assert len(calls) == 1
+
+
+def test_no_dividend_events_is_a_positive_empty_answer(monkeypatch):
+    _dividend_session(monkeypatch, events=None)
+    assert M.fetch_dividends("BRK-B") == []
+
+
+def test_a_throttled_dividend_request_raises_rather_than_reporting_no_dividend(monkeypatch):
+    _dividend_session(monkeypatch, status=429)
+    with pytest.raises(RateLimitedError):
+        M.fetch_dividends("JPM")
+
+
+def test_a_failed_dividend_request_raises_rather_than_reporting_no_dividend(monkeypatch):
+    _dividend_session(monkeypatch, status=503)
+    with pytest.raises(DataUnavailableError):
+        M.fetch_dividends("JPM")
+
+
+def test_statement_rows_carry_the_dividend_model_fields(monkeypatch):
+    """Row labels as Yahoo actually names them for JPM."""
+    income = dict(AAPL_INCOME, **{
+        "Net Income Common Stockholders": [55_681e6, 56_868e6, 47_760e6],
+        "Diluted EPS": [20.02, 19.75, 16.23]})
+    balance = dict(AAPL_BALANCE, **{
+        "Common Stock Equity": [342_393e6, 324_708e6, 300_474e6]})
+    cashflow = dict(AAPL_CASHFLOW, **{
+        "Cash Dividends Paid": [-16_625e6, -14_783e6, -13_463e6],
+        "Repurchase Of Capital Stock": [-34_591e6, -28_680e6, -9_824e6]})
+    install(monkeypatch, FakeTicker(info=AAPL_INFO, income=frame(income),
+                                    balance=frame(balance), cashflow=frame(cashflow)))
+
+    fin = M.fetch_financials("AAPL")
+    assert fin.income[0]["netIncomeCommon"] == pytest.approx(55_681e6)
+    assert fin.income[0]["dilutedEPS"] == pytest.approx(20.02)
+    assert fin.balance[0]["commonStockEquity"] == pytest.approx(342_393e6)
+    assert fin.cashflow[0]["dividendsPaid"] == pytest.approx(-16_625e6)
+    assert fin.cashflow[0]["stockRepurchased"] == pytest.approx(-34_591e6)
+
+
+# ---------------------------------------------------------------------------
+# Peer classification
+# ---------------------------------------------------------------------------
+
+def _search_session(monkeypatch, payloads, calls=None):
+    responses = iter(payloads)
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class Session:
+        @staticmethod
+        def get(url, **kwargs):
+            if calls is not None:
+                calls.append(url)
+            return Response(next(responses))
+
+    monkeypatch.setattr(M, "_browser_session", lambda: Session())
+
+
+def test_classification_retries_a_search_that_leaves_the_symbol_out(monkeypatch):
+    """Search dropped BAC from one response and included it in the next - costing JPM a peer."""
+    _search_session(monkeypatch, [
+        {"quotes": [{"symbol": "BAC-PQ"}, {"symbol": "BLZE"}]},
+        {"quotes": [{"symbol": "BAC", "quoteType": "EQUITY", "industry": "Banks—Diversified",
+                     "shortname": "Bank of America Corporation"}]},
+    ])
+    result = M.fetch_classification("BAC")
+    assert result["industry"] == "Banks - Diversified"
+    assert result["name"] == "Bank of America Corporation"
+
+
+def test_a_classification_miss_is_not_cached(monkeypatch):
+    calls = []
+    empty = {"quotes": []}
+    _search_session(monkeypatch, [empty] * (2 * M._CLASSIFICATION_ATTEMPTS), calls=calls)
+    assert M.fetch_classification("BAC")["industry"] is None
+    assert M.fetch_classification("BAC")["industry"] is None
+    assert len(calls) == 2 * M._CLASSIFICATION_ATTEMPTS, "a miss must be asked again, not remembered"
 
 
 def test_empty_statements_are_retried_not_reported_as_missing(monkeypatch):

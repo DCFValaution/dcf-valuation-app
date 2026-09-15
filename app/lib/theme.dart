@@ -38,6 +38,22 @@ abstract final class AppRadius {
   static const double chip = 999;
 }
 
+/// How far apart things sit, by relationship rather than by pixel.
+///
+/// Screens were spaced by eye as features were added, which is how one screen
+/// ended up with 12px between sections and another with 28. These name the
+/// three relationships that matter so every screen spaces them alike.
+abstract final class AppGap {
+  /// Between separate sections of a screen: the figure, the notes, the table.
+  static const double section = AppSpacing.xxl;
+
+  /// Between related blocks within a section.
+  static const double block = AppSpacing.lg;
+
+  /// Between a heading and what it introduces.
+  static const double heading = AppSpacing.sm;
+}
+
 // ---------------------------------------------------------------------------
 // Semantic colours
 // ---------------------------------------------------------------------------
@@ -111,19 +127,18 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? accentSurface,
     Color? hairline,
     Color? textSecondary,
-  }) =>
-      AppColors(
-        positive: positive ?? this.positive,
-        positiveSurface: positiveSurface ?? this.positiveSurface,
-        negative: negative ?? this.negative,
-        negativeSurface: negativeSurface ?? this.negativeSurface,
-        caution: caution ?? this.caution,
-        cautionSurface: cautionSurface ?? this.cautionSurface,
-        neutral: neutral ?? this.neutral,
-        accentSurface: accentSurface ?? this.accentSurface,
-        hairline: hairline ?? this.hairline,
-        textSecondary: textSecondary ?? this.textSecondary,
-      );
+  }) => AppColors(
+    positive: positive ?? this.positive,
+    positiveSurface: positiveSurface ?? this.positiveSurface,
+    negative: negative ?? this.negative,
+    negativeSurface: negativeSurface ?? this.negativeSurface,
+    caution: caution ?? this.caution,
+    cautionSurface: cautionSurface ?? this.cautionSurface,
+    neutral: neutral ?? this.neutral,
+    accentSurface: accentSurface ?? this.accentSurface,
+    hairline: hairline ?? this.hairline,
+    textSecondary: textSecondary ?? this.textSecondary,
+  );
 
   @override
   AppColors lerp(ThemeExtension<AppColors>? other, double t) {
@@ -162,71 +177,78 @@ extension AppColorsX on BuildContext {
 const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
 
 TextTheme _textTheme(Color primary, Color secondary) => TextTheme(
-      // The hero valuation.
-      displayLarge: TextStyle(
-        fontSize: 44,
-        height: 1.05,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -1.2,
-        color: primary,
-        fontFeatures: _tabular,
-      ),
-      displayMedium: TextStyle(
-        fontSize: 32,
-        height: 1.1,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.8,
-        color: primary,
-        fontFeatures: _tabular,
-      ),
-      headlineMedium: TextStyle(
-        fontSize: 24,
-        height: 1.2,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.4,
-        color: primary,
-      ),
-      titleLarge: TextStyle(
-        fontSize: 19,
-        height: 1.3,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.2,
-        color: primary,
-        fontFeatures: _tabular,
-      ),
-      titleMedium: TextStyle(
-        fontSize: 16,
-        height: 1.35,
-        fontWeight: FontWeight.w600,
-        color: primary,
-      ),
-      titleSmall: TextStyle(
-        fontSize: 14,
-        height: 1.35,
-        fontWeight: FontWeight.w600,
-        color: primary,
-        fontFeatures: _tabular,
-      ),
-      bodyLarge: TextStyle(
-          fontSize: 15, height: 1.5, color: primary, fontFeatures: _tabular),
-      bodyMedium: TextStyle(fontSize: 14, height: 1.55, color: primary),
-      bodySmall: TextStyle(fontSize: 13, height: 1.55, color: secondary),
-      // Eyebrow labels above figures.
-      labelLarge: TextStyle(
-          fontSize: 14, fontWeight: FontWeight.w600, color: primary),
-      labelMedium: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.9,
-        color: secondary,
-      ),
-      labelSmall: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0.3,
-        color: secondary,
-      ),
-    );
+  // The hero valuation.
+  displayLarge: TextStyle(
+    fontSize: 44,
+    height: 1.05,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -1.2,
+    color: primary,
+    fontFeatures: _tabular,
+  ),
+  displayMedium: TextStyle(
+    fontSize: 32,
+    height: 1.1,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.8,
+    color: primary,
+    fontFeatures: _tabular,
+  ),
+  headlineMedium: TextStyle(
+    fontSize: 24,
+    height: 1.2,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.4,
+    color: primary,
+  ),
+  titleLarge: TextStyle(
+    fontSize: 19,
+    height: 1.3,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.2,
+    color: primary,
+    fontFeatures: _tabular,
+  ),
+  titleMedium: TextStyle(
+    fontSize: 16,
+    height: 1.35,
+    fontWeight: FontWeight.w600,
+    color: primary,
+  ),
+  titleSmall: TextStyle(
+    fontSize: 14,
+    height: 1.35,
+    fontWeight: FontWeight.w600,
+    color: primary,
+    fontFeatures: _tabular,
+  ),
+  bodyLarge: TextStyle(
+    fontSize: 15,
+    height: 1.5,
+    color: primary,
+    fontFeatures: _tabular,
+  ),
+  bodyMedium: TextStyle(fontSize: 14, height: 1.55, color: primary),
+  bodySmall: TextStyle(fontSize: 13, height: 1.55, color: secondary),
+  // Eyebrow labels above figures.
+  labelLarge: TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: primary,
+  ),
+  labelMedium: TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.9,
+    color: secondary,
+  ),
+  labelSmall: TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.3,
+    color: secondary,
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // Themes
@@ -302,7 +324,9 @@ ThemeData _build({
       filled: true,
       fillColor: surface,
       contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.lg,
+      ),
       hintStyle: text.bodyMedium?.copyWith(color: colors.textSecondary),
       labelStyle: text.bodyMedium?.copyWith(color: colors.textSecondary),
       floatingLabelStyle: text.labelSmall?.copyWith(color: accent),
@@ -379,6 +403,78 @@ ThemeData _build({
       space: 1,
     ),
 
+    // A tinted selection rather than a solid brand fill: the switcher chooses
+    // what to look at and should never outshout the figure beneath it.
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        visualDensity: VisualDensity.standard,
+        textStyle: WidgetStatePropertyAll(text.labelLarge),
+        side: WidgetStatePropertyAll(BorderSide(color: colors.hairline)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? colors.accentSurface
+              : surface,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? accent
+              : colors.textSecondary,
+        ),
+        iconColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? accent
+              : colors.textSecondary,
+        ),
+      ),
+    ),
+
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      modalBackgroundColor: surface,
+      dragHandleColor: colors.hairline,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
+      ),
+    ),
+
+    dialogTheme: DialogThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      titleTextStyle: text.titleLarge?.copyWith(fontFeatures: const []),
+      contentTextStyle: text.bodyMedium,
+    ),
+
+    chipTheme: ChipThemeData(
+      backgroundColor: surfaceMuted,
+      side: BorderSide(color: colors.hairline),
+      labelStyle: text.labelLarge?.copyWith(fontSize: 13),
+      deleteIconColor: colors.textSecondary,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+    ),
+
+    expansionTileTheme: ExpansionTileThemeData(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: AppSpacing.md),
+      iconColor: colors.textSecondary,
+      collapsedIconColor: colors.textSecondary,
+      textColor: textPrimary,
+      collapsedTextColor: textPrimary,
+      shape: const Border(),
+      collapsedShape: const Border(),
+    ),
+
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: isDark ? surfaceMuted : const Color(0xFF1B2231),
@@ -400,21 +496,21 @@ ThemeData _build({
 }
 
 ThemeData buildLightTheme() => _build(
-      brightness: Brightness.light,
-      accent: _accentLight,
-      background: const Color(0xFFF5F7FA),
-      surface: Colors.white,
-      surfaceMuted: const Color(0xFFEFF2F7),
-      textPrimary: const Color(0xFF101828),
-      colors: AppColors.light,
-    );
+  brightness: Brightness.light,
+  accent: _accentLight,
+  background: const Color(0xFFF5F7FA),
+  surface: Colors.white,
+  surfaceMuted: const Color(0xFFEFF2F7),
+  textPrimary: const Color(0xFF101828),
+  colors: AppColors.light,
+);
 
 ThemeData buildDarkTheme() => _build(
-      brightness: Brightness.dark,
-      accent: _accentDark,
-      background: const Color(0xFF0B0E13),
-      surface: const Color(0xFF141922),
-      surfaceMuted: const Color(0xFF1B212C),
-      textPrimary: const Color(0xFFE8ECF3),
-      colors: AppColors.dark,
-    );
+  brightness: Brightness.dark,
+  accent: _accentDark,
+  background: const Color(0xFF0B0E13),
+  surface: const Color(0xFF141922),
+  surfaceMuted: const Color(0xFF1B212C),
+  textPrimary: const Color(0xFFE8ECF3),
+  colors: AppColors.dark,
+);

@@ -1,0 +1,11 @@
+# Template for release signing. Safe to commit: it holds no secrets.
+#
+# Copy to key.properties (same folder) and fill in your own values.
+# key.properties is git-ignored and must never be committed.
+#
+# storeFile is an absolute path; use forward slashes, even on Windows.
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=C:/Users/User/keys/intrinsic-upload.jks

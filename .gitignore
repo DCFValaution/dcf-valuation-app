@@ -70,7 +70,15 @@ app/android/app/debug/
 app/android/app/profile/
 app/android/app/release/
 app/android/local.properties
-app/android/key.properties
+# Release signing. key.properties holds the keystore passwords; the keystore
+# itself is the app's identity. Matched anywhere, not just at one path, so a
+# copy dropped elsewhere in the tree is still never committed. The template
+# (key.properties.example) holds no secrets and is allowed.
+key.properties
+**/key.properties
+!key.properties.example
+upload-keystore*
+*-upload.jks
 app/ios/Pods/
 app/ios/.symlinks/
 app/ios/Flutter/Flutter.framework

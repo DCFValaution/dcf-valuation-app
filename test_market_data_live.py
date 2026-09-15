@@ -5,7 +5,8 @@ Four things this proves, against the real service:
 
   1. AAPL reconciles with the FMP figures the model was built against.
   2. Tickers FMP's free tier gated now return real valuations.
-  3. The suitability guards still fire for RIVN and JPM.
+  3. The DCF guard still fires for RIVN; financials (JPM, BAC) are valued
+     with the dividend discount model, which refuses BRK-B (no dividend).
   4. Unknown, delisted and non-company symbols fail gracefully.
 
 Run with:  python test_market_data_live.py
@@ -38,7 +39,30 @@ PREVIOUSLY_BLOCKED = ["BRK-B", "BRLT", "CROX", "DECK", "ULTA",
 # quote. These must be refused, not valued - see _check_currency().
 CURRENCY_MISMATCHED = ["TSM", "ASML", "TM", "BABA"]
 
-GUARDED = ["RIVN", "JPM"]
+GUARDED = ["RIVN"]
+
+# Financials: refused by the DCF guard, then routed to the dividend discount
+# model, which values the dividend payers and refuses the rest.
+DDM_VALUED = ["JPM", "BAC", "TRV", "PGR"]
+DDM_REFUSED = ["BRK-B"]
+
+# Financial-sector companies that are not banks or insurers: never the DDM.
+# True means the DCF should value it; False means it should be refused.
+NOT_DDM_FINANCIALS = {"V": True, "MA": True, "SPGI": True, "COF": False, "GS": False}
+
+# Loss-makers: refused by default, always. The opt-in speculative path gives
+# RIVN an estimate, refuses BYND (shrinking) and QS (no revenue), and is not
+# offered at all to companies a standard valuation applies to.
+SPECULATIVE_ESTIMATED = ["RIVN"]
+SPECULATIVE_REFUSED = ["BYND", "QS"]
+SPECULATIVE_NOT_OFFERED = ["AAPL", "JPM"]
+
+# Relative valuation: JPM has co-watched same-industry peers; Apple has none
+# (probing found no co-watched company in Consumer Electronics); Rivian has no
+# intrinsic valuation for a second opinion to sit beside.
+RELATIVE_VALUED = ["JPM"]
+RELATIVE_DECLINED = ["AAPL"]
+RELATIVE_NOT_APPLICABLE = ["RIVN"]
 
 BAD_INPUT = [
     ("ZZZZTESTNOPE", "unknown symbol"),
@@ -110,8 +134,9 @@ def check_coverage() -> None:
 
         if report.suitable:
             r = report.result
-            print(f"  {ticker:<8} VALUED        ${r.intrinsic_value_per_share:>9,.2f}/sh"
-                  f"   vs ${report.base.current_price:>9,.2f}"
+            print(f"  {ticker:<8} VALUED ({report.method.upper()}) "
+                  f"${r.intrinsic_value_per_share:>9,.2f}/sh"
+                  f"   vs ${r.current_price:>9,.2f}"
                   f"   {r.upside_downside:+7.1%}   {report.company_name}")
         else:
             reason = report.suitability.reasons[0].splitlines()[0]
@@ -150,6 +175,122 @@ def check_guards() -> None:
             reason = report.suitability.reasons[0].splitlines()[0]
             print(f"  {ticker:<8} REFUSED  ({report.company_name})")
             print(f"           {reason}")
+
+
+def check_ddm() -> None:
+    rule("3b. Financials are valued with the dividend discount model")
+    for ticker in DDM_VALUED + DDM_REFUSED:
+        try:
+            report = value_company(ticker)
+        except MarketDataError as e:
+            print(f"  {ticker:<8} FETCH FAILED  {str(e).splitlines()[0]}")
+            failures.append(f"{ticker} could not be fetched")
+            continue
+
+        if report.method != "ddm":
+            print(f"  {ticker:<8} routed to the {report.method.upper()}, expected the DDM")
+            failures.append(f"{ticker} was not routed to the DDM")
+            continue
+
+        expect_value = ticker in DDM_VALUED
+        if report.suitable != expect_value:
+            failures.append(f"{ticker}: expected {'a value' if expect_value else 'a refusal'}")
+
+        if report.suitable:
+            r = report.result
+            print(f"  {ticker:<8} DDM VALUED    ${r.intrinsic_value_per_share:>9,.2f}/sh"
+                  f"   vs ${r.current_price:>9,.2f}   {r.upside_downside:+7.1%}")
+        else:
+            print(f"  {ticker:<8} DDM REFUSED   "
+                  f"{report.suitability.reasons[0].splitlines()[0][:66]}")
+
+
+def check_non_ddm_financials() -> None:
+    rule("3c. Other financials: the DCF where valid, a refusal where not - never the DDM")
+    for ticker, expect_value in NOT_DDM_FINANCIALS.items():
+        try:
+            report = value_company(ticker)
+        except MarketDataError as e:
+            print(f"  {ticker:<8} FETCH FAILED  {str(e).splitlines()[0]}")
+            failures.append(f"{ticker} could not be fetched")
+            continue
+
+        if report.method != "dcf":
+            print(f"  {ticker:<8} routed to the {report.method.upper()} - should never be")
+            failures.append(f"{ticker} was routed to the {report.method.upper()}")
+            continue
+        if report.suitable != expect_value:
+            failures.append(f"{ticker}: expected {'a DCF value' if expect_value else 'a refusal'}")
+
+        if report.suitable:
+            r = report.result
+            print(f"  {ticker:<8} DCF VALUED    ${r.intrinsic_value_per_share:>9,.2f}/sh"
+                  f"   vs ${r.current_price:>9,.2f}   {r.upside_downside:+7.1%}")
+        else:
+            print(f"  {ticker:<8} DCF REFUSED   "
+                  f"{report.suitability.reasons[0].splitlines()[0][:66]}")
+
+
+def check_speculative() -> None:
+    rule("3d. Speculative estimates: never by default, only on request, not for everyone")
+    from analysis import SpeculativeNotApplicable, value_company_speculatively
+
+    for ticker in SPECULATIVE_ESTIMATED + SPECULATIVE_REFUSED:
+        try:
+            if value_company(ticker).suitable:
+                failures.append(f"{ticker} was valued by default - the refusal must stay the default")
+            report = value_company_speculatively(ticker)
+        except (MarketDataError, SpeculativeNotApplicable) as e:
+            print(f"  {ticker:<8} FAILED  {str(e).splitlines()[0][:70]}")
+            failures.append(f"{ticker}: {type(e).__name__}")
+            continue
+
+        expect_estimate = ticker in SPECULATIVE_ESTIMATED
+        if report.suitable != expect_estimate:
+            failures.append(f"{ticker}: expected {'an estimate' if expect_estimate else 'a refusal'}")
+        if report.suitable:
+            r = report.result
+            print(f"  {ticker:<8} SPECULATIVE   ${r.value_per_share:>9,.2f}/sh   vs "
+                  f"${r.current_price:>9,.2f}   (refused by default; estimate on request)")
+        else:
+            print(f"  {ticker:<8} SPEC REFUSED  {report.suitability.reasons[0][:66]}")
+
+    for ticker in SPECULATIVE_NOT_OFFERED:
+        try:
+            value_company_speculatively(ticker)
+            print(f"  {ticker:<8} OFFERED A SPECULATIVE ESTIMATE - must never be")
+            failures.append(f"{ticker} was given a speculative estimate")
+        except SpeculativeNotApplicable as e:
+            print(f"  {ticker:<8} NOT OFFERED   {str(e)[:66]}")
+
+
+def check_relative() -> None:
+    rule("3e. Relative valuation: a second opinion beside the intrinsic value, never instead")
+    from analysis import RelativeNotApplicable, value_company_relatively
+
+    for ticker in RELATIVE_VALUED + RELATIVE_DECLINED:
+        try:
+            report = value_company_relatively(ticker)
+        except (MarketDataError, RelativeNotApplicable) as e:
+            print(f"  {ticker:<8} FAILED  {str(e).splitlines()[0][:70]}")
+            failures.append(f"{ticker}: {type(e).__name__}")
+            continue
+        expect_value = ticker in RELATIVE_VALUED
+        if report.suitable != expect_value:
+            failures.append(f"{ticker}: expected {'a relative figure' if expect_value else 'a decline'}")
+        peers = ", ".join(p.ticker for p in report.peers) or "none"
+        if report.suitable:
+            r = report.result
+            print(f"  {ticker:<8} RELATIVE      ${r.central_value_per_share:>9,.2f}/sh   peers: {peers}")
+        else:
+            print(f"  {ticker:<8} DECLINED      {report.suitability.reasons[0][:66]}")
+
+    for ticker in RELATIVE_NOT_APPLICABLE:
+        try:
+            value_company_relatively(ticker)
+            failures.append(f"{ticker} was given a relative figure without an intrinsic one")
+        except RelativeNotApplicable as e:
+            print(f"  {ticker:<8} NOT OFFERED   {str(e)[:66]}")
 
 
 def check_bad_input() -> None:
@@ -213,6 +354,10 @@ def main() -> int:
     check_coverage()
     check_currency_guard()
     check_guards()
+    check_ddm()
+    check_non_ddm_financials()
+    check_speculative()
+    check_relative()
     check_bad_input()
     check_risk_free()
     check_cache()

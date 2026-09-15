@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,11 +9,57 @@ import 'package:share_plus/share_plus.dart';
 import 'assumption_sliders.dart';
 import 'dcf_engine.dart';
 import 'formatting.dart';
+import 'relative_controller.dart';
+import 'relative_view.dart';
+import 'ui.dart';
+import 'search_dropdown.dart';
+import 'sensitivity_table.dart';
+import 'speculative_screen.dart';
 import 'theme.dart';
+import 'ticker_search.dart';
 import 'valuation_api.dart';
 
 const String _xlsxMimeType =
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/// Which analysis of a valued company is on screen.
+enum _Lens { intrinsic, relative }
+
+/// Chooses between the intrinsic valuation and the relative view.
+///
+/// The labels carry the distinction: "Intrinsic value" against "Relative
+/// (market)", so the second can never be taken for another intrinsic figure.
+class _LensSwitcher extends StatelessWidget {
+  const _LensSwitcher({required this.lens, required this.onChanged});
+
+  final _Lens lens;
+  final ValueChanged<_Lens> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<_Lens>(
+        key: const Key('lens-switcher'),
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: _Lens.intrinsic,
+            icon: Icon(Icons.functions_rounded, size: 18),
+            label: Text('Intrinsic value'),
+          ),
+          ButtonSegment(
+            value: _Lens.relative,
+            icon: Icon(Icons.compare_arrows_rounded, size: 18),
+            label: Text('Relative (market)'),
+          ),
+        ],
+        selected: {lens},
+        onSelectionChanged: (s) => onChanged(s.first),
+      ),
+    );
+  }
+}
 
 /// Where the figure on screen came from.
 enum ValueStatus {
@@ -22,6 +68,14 @@ enum ValueStatus {
 
   /// Computed locally while dragging; not yet checked against the backend.
   preview,
+
+  /// The assumptions have been moved but the figure has not caught up yet.
+  ///
+  /// Only the DCF has a local engine to preview with. For a dividend discount
+  /// model the displayed number still belongs to the previous assumptions
+  /// until the backend answers, and saying so is better than letting a stale
+  /// figure sit silently under a moved slider.
+  stale,
 
   /// A background confirmation request is in flight.
   confirming,
@@ -33,7 +87,10 @@ enum ValueStatus {
 void main() => runApp(const DcfApp());
 
 class DcfApp extends StatelessWidget {
-  const DcfApp({super.key});
+  const DcfApp({super.key, this.api});
+
+  /// Injected by tests; the app builds its own.
+  final ValuationApi? api;
 
   @override
   Widget build(BuildContext context) {
@@ -45,13 +102,15 @@ class DcfApp extends StatelessWidget {
       // Follows the device setting; both themes are designed, neither is a
       // tinted afterthought of the other.
       themeMode: ThemeMode.system,
-      home: const ValuationScreen(),
+      home: ValuationScreen(api: api),
     );
   }
 }
 
 class ValuationScreen extends StatefulWidget {
-  const ValuationScreen({super.key});
+  const ValuationScreen({super.key, this.api});
+
+  final ValuationApi? api;
 
   @override
   State<ValuationScreen> createState() => _ValuationScreenState();
@@ -59,7 +118,13 @@ class ValuationScreen extends StatefulWidget {
 
 class _ValuationScreenState extends State<ValuationScreen> {
   final _controller = TextEditingController();
-  final _api = ValuationApi();
+  late final ValuationApi _api = widget.api ?? ValuationApi();
+
+  /// Debounces and caches company search, so typing a name costs one request
+  /// per pause rather than one per keystroke.
+  late final TickerSearchController _search = TickerSearchController(
+    fetch: _api.search,
+  );
 
   ValuationResult? _result;
   bool _loading = false;
@@ -119,6 +184,21 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// Set when the backend's answer differed from the local preview.
   String? _correctionNote;
 
+  // --- Relative view -------------------------------------------------------
+
+  _Lens _lens = _Lens.intrinsic;
+
+  /// The relative view and its peer edits, for the company on screen. Made on
+  /// first opening and discarded with the company, so edits never carry over.
+  RelativeController? _relativeController;
+
+  /// Search for adding peers. Separate from the ticker field's own search, so
+  /// the two dropdowns never open each other, but kept for the screen's
+  /// lifetime so its cache survives closing and reopening the sheet.
+  late final TickerSearchController _peerSearch = TickerSearchController(
+    fetch: _api.search,
+  );
+
   /// Debounces confirmation, and lets a stale response be discarded when the
   /// user has dragged again since it was sent.
   Timer? _confirmTimer;
@@ -168,6 +248,9 @@ class _ValuationScreenState extends State<ValuationScreen> {
   void dispose() {
     _confirmTimer?.cancel();
     _wakingTimer?.cancel();
+    _search.dispose();
+    _peerSearch.dispose();
+    _relativeController?.dispose();
     _controller.dispose();
     _api.dispose();
     super.dispose();
@@ -197,23 +280,27 @@ class _ValuationScreenState extends State<ValuationScreen> {
       companyName: success.companyName,
       wacc: _slider['wacc'] ?? _fullAssumptions['wacc'] ?? 0,
       terminalGrowth:
-          _slider['terminal_growth'] ?? _fullAssumptions['terminal_growth'] ?? 0,
+          _slider['terminal_growth'] ??
+          _fullAssumptions['terminal_growth'] ??
+          0,
       equityRiskPremium: _equityRiskPremium,
     );
   }
 
+  /// Which levers apply, which depends on the model that produced the figure.
+  List<AdjustableAssumption> get _specs => _specsFor(_success?.method);
+
+  static List<AdjustableAssumption> _specsFor(ValuationMethod? method) =>
+      method == ValuationMethod.ddm ? kDdmAdjustable : kAdjustable;
+
   /// Mirrors the slider panel's own check, so the export button and the
   /// warning agree about when the inputs are unusable.
-  bool get _growthExceedsWacc {
-    final wacc = _slider['wacc'];
-    final g = _slider['terminal_growth'];
-    if (wacc == null || g == null) return false;
-    return g >= wacc;
-  }
+  bool get _growthExceedsDiscountRate =>
+      growthExceedsDiscountRate(_slider, _specs);
 
   Map<String, double> get _activeOverrides {
     final out = <String, double>{};
-    for (final spec in kAdjustable) {
+    for (final spec in _specs) {
       final derived = _derived[spec.name];
       final current = _slider[spec.name];
       if (derived == null || current == null) continue;
@@ -228,7 +315,28 @@ class _ValuationScreenState extends State<ValuationScreen> {
     final ticker = _controller.text.trim().toUpperCase();
     if (_loading) return;
 
-    FocusScope.of(context).unfocus();
+    // The field takes company names now, so "BANK OF AMERICA" can reach this
+    // button. Sent as a ticker it would come back "not found" - accurate, and
+    // useless when the company is sitting in the dropdown. Point at the list
+    // rather than guessing which result was meant.
+    if (ticker.isNotEmpty && !looksLikeTicker(ticker)) {
+      final hasResults = _search.results.isNotEmpty;
+      _showMessage(
+        hasResults
+            ? 'Pick a company from the list to value it.'
+            : 'Type a ticker such as AAPL, or type a company name and pick it '
+                  'from the list.',
+      );
+      return;
+    }
+
+    _search.dismiss(currentText: _controller.text);
+    // Unfocus the field itself, not the page's scope. Unfocusing the scope
+    // hides the keyboard but leaves the field as the scope's remembered
+    // child, so the next route to close - the disclaimer, the add-peer
+    // sheet, the speculative screen - hands focus straight back to it and
+    // the keyboard springs up over whatever the user was reading.
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _loading = true;
       _result = null;
@@ -242,6 +350,11 @@ class _ValuationScreenState extends State<ValuationScreen> {
       _equityRiskPremium = null;
       _correctionNote = null;
       _status = ValueStatus.confirmed;
+      // A new company starts on its intrinsic value, with no relative view
+      // carried over from the last one.
+      _lens = _Lens.intrinsic;
+      _relativeController?.dispose();
+      _relativeController = null;
     });
     _confirmTimer?.cancel();
     _confirmSeq++;
@@ -259,17 +372,17 @@ class _ValuationScreenState extends State<ValuationScreen> {
         // Every assumption, including those without sliders, so the local
         // engine has the complete set to work from.
         _fullAssumptions = {
-          for (final a in result.assumptions) a.name: a.value
+          for (final a in result.assumptions) a.name: a.value,
         };
-        _equityRiskPremium =
-            result.assumption('equity_risk_premium')?.value;
+        _equityRiskPremium = result.assumption('equity_risk_premium')?.value;
+        final specs = _specsFor(result.method);
         _derived = {
-          for (final spec in kAdjustable)
+          for (final spec in specs)
             if (result.assumption(spec.name) != null)
               spec.name: result.assumption(spec.name)!.value,
         };
         _sources = {
-          for (final spec in kAdjustable)
+          for (final spec in specs)
             if (result.assumption(spec.name) != null)
               spec.name: result.assumption(spec.name)!.source,
         };
@@ -277,6 +390,52 @@ class _ValuationScreenState extends State<ValuationScreen> {
         _baselineValue = result.intrinsicValuePerShare;
       }
     });
+  }
+
+  /// Switch lens. The relative view is fetched the first time it is opened
+  /// for this company and kept, so switching back and forth costs nothing -
+  /// it prices several companies, and should not be asked to twice.
+  void _selectLens(_Lens lens) {
+    setState(() {
+      _lens = lens;
+      if (lens == _Lens.relative && _resultTicker.isNotEmpty) {
+        _relativeController ??= RelativeController(
+          api: _api,
+          ticker: _resultTicker,
+        );
+      }
+    });
+    if (lens == _Lens.relative) _relativeController?.open();
+  }
+
+  /// The user asked, explicitly, to see a speculative estimate past a refusal.
+  ///
+  /// A separate route rather than a change to this screen's state: the refusal
+  /// underneath stays exactly as it was, so Back always returns to it, and
+  /// nothing speculative can leak into a valuation shown here later.
+  void _openSpeculative(ValuationNotSuitable refusal) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SpeculativeScreen(
+          api: _api,
+          ticker: refusal.ticker.isNotEmpty ? refusal.ticker : _resultTicker,
+          companyName: refusal.companyName,
+        ),
+      ),
+    );
+  }
+
+  /// A company was picked from the dropdown: fill in its ticker and value it.
+  void _selectSearchResult(CompanySearchResult result) {
+    if (_loading) return;
+    _controller.value = TextEditingValue(
+      text: result.ticker,
+      selection: TextSelection.collapsed(offset: result.ticker.length),
+    );
+    // Before submitting, so writing the ticker does not reopen the dropdown
+    // with a search for the ticker just chosen.
+    _search.dismiss(currentText: result.ticker);
+    _submit();
   }
 
   /// Recompute locally as the slider moves. No network, no await - this runs
@@ -289,10 +448,22 @@ class _ValuationScreenState extends State<ValuationScreen> {
       _slider[name] = value;
       _correctionNote = null;
 
-      final assumptions =
-          DcfAssumptions.fromMap({..._fullAssumptions, ..._slider});
+      // No local engine for the dividend discount model, so there is nothing
+      // to preview with: hold the backend's figure, mark it as belonging to
+      // the old assumptions, and let the confirmation round trip produce the
+      // new one.
+      if (!success.supportsLocalPreview) {
+        _preview = null;
+        _status = ValueStatus.stale;
+        return;
+      }
+
+      final assumptions = DcfAssumptions.fromMap({
+        ..._fullAssumptions,
+        ..._slider,
+      });
       try {
-        _preview = runDcf(success.baseYear, assumptions);
+        _preview = runDcf(success.baseYear!, assumptions);
         _status = ValueStatus.preview;
       } on DcfInputError {
         // Terminal growth has crossed WACC. The slider panel explains it;
@@ -331,16 +502,17 @@ class _ValuationScreenState extends State<ValuationScreen> {
     setState(() {
       if (result is ValuationSuccess) {
         final backendValue = result.intrinsicValuePerShare;
-        final diverged = localValue != null &&
+        final diverged =
+            localValue != null &&
             (backendValue - localValue).abs() > _tolerance;
 
         _result = result;
         _preview = null; // the backend's figure is now the displayed one
         _status = diverged ? ValueStatus.corrected : ValueStatus.confirmed;
         _correctionNote = diverged
-            ? 'Local preview showed \$${localValue.toStringAsFixed(2)}; '
-                'the backend calculated \$${backendValue.toStringAsFixed(2)}. '
-                'Showing the backend figure.'
+            ? 'The quick preview showed \$${localValue.toStringAsFixed(2)}, but '
+                  'the full calculation gives \$${backendValue.toStringAsFixed(2)}. '
+                  'Showing the full calculation.'
             : null;
       } else {
         // A refusal or error under these assumptions - surface it as the
@@ -362,8 +534,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
     if (_exporting || _resultTicker.isEmpty) return;
 
     setState(() => _exporting = true);
-    final result =
-        await _api.downloadExcel(_resultTicker, overrides: _activeOverrides);
+    final result = await _api.downloadExcel(
+      _resultTicker,
+      overrides: _activeOverrides,
+    );
     if (!mounted) return;
 
     switch (result) {
@@ -387,10 +561,14 @@ class _ValuationScreenState extends State<ValuationScreen> {
             ),
           );
         } catch (e) {
+          debugPrint('saving or sharing $filename failed: $e');
           if (!mounted) return;
           setState(() => _exporting = false);
-          _showMessage('Downloaded, but could not save or share it: $e',
-              isError: true);
+          _showMessage(
+            'The spreadsheet downloaded, but it couldn’t be saved or shared. '
+            'Please try again.',
+            isError: true,
+          );
         }
 
       case ExcelNotSuitable(:final message):
@@ -407,11 +585,13 @@ class _ValuationScreenState extends State<ValuationScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(text),
-        backgroundColor: isError ? const Color(0xFFB3261E) : null,
-        duration: Duration(seconds: isError ? 6 : 3),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor: isError ? const Color(0xFFB3261E) : null,
+          duration: Duration(seconds: isError ? 6 : 3),
+        ),
+      );
   }
 
   /// Back to the backend's own assumptions.
@@ -470,7 +650,11 @@ class _ValuationScreenState extends State<ValuationScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xl, AppSpacing.sm, AppSpacing.xl, AppSpacing.lg),
+                AppSpacing.xl,
+                AppSpacing.sm,
+                AppSpacing.xl,
+                AppSpacing.lg,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -487,31 +671,80 @@ class _ValuationScreenState extends State<ValuationScreen> {
                       ),
                       inputFormatters: [
                         UpperCaseFormatter(),
-                        FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9.\-]')),
-                        LengthLimitingTextInputFormatter(12),
+                        // Company names as well as tickers: spaces, and the
+                        // punctuation in names like AT&T and Moody's.
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r"[A-Za-z0-9.\-&', ]"),
+                        ),
+                        LengthLimitingTextInputFormatter(50),
                       ],
                       decoration: InputDecoration(
-                        hintText: 'Search a ticker',
-                        prefixIcon: Icon(Icons.search_rounded,
-                            size: 20, color: colors.textSecondary),
+                        hintText: 'Ticker or company name',
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: 20,
+                          color: colors.textSecondary,
+                        ),
                         prefixIconConstraints: const BoxConstraints(
-                            minWidth: 44, minHeight: 24),
+                          minWidth: 44,
+                          minHeight: 24,
+                        ),
                       ),
+                      // Fires for typing only, not for the ticker a selection
+                      // writes in - which is what keeps a pick from searching
+                      // for itself.
+                      onChanged: _search.onQueryChanged,
+                      onTapOutside: (_) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        _search.dismiss(currentText: _controller.text);
+                      },
                       onSubmitted: (_) => _submit(),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
-                  SizedBox(
-                    height: 54,
-                    child: FilledButton(
-                      onPressed: _loading ? null : _submit,
-                      child: const Text('Value'),
+                  // Part of the search, not outside it: otherwise pressing
+                  // Value closes the dropdown before the press is handled, and
+                  // a company name submitted by mistake would be told to pick
+                  // from a list that had just disappeared.
+                  TextFieldTapRegion(
+                    child: SizedBox(
+                      height: 54,
+                      child: FilledButton(
+                        onPressed: _loading ? null : _submit,
+                        child: const Text('Value'),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            Expanded(child: _buildResultArea()),
+            Expanded(
+              // The dropdown floats over the result rather than pushing it
+              // down, so opening it does not shift what is already on screen.
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _buildResultArea()),
+                  Positioned(
+                    left: AppSpacing.xl,
+                    right: AppSpacing.xl,
+                    top: 0,
+                    child: ListenableBuilder(
+                      listenable: _search,
+                      builder: (context, _) => (_search.isOpen && !_loading)
+                          // Taps on the dropdown belong to the field, so
+                          // choosing a result is not read as tapping away.
+                          ? TextFieldTapRegion(
+                              child: SearchDropdown(
+                                controller: _search,
+                                onSelected: _selectSearchResult,
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -546,7 +779,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
               Text(
                 waking
                     ? 'This can take up to a minute on the first use after a '
-                        'while. Later valuations are quick.'
+                          'while. Later valuations are quick.'
                     : 'Reading filings and deriving assumptions',
                 style: context.text.bodySmall,
                 textAlign: TextAlign.center,
@@ -566,34 +799,58 @@ class _ValuationScreenState extends State<ValuationScreen> {
     // terms rather than collapsing them into "worked" and "didn't".
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xxxl),
+        AppSpacing.xl,
+        0,
+        AppSpacing.xl,
+        AppSpacing.xxxl,
+      ),
       child: switch (result) {
         ValuationSuccess() => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Two lenses on the same company. The intrinsic one is the
+            // default and is left exactly as it was; the relative one is a
+            // separate, market-based second opinion, fetched only on request.
+            _LensSwitcher(lens: _lens, onChanged: _selectLens),
+            const SizedBox(height: AppSpacing.xl),
+            if (_lens == _Lens.relative && _relativeController != null)
+              RelativeView(
+                controller: _relativeController!,
+                peerSearch: _peerSearch,
+                intrinsicAdjusted: _activeOverrides.isNotEmpty,
+              )
+            else ...[
               _SuccessCard(
                 result: result,
-                intrinsicValue: _displayIntrinsic ?? result.intrinsicValuePerShare,
+                intrinsicValue:
+                    _displayIntrinsic ?? result.intrinsicValuePerShare,
                 upsideDownside: _displayUpside ?? result.upsideDownside,
                 note: _displayNote,
                 status: _status,
                 // Only meaningful once something has actually been changed.
-                baselineValue:
-                    (_activeOverrides.isEmpty) ? null : _baselineValue,
+                baselineValue: (_activeOverrides.isEmpty)
+                    ? null
+                    : _baselineValue,
                 correctionNote: _correctionNote,
               ),
-              const SizedBox(height: AppSpacing.xl),
-              _ExportButton(
-                busy: _exporting,
-                // Terminal growth at or above WACC would make the backend
-                // refuse; do not offer an export that cannot succeed.
-                blocked: _growthExceedsWacc,
-                overrideCount: _activeOverrides.length,
-                onPressed: _exportExcel,
-              ),
+              // The workbook builds a discounted cash flow model, so there is
+              // none to offer for a company valued on its dividends. Better no
+              // button than one whose only outcome is a refusal.
+              if (result.method == ValuationMethod.dcf) ...[
+                const SizedBox(height: AppSpacing.xl),
+                _ExportButton(
+                  busy: _exporting,
+                  // Terminal growth at or above WACC would make the backend
+                  // refuse; do not offer an export that cannot succeed.
+                  blocked: _growthExceedsDiscountRate,
+                  overrideCount: _activeOverrides.length,
+                  onPressed: _exportExcel,
+                ),
+              ],
               if (_derived.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xxl),
                 AssumptionSliders(
+                  specs: _specs,
                   derived: _derived,
                   current: _slider,
                   sources: _sources,
@@ -605,8 +862,14 @@ class _ValuationScreenState extends State<ValuationScreen> {
                 ),
               ],
             ],
-          ),
-        ValuationNotSuitable() => _NotSuitableCard(result: result),
+          ],
+        ),
+        ValuationNotSuitable() => _NotSuitableCard(
+          result: result,
+          onShowSpeculative: result.speculativeEstimateAvailable
+              ? () => _openSpeculative(result)
+              : null,
+        ),
         ValuationFailure() => _FailureCard(result: result),
       },
     );
@@ -618,7 +881,9 @@ class _ValuationScreenState extends State<ValuationScreen> {
 class UpperCaseFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     return newValue.copyWith(text: newValue.text.toUpperCase());
   }
 }
@@ -700,7 +965,11 @@ class _EmptyState extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl, AppSpacing.sm, AppSpacing.xl, AppSpacing.xxxl),
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.xxxl,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -714,8 +983,7 @@ class _EmptyState extends StatelessWidget {
             child: const Center(child: _BrandMark(size: 32)),
           ),
           const SizedBox(height: AppSpacing.xl),
-          Text('Value any listed company',
-              style: context.text.headlineMedium),
+          Text('Value any listed company', style: context.text.headlineMedium),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'A discounted cash flow model built from the company’s own '
@@ -728,7 +996,8 @@ class _EmptyState extends StatelessWidget {
           const _FeatureRow(
             icon: Icons.auto_graph_rounded,
             title: 'Assumptions from the filings',
-            detail: 'Growth, margin, tax and WACC derived per company, '
+            detail:
+                'Growth, margin, tax and WACC derived per company, '
                 'each labelled with where it came from.',
           ),
           const _FeatureRow(
@@ -792,9 +1061,12 @@ class _FeatureRow extends StatelessWidget {
               children: [
                 Text(title, style: context.text.titleSmall),
                 const SizedBox(height: 2),
-                Text(detail,
-                    style: context.text.bodySmall
-                        ?.copyWith(color: colors.textSecondary)),
+                Text(
+                  detail,
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -817,7 +1089,9 @@ class _TickerHint extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: context.scheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.chip),
@@ -881,8 +1155,8 @@ class _ExportButton extends StatelessWidget {
         Text(
           blocked
               ? 'Set terminal growth below WACC before exporting.'
-              : 'A live-formula model built by the backend, matching the '
-                  'assumptions below.',
+              : 'A spreadsheet with working formulas, matching the '
+                    'assumptions below.',
           style: context.text.labelSmall?.copyWith(
             color: blocked ? colors.negative : colors.textSecondary,
           ),
@@ -908,36 +1182,44 @@ class _StatusLine extends StatelessWidget {
 
     final (IconData icon, String text, Color fg, Color bg) = switch (status) {
       ValueStatus.confirmed => (
-          Icons.verified_rounded,
-          'Confirmed by the backend',
-          colors.positive,
-          colors.positiveSurface,
-        ),
+        Icons.verified_rounded,
+        'Confirmed by the full calculation',
+        colors.positive,
+        colors.positiveSurface,
+      ),
       ValueStatus.preview => (
-          Icons.bolt_rounded,
-          'Live preview · on device',
-          colors.caution,
-          colors.cautionSurface,
-        ),
+        Icons.bolt_rounded,
+        'Live preview · on device',
+        colors.caution,
+        colors.cautionSurface,
+      ),
+      ValueStatus.stale => (
+        Icons.pending_outlined,
+        'Figure not yet updated · release to recalculate',
+        colors.caution,
+        colors.cautionSurface,
+      ),
       ValueStatus.confirming => (
-          Icons.sync_rounded,
-          'Confirming…',
-          colors.textSecondary,
-          context.scheme.surfaceContainerHighest,
-        ),
+        Icons.sync_rounded,
+        'Confirming…',
+        colors.textSecondary,
+        context.scheme.surfaceContainerHighest,
+      ),
       ValueStatus.corrected => (
-          Icons.published_with_changes_rounded,
-          'Corrected to the backend figure',
-          colors.negative,
-          colors.negativeSurface,
-        ),
+        Icons.published_with_changes_rounded,
+        'Updated to the full calculation',
+        colors.negative,
+        colors.negativeSurface,
+      ),
     };
 
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: 6),
+          horizontal: AppSpacing.md,
+          vertical: 6,
+        ),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(AppRadius.chip),
@@ -949,15 +1231,18 @@ class _StatusLine extends StatelessWidget {
               SizedBox(
                 width: 12,
                 height: 12,
-                child: CircularProgressIndicator(
-                    strokeWidth: 1.8, color: fg),
+                child: CircularProgressIndicator(strokeWidth: 1.8, color: fg),
               )
             else
               Icon(icon, size: 14, color: fg),
             const SizedBox(width: AppSpacing.sm),
-            Text(text,
-                style: context.text.labelSmall
-                    ?.copyWith(color: fg, fontWeight: FontWeight.w600)),
+            Text(
+              text,
+              style: context.text.labelSmall?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -977,6 +1262,11 @@ class _SuccessCard extends StatelessWidget {
   });
 
   final ValuationSuccess result;
+
+  /// The table describes [result]; the headline may be a local preview of
+  /// other assumptions, or awaiting confirmation of them.
+  bool get _sensitivityStale =>
+      status != ValueStatus.confirmed && status != ValueStatus.corrected;
 
   /// Displayed figures, which may come from the local preview rather than
   /// from [result].
@@ -1010,122 +1300,155 @@ class _SuccessCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(result.companyName,
-            style: context.text.headlineMedium, maxLines: 2),
+        Text(
+          result.companyName,
+          style: context.text.headlineMedium,
+          maxLines: 2,
+        ),
         const SizedBox(height: AppSpacing.xs),
         Row(
           children: [
-            Text(result.ticker,
-                style: context.text.labelSmall?.copyWith(
-                  color: colors.textSecondary,
-                  letterSpacing: 1.0,
-                  fontWeight: FontWeight.w700,
-                )),
-            const SizedBox(width: AppSpacing.sm),
-            Container(width: 3, height: 3, decoration: BoxDecoration(
-                color: colors.textSecondary, shape: BoxShape.circle)),
-            const SizedBox(width: AppSpacing.sm),
-            Flexible(
-              child: Text(result.sector,
-                  style: context.text.bodySmall
-                      ?.copyWith(color: colors.textSecondary),
-                  overflow: TextOverflow.ellipsis),
+            Text(
+              result.ticker,
+              style: context.text.labelSmall?.copyWith(
+                color: colors.textSecondary,
+                letterSpacing: 1.0,
+                fontWeight: FontWeight.w700,
+              ),
             ),
+            // No sector reported: the ticker stands alone, with no separator.
+            if (result.displaySector case final sector?) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Container(
+                key: const Key('sector-separator'),
+                width: 3,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: colors.textSecondary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Flexible(
+                child: Text(
+                  sector,
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ],
         ),
+        const SizedBox(height: AppSpacing.lg),
+        // Which model produced the figure below. Not decoration: a dividend
+        // model and a cash flow model answer different questions, and someone
+        // reading the number is entitled to know which one they are reading.
+        _MethodBadge(method: result.method),
         const SizedBox(height: AppSpacing.xl),
 
         // --- Hero -----------------------------------------------------------
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('INTRINSIC VALUE PER SHARE',
-                    style: context.text.labelMedium),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Eyebrow('INTRINSIC VALUE PER SHARE'),
+              const SizedBox(height: AppSpacing.md),
+              // No implicit animation on the number itself: it must track
+              // the finger exactly, and a tween would lag behind the drag.
+              Text(_money(intrinsicValue), style: context.text.displayLarge),
+              if (baselineValue != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                // No implicit animation on the number itself: it must track
-                // the finger exactly, and a tween would lag behind the drag.
-                Text(_money(intrinsicValue),
-                    style: context.text.displayLarge),
-                if (baselineValue != null) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _BaselineDelta(
-                    baseline: baselineValue!,
-                    current: intrinsicValue,
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.xl),
-                Divider(color: colors.hairline, height: 1),
-                const SizedBox(height: AppSpacing.xl),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _Metric(
-                        label: 'Market price',
-                        value: _money(result.currentPrice),
-                      ),
-                    ),
-                    Container(
-                        width: 1, height: 40, color: colors.hairline),
-                    const SizedBox(width: AppSpacing.xl),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            up ? 'IMPLIED UPSIDE' : 'IMPLIED DOWNSIDE',
-                            style: context.text.labelMedium,
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          // Colour, an arrow and an explicit sign all carry
-                          // the same meaning, so none of them is load-bearing
-                          // on its own.
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.md, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: accentSurface,
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.chip),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                    up
-                                        ? Icons.arrow_upward_rounded
-                                        : Icons.arrow_downward_rounded,
-                                    size: 15,
-                                    color: accent),
-                                const SizedBox(width: AppSpacing.xs),
-                                Text(
-                                  _percent(upsideDownside),
-                                  style: context.text.titleSmall
-                                      ?.copyWith(color: accent),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                _BaselineDelta(
+                  baseline: baselineValue!,
+                  current: intrinsicValue,
                 ),
               ],
-            ),
+              const SizedBox(height: AppSpacing.xl),
+              Divider(color: colors.hairline, height: 1),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _Metric(
+                      label: 'Market price',
+                      value: _money(result.currentPrice),
+                    ),
+                  ),
+                  Container(width: 1, height: 40, color: colors.hairline),
+                  const SizedBox(width: AppSpacing.xl),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          up ? 'IMPLIED UPSIDE' : 'IMPLIED DOWNSIDE',
+                          style: context.text.labelMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        // Colour, an arrow and an explicit sign all carry
+                        // the same meaning, so none of them is load-bearing
+                        // on its own.
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accentSurface,
+                            borderRadius: BorderRadius.circular(AppRadius.chip),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                up
+                                    ? Icons.arrow_upward_rounded
+                                    : Icons.arrow_downward_rounded,
+                                size: 15,
+                                color: accent,
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              Text(
+                                _percent(upsideDownside),
+                                style: context.text.titleSmall?.copyWith(
+                                  color: accent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
 
+        // An update to the figure, not a loss: amber for "notice this", so
+        // red keeps meaning downside.
         if (correctionNote != null) ...[
           const SizedBox(height: AppSpacing.md),
-          _NoticeBar(
+          Callout(
             icon: Icons.published_with_changes_rounded,
             text: correctionNote!,
-            foreground: colors.negative,
-            background: colors.negativeSurface,
+            tone: Tone.caution,
+          ),
+        ],
+
+        // What the dividend projection starts from, standing where the DCF's
+        // revenue and cash flow would be. A dividend model has no base year of
+        // filings to show; showing the dividend instead is what makes the
+        // figure checkable.
+        if (result.dividendBasis != null) ...[
+          const SizedBox(height: AppSpacing.xl),
+          _DividendBasisCard(
+            basis: result.dividendBasis!,
+            whyNotDcf: result.whyNotDcf,
           ),
         ],
 
@@ -1142,17 +1465,48 @@ class _SuccessCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline_rounded,
-                    size: 17, color: colors.textSecondary),
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 17,
+                  color: colors.textSecondary,
+                ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Text(note,
-                      style: context.text.bodySmall
-                          ?.copyWith(color: colors.textSecondary)),
+                  child: Text(
+                    note,
+                    style: context.text.bodySmall?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
+
+        // The table the note above points to. Drawn only when the backend
+        // sent one worth drawing.
+        if (result.sensitivity != null) ...[
+          const SizedBox(height: AppSpacing.lg),
+          SensitivityTable(
+            grid: result.sensitivity!,
+            formatValue: _money,
+            title: 'How sensitive is this figure?',
+            explanation:
+                'Each cell is the value per share if these two '
+                'assumptions were different. None of them is more correct '
+                'than its neighbours.',
+            stale: _sensitivityStale,
+          ),
+        ],
+
+        // What the model cannot see - for a bank, the cash returned through
+        // buybacks that a dividend model counts for nothing. This is the
+        // backend telling the user where its own figure is weak, so it sits
+        // with the figure rather than being dropped.
+        if (result.warnings.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          NoteList(title: 'Keep in mind', notes: result.warnings),
+        ],
 
         // Sits directly under the figure, where someone about to act on it
         // will actually read it - not buried in a settings screen they will
@@ -1160,6 +1514,96 @@ class _SuccessCard extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         const DisclaimerLine(),
       ],
+    );
+  }
+}
+
+/// Names the model that produced the figure above it.
+///
+/// Small and quiet, but always present - including for the DCF, so that the
+/// DDM's badge cannot be read as an exception or a warning. Two methods, both
+/// labelled, neither presented as the default.
+class _MethodBadge extends StatelessWidget {
+  const _MethodBadge({required this.method});
+
+  final ValuationMethod method;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pill(
+      icon: method == ValuationMethod.ddm
+          ? Icons.payments_outlined
+          : Icons.waterfall_chart_rounded,
+      label: 'Valued with a ${method.label}',
+    );
+  }
+}
+
+/// The dividend a dividend discount model projects from, and why that model
+/// was used at all.
+///
+/// The DCF shows a base year of revenue, debt and shares; this is its
+/// counterpart. Without it the DDM's figure would arrive with nothing to check
+/// it against.
+class _DividendBasisCard extends StatelessWidget {
+  const _DividendBasisCard({required this.basis, required this.whyNotDcf});
+
+  final DividendBasis basis;
+  final String whyNotDcf;
+
+  static String _money(double v) => '\$${v.toStringAsFixed(2)}';
+  static String _pct(double f) => '${(f * 100).toStringAsFixed(1)}%';
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    // Only what the backend actually reported: a payout ratio or return on
+    // equity it could not derive is left out rather than shown as zero.
+    final facts = <(String, String)>[
+      ('Annual dividend', _money(basis.currentAnnualDividend)),
+      ('Dividend yield', _pct(basis.dividendYield)),
+      if (basis.payoutRatio != null) ('Payout ratio', _pct(basis.payoutRatio!)),
+      if (basis.returnOnEquity != null)
+        ('Return on equity', _pct(basis.returnOnEquity!)),
+    ];
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Eyebrow('DIVIDEND BASIS'),
+          const SizedBox(height: AppSpacing.lg),
+          Wrap(
+            spacing: AppSpacing.xxl,
+            runSpacing: AppSpacing.lg,
+            children: [
+              for (final (label, value) in facts)
+                _Metric(label: label.toUpperCase(), value: value),
+            ],
+          ),
+          if (basis.detail.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              basis.detail,
+              style: context.text.bodySmall?.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+          if (whyNotDcf.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            Divider(color: colors.hairline, height: 1),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              whyNotDcf,
+              style: context.text.bodySmall?.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -1181,7 +1625,9 @@ class DisclaimerLine extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.control),
       child: Padding(
         padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.sm, horizontal: AppSpacing.xs),
+          vertical: AppSpacing.sm,
+          horizontal: AppSpacing.xs,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1196,8 +1642,11 @@ class DisclaimerLine extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            Icon(Icons.chevron_right_rounded,
-                size: 16, color: colors.textSecondary),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: colors.textSecondary,
+            ),
           ],
         ),
       ),
@@ -1220,15 +1669,22 @@ Future<void> showDisclaimerSheet(BuildContext context) {
         // The text is long enough to overflow a short viewport - a small
         // phone in landscape, or a device with a large font scale - and an
         // unscrollable sheet would simply cut the disclaimer off.
-        padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, 0, AppSpacing.xxl,
-            AppSpacing.xxl),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xxl,
+          0,
+          AppSpacing.xxl,
+          AppSpacing.xxl,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('About these valuations',
-                style: context.text.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'About these valuations',
+              style: context.text.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: AppSpacing.lg),
             _DisclaimerParagraph(
               'Every figure here is an educational estimate produced by a '
@@ -1263,15 +1719,19 @@ Future<void> showDisclaimerSheet(BuildContext context) {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.school_outlined,
-                      size: 18, color: colors.textSecondary),
+                  Icon(
+                    Icons.school_outlined,
+                    size: 18,
+                    color: colors.textSecondary,
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Text(
                       'Built to make the mechanics of a DCF visible and '
                       'arguable — that is the point of it.',
-                      style: context.text.bodySmall
-                          ?.copyWith(color: colors.textSecondary),
+                      style: context.text.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                   ),
                 ],
@@ -1295,46 +1755,10 @@ class _DisclaimerParagraph extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: Text(
         text,
-        style: context.text.bodyMedium
-            ?.copyWith(color: context.colors.textSecondary, height: 1.5),
-      ),
-    );
-  }
-}
-
-/// A tinted inline notice, used where a message needs to stand out without
-/// looking like a system error.
-class _NoticeBar extends StatelessWidget {
-  const _NoticeBar({
-    required this.icon,
-    required this.text,
-    required this.foreground,
-    required this.background,
-  });
-
-  final IconData icon;
-  final String text;
-  final Color foreground;
-  final Color background;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(AppRadius.control),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 17, color: foreground),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Text(text,
-                style: context.text.bodySmall?.copyWith(color: foreground)),
-          ),
-        ],
+        style: context.text.bodyMedium?.copyWith(
+          color: context.colors.textSecondary,
+          height: 1.5,
+        ),
       ),
     );
   }
@@ -1359,8 +1783,11 @@ class _BaselineDelta extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(up ? Icons.north_east_rounded : Icons.south_east_rounded,
-            size: 14, color: colour),
+        Icon(
+          up ? Icons.north_east_rounded : Icons.south_east_rounded,
+          size: 14,
+          color: colour,
+        ),
         const SizedBox(width: AppSpacing.xs),
         Flexible(
           child: RichText(
@@ -1369,15 +1796,19 @@ class _BaselineDelta extends StatelessWidget {
               style: context.text.bodySmall,
               children: [
                 TextSpan(
-                  text: '$sign\$${diff.abs().toStringAsFixed(2)} '
+                  text:
+                      '$sign\$${diff.abs().toStringAsFixed(2)} '
                       '($sign${pct.abs().toStringAsFixed(1)}%)',
                   style: context.text.bodySmall?.copyWith(
-                      color: colour, fontWeight: FontWeight.w600),
+                    color: colour,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 TextSpan(
                   text: '  vs derived \$${baseline.toStringAsFixed(2)}',
-                  style: context.text.bodySmall
-                      ?.copyWith(color: colors.textSecondary),
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -1411,9 +1842,14 @@ class _Metric extends StatelessWidget {
 }
 
 class _NotSuitableCard extends StatelessWidget {
-  const _NotSuitableCard({required this.result});
+  const _NotSuitableCard({required this.result, this.onShowSpeculative});
 
   final ValuationNotSuitable result;
+
+  /// Opens the speculative estimate. Offered only when the backend says one
+  /// exists for this refusal - a company refused only for losing money - and
+  /// never for any other.
+  final VoidCallback? onShowSpeculative;
 
   @override
   Widget build(BuildContext context) {
@@ -1423,15 +1859,20 @@ class _NotSuitableCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (result.companyName.isNotEmpty) ...[
-          Text(result.companyName,
-              style: context.text.headlineMedium, maxLines: 2),
+          Text(
+            result.companyName,
+            style: context.text.headlineMedium,
+            maxLines: 2,
+          ),
           const SizedBox(height: AppSpacing.xs),
-          Text(result.ticker,
-              style: context.text.labelSmall?.copyWith(
-                color: colors.textSecondary,
-                letterSpacing: 1.0,
-                fontWeight: FontWeight.w700,
-              )),
+          Text(
+            result.ticker,
+            style: context.text.labelSmall?.copyWith(
+              color: colors.textSecondary,
+              letterSpacing: 1.0,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: AppSpacing.xl),
         ],
         Card(
@@ -1442,11 +1883,14 @@ class _NotSuitableCard extends StatelessWidget {
               // considered answer, not a failure.
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
+                  horizontal: AppSpacing.xl,
+                  vertical: AppSpacing.lg,
+                ),
                 decoration: BoxDecoration(
                   color: colors.cautionSurface,
                   borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(AppRadius.card - 1)),
+                    top: Radius.circular(AppRadius.card - 1),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -1455,8 +1899,9 @@ class _NotSuitableCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'A standard DCF isn’t the right tool here',
-                        style: context.text.titleSmall
-                            ?.copyWith(color: colors.caution),
+                        style: context.text.titleSmall?.copyWith(
+                          color: colors.caution,
+                        ),
                       ),
                     ),
                   ],
@@ -1467,14 +1912,15 @@ class _NotSuitableCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(tidyBackendMessage(result.message),
-                        style: context.text.bodyMedium),
+                    Text(
+                      tidyBackendMessage(result.message),
+                      style: context.text.bodyMedium,
+                    ),
                     if (result.reasons.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xl),
                       ...result.reasons.map(
                         (reason) => Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSpacing.md),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1492,7 +1938,8 @@ class _NotSuitableCard extends StatelessWidget {
                                 child: Text(
                                   tidyBackendMessage(reason),
                                   style: context.text.bodySmall?.copyWith(
-                                      color: colors.textSecondary),
+                                    color: colors.textSecondary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1512,6 +1959,36 @@ class _NotSuitableCard extends StatelessWidget {
           'would produce a confident figure with no economic meaning.',
           style: context.text.bodySmall?.copyWith(color: colors.textSecondary),
         ),
+
+        // The opt-in. Below the refusal, visually quieter than it, and framed
+        // as what it is before anyone taps: the refusal remains the answer,
+        // and this is a deliberate step past it. Both conditions are checked
+        // so a callback wired by mistake still cannot offer it without the
+        // backend's say-so.
+        if (result.speculativeEstimateAvailable &&
+            onShowSpeculative != null) ...[
+          const SizedBox(height: AppSpacing.xxl),
+          Divider(color: colors.hairline, height: 1),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'A speculative estimate can be built by assuming a path to '
+            'profitability. It is not a valuation, and it can be far off.',
+            style: context.text.bodySmall?.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextButton.icon(
+            key: const Key('speculative-opt-in'),
+            onPressed: onShowSpeculative,
+            icon: const Icon(Icons.science_outlined, size: 18),
+            label: const Text('Show a speculative estimate anyway'),
+            style: TextButton.styleFrom(
+              foregroundColor: colors.textSecondary,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1527,41 +2004,43 @@ class _FailureCard extends StatelessWidget {
   ({IconData icon, String title, bool severe}) get _presentation =>
       switch (result.kind) {
         ValuationFailureKind.tickerNotFound => (
-            icon: Icons.travel_explore_rounded,
-            title: 'No match for that ticker',
-            severe: false,
-          ),
-        ValuationFailureKind.planLimited => (
-            icon: Icons.workspace_premium_outlined,
-            title: 'Not on your data plan',
-            severe: false,
-          ),
+          icon: Icons.travel_explore_rounded,
+          title: 'No match for that ticker',
+          severe: false,
+        ),
         ValuationFailureKind.rateLimited => (
-            icon: Icons.schedule_rounded,
-            title: 'Rate limit reached',
-            severe: false,
-          ),
+          icon: Icons.schedule_rounded,
+          title: 'Too many requests',
+          severe: false,
+        ),
+        // Nothing the user typed was wrong: the listing itself cannot be
+        // valued, so it is not a "check the request" problem.
+        ValuationFailureKind.unsupportedListing => (
+          icon: Icons.currency_exchange_rounded,
+          title: 'This listing can’t be valued',
+          severe: false,
+        ),
         ValuationFailureKind.backendUnreachable => (
-            icon: Icons.cloud_off_rounded,
-            // "Backend" is our word, not the user's.
-            title: 'Can’t reach the server',
-            severe: true,
-          ),
+          icon: Icons.cloud_off_rounded,
+          // "Backend" is our word, not the user's.
+          title: 'Can’t reach the server',
+          severe: true,
+        ),
         ValuationFailureKind.upstreamError => (
-            icon: Icons.report_gmailerrorred_rounded,
-            title: 'Data provider problem',
-            severe: true,
-          ),
+          icon: Icons.report_gmailerrorred_rounded,
+          title: 'Market data unavailable',
+          severe: true,
+        ),
         ValuationFailureKind.badRequest => (
-            icon: Icons.edit_note_rounded,
-            title: 'Check the request',
-            severe: false,
-          ),
+          icon: Icons.edit_note_rounded,
+          title: 'Check the request',
+          severe: false,
+        ),
         ValuationFailureKind.unexpected => (
-            icon: Icons.help_outline_rounded,
-            title: 'Unexpected problem',
-            severe: true,
-          ),
+          icon: Icons.help_outline_rounded,
+          title: 'Unexpected problem',
+          severe: true,
+        ),
       };
 
   @override
@@ -1569,8 +2048,9 @@ class _FailureCard extends StatelessWidget {
     final colors = context.colors;
     final p = _presentation;
     final accent = p.severe ? colors.negative : colors.textSecondary;
-    final iconSurface =
-        p.severe ? colors.negativeSurface : context.scheme.surfaceContainerHighest;
+    final iconSurface = p.severe
+        ? colors.negativeSurface
+        : context.scheme.surfaceContainerHighest;
 
     // The backend writes for a terminal; reflow it, and lift any trailing URL
     // out so it does not wrap mid-word through the paragraph.
@@ -1594,21 +2074,24 @@ class _FailureCard extends StatelessWidget {
                   child: Icon(p.icon, size: 20, color: accent),
                 ),
                 const SizedBox(width: AppSpacing.lg),
-                Expanded(
-                  child: Text(p.title, style: context.text.titleMedium),
-                ),
+                Expanded(child: Text(p.title, style: context.text.titleMedium)),
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            Text(body,
-                style: context.text.bodySmall
-                    ?.copyWith(color: colors.textSecondary)),
+            Text(
+              body,
+              style: context.text.bodySmall?.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
             if (url != null) ...[
               const SizedBox(height: AppSpacing.md),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.sm,
+                ),
                 decoration: BoxDecoration(
                   color: context.scheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(AppSpacing.sm),
@@ -1628,4 +2111,3 @@ class _FailureCard extends StatelessWidget {
     );
   }
 }
-

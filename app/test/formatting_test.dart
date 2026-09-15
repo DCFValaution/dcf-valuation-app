@@ -6,28 +6,30 @@ import 'package:dcf_app/formatting.dart';
 
 void main() {
   group('tidyBackendMessage', () {
-    // The exact string the backend returns for a plan-gated ticker, which
-    // previously rendered with stray indentation mid-paragraph.
-    const planLimited =
-        "BRK-B isn't available on your current data plan.\n"
-        '  The ticker is valid, but detailed financials for it need a paid '
-        'FMP plan - the free tier covers only a subset of companies.\n'
-        '  Try a large-cap US listing, or upgrade at '
-        'https://site.financialmodelingprep.com/developer/docs/pricing';
+    // A message in the backend's terminal style - hard-wrapped, with indented
+    // continuation lines - which would otherwise render with stray
+    // indentation mid-paragraph.
+    const wrapped =
+        "Yahoo Finance recognises 'AAPL' but returned no data for it just now.\n"
+        '  This is a temporary problem on the data provider\'s side, not an '
+        'unknown ticker.\n'
+        '  Try again shortly.';
 
     test('joins hard-wrapped lines and strips terminal indentation', () {
-      final tidied = tidyBackendMessage(planLimited);
+      final tidied = tidyBackendMessage(wrapped);
 
       expect(tidied.contains('\n'), isFalse);
       expect(tidied.contains('  '), isFalse, reason: 'no double spaces left');
-      expect(tidied, startsWith("BRK-B isn't available"));
-      expect(tidied, contains('plan. The ticker is valid'));
+      expect(tidied, startsWith("Yahoo Finance recognises 'AAPL'"));
+      expect(tidied, contains('just now. This is a temporary problem'));
     });
 
     test('preserves genuine paragraph breaks', () {
       const input = 'First paragraph line one\nline two\n\nSecond paragraph';
-      expect(tidyBackendMessage(input),
-          'First paragraph line one line two\n\nSecond paragraph');
+      expect(
+        tidyBackendMessage(input),
+        'First paragraph line one line two\n\nSecond paragraph',
+      );
     });
 
     test('leaves an already-clean message untouched', () {
@@ -44,7 +46,8 @@ void main() {
   group('splitTrailingUrl', () {
     test('lifts a trailing URL out of the prose', () {
       final (message, url) = splitTrailingUrl(
-          'Try a large-cap US listing, or upgrade at https://example.com/pricing');
+        'Try a large-cap US listing, or upgrade at https://example.com/pricing',
+      );
 
       expect(url, 'https://example.com/pricing');
       expect(message, 'Try a large-cap US listing, or upgrade');
@@ -65,16 +68,16 @@ void main() {
       expect(message, text);
     });
 
-    test('the two together produce a clean plan-limited message', () {
-      const raw = "BRK-B isn't available on your current data plan.\n"
-          '  The ticker is valid, but detailed financials need a paid plan.\n'
-          '  Upgrade at https://example.com/pricing';
+    test('the two together produce a clean message with a trailing link', () {
+      const raw =
+          'The ticker is valid, but this company is not covered.\n'
+          '  Read more at https://example.com/coverage';
 
       final (message, url) = splitTrailingUrl(tidyBackendMessage(raw));
 
       expect(message, isNot(contains('\n')));
-      expect(message, endsWith('Upgrade'));
-      expect(url, 'https://example.com/pricing');
+      expect(message, endsWith('Read more'));
+      expect(url, 'https://example.com/coverage');
     });
   });
 }

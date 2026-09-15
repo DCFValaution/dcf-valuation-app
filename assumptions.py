@@ -102,6 +102,16 @@ class Provenance:
     source: str      # "derived" | "derived (clamped)" | "default" | "override"
     detail: str
 
+    # For a clamped value, the facts behind it in structured form: the figure
+    # the company's own history gave, the limit it was held to, and - where a
+    # value can be limited for more than one reason - which. `detail` stays the
+    # precise technical record (it is what the workbook carries); these let a
+    # plain-language warning be written from the numbers rather than by
+    # parsing that string.
+    raw: float | None = None
+    limit: float | None = None
+    why: str | None = None
+
     @property
     def is_derived(self) -> bool:
         return self.source.startswith("derived")
@@ -185,26 +195,14 @@ def _cost_of_debt_history(fin: CompanyFinancials) -> list[tuple[str, float]]:
     return rates
 
 
-def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
-                 record_input) -> tuple[float | None, str, dict]:
+def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, float]:
     """
-    WACC = We*Re + Wd*Rd*(1-t), with Re from CAPM.
+    Risk-free rate, equity risk premium and beta, each recorded with provenance.
 
-        Re = risk-free rate + beta * equity risk premium
-        Rd = interest expense / average debt   (the company's actual rate)
-        We, Wd = market value of equity and book debt, as shares of the total
-
-    Equity is weighted at MARKET value and debt at BOOK value. That asymmetry
-    is deliberate and conventional: a company's market cap is observable and is
-    what equity investors have at stake, whereas the market value of corporate
-    debt is rarely observable and book value is a close proxy for
-    investment-grade issuers near par.
-
-    Returns (wacc, detail, components). A wacc of None means derivation failed
-    and the caller should fall back to DEFAULT_WACC.
+    Shared by the DCF's WACC build-up and the dividend discount model's cost
+    of equity, so the two methods can never disagree about what the market
+    demands of the same company.
     """
-    components: dict = {}
-
     # --- Risk-free rate: live Treasury curve, static fallback --------------
     live = fetch_risk_free_rate(RISK_FREE_TENOR)
     if live is not None:
@@ -230,6 +228,31 @@ def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
             else f"reported {raw_beta:g}, outside plausible range"
         beta = record_input("beta", DEFAULT_BETA, "default",
                             f"beta {reason}; used market beta of 1.0")
+
+    return rf, erp, beta
+
+
+def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
+                 record_input) -> tuple[float | None, str, dict]:
+    """
+    WACC = We*Re + Wd*Rd*(1-t), with Re from CAPM.
+
+        Re = risk-free rate + beta * equity risk premium
+        Rd = interest expense / average debt   (the company's actual rate)
+        We, Wd = market value of equity and book debt, as shares of the total
+
+    Equity is weighted at MARKET value and debt at BOOK value. That asymmetry
+    is deliberate and conventional: a company's market cap is observable and is
+    what equity investors have at stake, whereas the market value of corporate
+    debt is rarely observable and book value is a close proxy for
+    investment-grade issuers near par.
+
+    Returns (wacc, detail, components). A wacc of None means derivation failed
+    and the caller should fall back to DEFAULT_WACC.
+    """
+    components: dict = {}
+
+    rf, erp, beta = _capm_inputs(fin, record_input)
 
     cost_of_equity = rf + beta * erp
 
@@ -315,17 +338,18 @@ def derive_assumptions(fin: CompanyFinancials,
     wacc_inputs: dict[str, Provenance] = {}
     diagnostics: dict = {}
 
-    def _record_into(store: dict, name: str, value: float, source: str, detail: str) -> float:
+    def _record_into(store: dict, name: str, value: float, source: str, detail: str,
+                     **clamp) -> float:
         if name in overrides:
             supplied = float(overrides[name])
             store[name] = Provenance(name, supplied, "override",
                                      f"supplied by caller (would have been {value:.4g} from {source})")
             return supplied
-        store[name] = Provenance(name, value, source, detail)
+        store[name] = Provenance(name, value, source, detail, **clamp)
         return value
 
-    def record(name: str, value: float, source: str, detail: str) -> float:
-        return _record_into(provenance, name, value, source, detail)
+    def record(name: str, value: float, source: str, detail: str, **clamp) -> float:
+        return _record_into(provenance, name, value, source, detail, **clamp)
 
     def record_input(name: str, value: float, source: str, detail: str) -> float:
         return _record_into(wacc_inputs, name, value, source, detail)
@@ -338,7 +362,8 @@ def derive_assumptions(fin: CompanyFinancials,
         clamped, was_clamped = _clamp(value, bounds)
         if was_clamped:
             return record(name, clamped, "derived (clamped)",
-                          f"{detail}; raw {value:.1%} clamped to [{bounds[0]:.0%}, {bounds[1]:.0%}]")
+                          f"{detail}; raw {value:.1%} clamped to [{bounds[0]:.0%}, {bounds[1]:.0%}]",
+                          raw=value, limit=clamped, why="range")
         return record(name, clamped, "derived", detail)
 
     # --- Revenue history ---------------------------------------------------

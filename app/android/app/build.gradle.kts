@@ -1,7 +1,19 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Release signing secrets. android/key.properties is git-ignored; see
+// android/key.properties.example for its shape.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
 }
 
 android {
@@ -31,11 +43,42 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Populated only when key.properties exists. The file holds the
+        // keystore passwords and is git-ignored; it lives on the developer's
+        // machine and nowhere else.
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Deliberately no fallback to the debug key. An APK signed with the
+            // debug key cannot later be upgraded by a properly signed one, so
+            // shipping one by accident is worse than a build that refuses.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+}
+
+// Fail release builds loudly when signing is not configured, rather than
+// producing an unsigned or debug-signed APK. Debug builds are unaffected.
+tasks.configureEach {
+    if (name.contains("Release") && !keystorePropertiesFile.exists()) {
+        doFirst {
+            throw GradleException(
+                "Release signing is not configured: ${keystorePropertiesFile.path} " +
+                "is missing. Copy android/key.properties.example to " +
+                "android/key.properties and fill it in."
+            )
         }
     }
 }

@@ -1,0 +1,2086 @@
+{
+  "produced": {
+    "status_code": 200,
+    "body": {
+      "company": {
+        "ticker": "JPM",
+        "company_name": "JPMorgan Chase & Co.",
+        "sector": "Financial Services",
+        "exchange": "NYSE"
+      },
+      "intrinsic_valuation": {
+        "method": "ddm",
+        "intrinsic_value_per_share": 98.20515864307912,
+        "current_price": 350.95,
+        "upside_downside": -0.7201733618946313,
+        "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+        "full_valuation": "/valuation/JPM"
+      },
+      "relative_valuation": {
+        "method": "relative",
+        "basis": "market",
+        "is_intrinsic_valuation": false,
+        "framing": "How the market prices similar companies right now",
+        "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E and Price/Book multiples of 3 peers (Citigroup Inc., Bank of America Corporation, Wells Fargo & Company) to JPMorgan Chase & Co.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
+        "peer_selection": {
+          "mode": "automatic",
+          "rule": "Companies that people on Yahoo Finance often look at alongside JPM and that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+          "peers": [
+            {
+              "ticker": "C",
+              "name": "Citigroup Inc.",
+              "industry": "Banks - Diversified",
+              "provenance": "selected",
+              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+            },
+            {
+              "ticker": "BAC",
+              "name": "Bank of America Corporation",
+              "industry": "Banks - Diversified",
+              "provenance": "selected",
+              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+            },
+            {
+              "ticker": "WFC",
+              "name": "Wells Fargo & Company",
+              "industry": "Banks - Diversified",
+              "provenance": "selected",
+              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+            }
+          ],
+          "excluded": [
+            {
+              "ticker": "GS",
+              "name": "Goldman Sachs Group, Inc. (The)",
+              "reason": "often looked at alongside JPM, but it is in Capital Markets, not Banks - Diversified"
+            },
+            {
+              "ticker": "KO",
+              "name": "Coca-Cola Company (The)",
+              "reason": "often looked at alongside JPM, but it is in Beverages - Non-Alcoholic, not Banks - Diversified"
+            }
+          ]
+        },
+        "company_figures": {
+          "as_of": "2026-06-30",
+          "trading_currency": "USD",
+          "reporting_currency": "USD",
+          "price": 350.95,
+          "market_cap": 932890445135.25,
+          "enterprise_value": 1156032445135.25,
+          "revenue": 194911000000.0,
+          "ebitda": null,
+          "net_income": 63634000000.0,
+          "total_debt": 532953000000.0,
+          "cash": 309811000000.0,
+          "shares": 2658186195.0,
+          "common_equity": 353558000000.0
+        },
+        "multiples": [
+          {
+            "name": "pe",
+            "label": "P/E",
+            "applicable": true,
+            "company_value": 14.660251518610334,
+            "company_reason": null,
+            "peer_median": 13.2533060896772,
+            "peer_count": 3,
+            "premium_to_median": 0.10615807251512765,
+            "implied_value_per_share": 317.2693023900528,
+            "reason": null,
+            "peers": [
+              {
+                "ticker": "C",
+                "value": 14.122189116160298,
+                "excluded_reason": null
+              },
+              {
+                "ticker": "BAC",
+                "value": 13.2533060896772,
+                "excluded_reason": null
+              },
+              {
+                "ticker": "WFC",
+                "value": 12.832414252983206,
+                "excluded_reason": null
+              }
+            ]
+          },
+          {
+            "name": "pb",
+            "label": "Price/Book",
+            "applicable": true,
+            "company_value": 2.6385782393136346,
+            "company_reason": null,
+            "peer_median": 1.5444530388682203,
+            "peer_count": 3,
+            "premium_to_median": 0.7084224465945512,
+            "implied_value_per_share": 205.42343066233937,
+            "reason": null,
+            "peers": [
+              {
+                "ticker": "C",
+                "value": 1.207538338319435,
+                "excluded_reason": null
+              },
+              {
+                "ticker": "BAC",
+                "value": 1.5444530388682203,
+                "excluded_reason": null
+              },
+              {
+                "ticker": "WFC",
+                "value": 1.6826575392086482,
+                "excluded_reason": null
+              }
+            ]
+          }
+        ],
+        "relative_value_per_share": {
+          "central": 261.3463665261961,
+          "low": 205.42343066233937,
+          "high": 317.2693023900528,
+          "multiples_applied": [
+            "P/E",
+            "Price/Book"
+          ]
+        },
+        "current_price": 350.95,
+        "relative_value_vs_price": -0.25531737704460433,
+        "comparison_with_intrinsic": {
+          "intrinsic_method": "ddm",
+          "intrinsic_value_per_share": 98.20515864307912,
+          "relative_value_per_share": 261.3463665261961,
+          "gap": 1.6612284948904175,
+          "statement": "The relative figure of $261.35 is 166% above the dividend discount model intrinsic value of $98.21. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+        },
+        "warnings": [
+          "With only 3 peers, a single company's share price can move the result a lot."
+        ]
+      }
+    }
+  },
+  "no_peers": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "relative",
+      "company": {
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "sector": "Technology",
+        "exchange": "NasdaqGS"
+      },
+      "message": "No relative valuation is produced for Apple Inc.: a comparison with peers could not be made meaningfully, so no market-based figure is offered. The intrinsic valuation is unaffected and included here.",
+      "reasons": [
+        "No comparable company could be found. A comparison needs at least 3 companies, because the prices of one or two say little about how the market values a group, so no relative figure is produced. Peers are chosen automatically from companies in the same industry that people often look at alongside this one. The data source does not provide a full list of every company in an industry, so this often comes up short for companies without close, frequently compared rivals. You can add your own peers."
+      ],
+      "peer_selection": {
+        "mode": "automatic",
+        "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+        "peers": [],
+        "excluded": [
+          {
+            "ticker": "AMZN",
+            "name": "Amazon.com, Inc.",
+            "reason": "often looked at alongside AAPL, but it is in Internet Retail, not Consumer Electronics"
+          },
+          {
+            "ticker": "TSLA",
+            "name": "Tesla, Inc.",
+            "reason": "often looked at alongside AAPL, but it is in Auto Manufacturers, not Consumer Electronics"
+          },
+          {
+            "ticker": "GOOG",
+            "name": "Alphabet Inc.",
+            "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+          },
+          {
+            "ticker": "META",
+            "name": "Meta Platforms, Inc.",
+            "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+          },
+          {
+            "ticker": "MSFT",
+            "name": "Microsoft Corporation",
+            "reason": "often looked at alongside AAPL, but it is in Software - Infrastructure, not Consumer Electronics"
+          }
+        ]
+      },
+      "intrinsic_valuation": {
+        "method": "dcf",
+        "intrinsic_value_per_share": 91.73998884980165,
+        "current_price": 330.715,
+        "upside_downside": -0.7226010648147146,
+        "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+        "full_valuation": "/valuation/AAPL"
+      },
+      "company_figures": null,
+      "multiples": []
+    }
+  },
+  "single_multiple": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "relative",
+      "company": {
+        "ticker": "CRM",
+        "company_name": "Salesforce, Inc.",
+        "sector": "Technology",
+        "exchange": "NYSE"
+      },
+      "message": "No relative valuation is produced for Salesforce, Inc.: a comparison with peers could not be made meaningfully, so no market-based figure is offered. The intrinsic valuation is unaffected and included here. The multiples that could be computed are included as information, without a value drawn from them.",
+      "reasons": [
+        "Only one of the multiples appropriate to Salesforce, Inc. could be applied (Price/Sales), and a relative valuation resting on a single multiple is too fragile to report: one outlying peer moves it, with nothing to cross-check it against. At least 2 are needed. The Price/Sales comparison is shown as information instead, without a value drawn from it. The others could not be applied - P/E: only 2 peers have a usable P/E; at least 3 are needed to describe the group rather than one or two companies; EV/EBITDA: only 2 peers have a usable EV/EBITDA; at least 3 are needed to describe the group rather than one or two companies."
+      ],
+      "peer_selection": {
+        "mode": "automatic",
+        "rule": "Companies that people on Yahoo Finance often look at alongside CRM and that are in the same industry (Software - Application), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+        "peers": [
+          {
+            "ticker": "ADBE",
+            "name": "Adobe Inc.",
+            "industry": "Software - Application",
+            "provenance": "selected",
+            "detail": "in the same industry (Software - Application), and among the companies Yahoo Finance users also watch alongside CRM"
+          },
+          {
+            "ticker": "NOW",
+            "name": "ServiceNow, Inc.",
+            "industry": "Software - Application",
+            "provenance": "selected",
+            "detail": "in the same industry (Software - Application), and among the companies Yahoo Finance users also watch alongside CRM"
+          },
+          {
+            "ticker": "SNOW",
+            "name": "Snowflake Inc.",
+            "industry": "Software - Application",
+            "provenance": "selected",
+            "detail": "in the same industry (Software - Application), and among the companies Yahoo Finance users also watch alongside CRM"
+          }
+        ],
+        "excluded": [
+          {
+            "ticker": "PYPL",
+            "name": "PayPal Holdings, Inc.",
+            "reason": "often looked at alongside CRM, but it is in Credit Services, not Software - Application"
+          },
+          {
+            "ticker": "CRWD",
+            "name": "CrowdStrike Holdings, Inc.",
+            "reason": "often looked at alongside CRM, but it is in Software - Infrastructure, not Software - Application"
+          }
+        ]
+      },
+      "intrinsic_valuation": {
+        "method": "dcf",
+        "intrinsic_value_per_share": 172.26870157454317,
+        "current_price": 258.2725,
+        "upside_downside": -0.3329963446571231,
+        "note": "$172.27 is the output of these assumptions, not a fact about Salesforce, Inc. It assumes a WACC of 11.42%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+        "full_valuation": "/valuation/CRM"
+      },
+      "company_figures": {
+        "as_of": "2026-07-31",
+        "trading_currency": "USD",
+        "reporting_currency": "USD",
+        "price": 258.275,
+        "market_cap": 212560324999.99997,
+        "enterprise_value": 242900324999.99997,
+        "revenue": 43938000000.0,
+        "ebitda": 16387000000.0,
+        "net_income": 9662000000.0,
+        "total_debt": 41743000000.0,
+        "cash": 11403000000.0,
+        "shares": 823000000.0,
+        "common_equity": 38378000000.0
+      },
+      "multiples": [
+        {
+          "name": "pe",
+          "label": "P/E",
+          "applicable": false,
+          "company_value": 21.99961964396605,
+          "company_reason": null,
+          "peer_median": null,
+          "peer_count": 2,
+          "premium_to_median": null,
+          "implied_value_per_share": null,
+          "reason": "only 2 peers have a usable P/E; at least 3 are needed to describe the group rather than one or two companies",
+          "peers": [
+            {
+              "ticker": "ADBE",
+              "value": 14.29421334431631,
+              "excluded_reason": null
+            },
+            {
+              "ticker": "NOW",
+              "value": 87.2499047724551,
+              "excluded_reason": null
+            },
+            {
+              "ticker": "SNOW",
+              "value": null,
+              "excluded_reason": "not profitable over the last twelve months"
+            }
+          ]
+        },
+        {
+          "name": "ev_ebitda",
+          "label": "EV/EBITDA",
+          "applicable": false,
+          "company_value": 14.82274516384939,
+          "company_reason": null,
+          "peer_median": null,
+          "peer_count": 2,
+          "premium_to_median": null,
+          "implied_value_per_share": null,
+          "reason": "only 2 peers have a usable EV/EBITDA; at least 3 are needed to describe the group rather than one or two companies",
+          "peers": [
+            {
+              "ticker": "ADBE",
+              "value": 10.241394198117783,
+              "excluded_reason": null
+            },
+            {
+              "ticker": "NOW",
+              "value": 42.71324027714286,
+              "excluded_reason": null
+            },
+            {
+              "ticker": "SNOW",
+              "value": null,
+              "excluded_reason": "EBITDA was not positive over the last twelve months"
+            }
+          ]
+        },
+        {
+          "name": "ps",
+          "label": "Price/Sales",
+          "applicable": true,
+          "company_value": 4.837733283262779,
+          "company_reason": null,
+          "peer_median": 9.890533598289437,
+          "peer_count": 3,
+          "premium_to_median": -0.5108723674828362,
+          "implied_value_per_share": null,
+          "reason": null,
+          "peers": [
+            {
+              "ticker": "ADBE",
+              "value": 4.009204851752021,
+              "excluded_reason": null
+            },
+            {
+              "ticker": "NOW",
+              "value": 9.890533598289437,
+              "excluded_reason": null
+            },
+            {
+              "ticker": "SNOW",
+              "value": 20.69148262987458,
+              "excluded_reason": null
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "not_applicable": {
+    "status_code": 422,
+    "body": {
+      "code": "relative_not_applicable",
+      "message": "Rivian Automotive, Inc. has no intrinsic valuation for a relative view to sit beside - the standard valuation refused it. A relative figure is a second opinion, never a substitute for one, so none is produced.",
+      "method": "relative",
+      "reasons": [
+        "The company is loss-making: its day-to-day business lost $3.6bn in its 2025 financial year, and it made a loss in 4 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
+      ],
+      "standard_valuation": "/valuation/RIVN"
+    }
+  },
+  "valuation_JPM": {
+    "status_code": 200,
+    "body": {
+      "method": "ddm",
+      "company": {
+        "ticker": "JPM",
+        "company_name": "JPMorgan Chase & Co.",
+        "sector": "Financial Services",
+        "exchange": "NYSE"
+      },
+      "suitable": true,
+      "intrinsic_value_per_share": 98.20515864307912,
+      "current_price": 350.95,
+      "upside_downside": -0.7201733618946313,
+      "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "why_not_dcf": "JPMorgan Chase & Co. is in the Financial Services sector. For banks and insurers, borrowing is an input to operations rather than financing, so unlevered free cash flow and an enterprise-to-equity bridge are not meaningful. A dividend discount or excess-return model is the appropriate tool.",
+      "dividend_base": {
+        "current_annual_dividend": 6.0,
+        "detail": "Based on the latest regular dividend of $1.50, paid on 6 July 2026, which the company pays 4 times a year (quarterly).",
+        "last_regular_payment": 1.5,
+        "last_regular_payment_date": "2026-07-06",
+        "payments_per_year": 4,
+        "trailing_twelve_months": 6.0,
+        "dividend_yield": 0.017096452486109134,
+        "payout_ratio": 0.2818886097152429,
+        "return_on_equity": 0.16894174410419488,
+        "sustainable_growth": 0.12131899073579505,
+        "annual_history": [
+          {
+            "year": 2017,
+            "dividend_per_share": 2.04
+          },
+          {
+            "year": 2018,
+            "dividend_per_share": 2.4800000000000004
+          },
+          {
+            "year": 2019,
+            "dividend_per_share": 3.3000000000000003
+          },
+          {
+            "year": 2020,
+            "dividend_per_share": 3.6
+          },
+          {
+            "year": 2021,
+            "dividend_per_share": 3.7
+          },
+          {
+            "year": 2022,
+            "dividend_per_share": 4.0
+          },
+          {
+            "year": 2023,
+            "dividend_per_share": 4.05
+          },
+          {
+            "year": 2024,
+            "dividend_per_share": 4.6
+          },
+          {
+            "year": 2025,
+            "dividend_per_share": 5.55
+          }
+        ],
+        "special_dividends_excluded": [],
+        "regular_annual_dividend": 6.0,
+        "variable_annual_dividend": null,
+        "variable_average_years": null,
+        "variable_dividends_included": []
+      },
+      "valuation": {
+        "pv_dividends_sum": 28.67781644319399,
+        "terminal_value": 115.59430617490969,
+        "pv_terminal_value": 69.52734219988513,
+        "tv_pct_of_value": 0.7079805497038926
+      },
+      "assumptions": [
+        {
+          "name": "cost_of_equity",
+          "value": 0.10702177350892692,
+          "source": "derived",
+          "detail": "CAPM: 5.00% + 1.04x5.50%",
+          "is_percent": true
+        },
+        {
+          "name": "dividend_growth",
+          "value": 0.0904307661344419,
+          "source": "derived",
+          "detail": "5-year dividend-per-share CAGR, 2020-2025 ($3.60 -> $5.55); within sustainable growth of 12.1%",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
+          "is_percent": true
+        },
+        {
+          "name": "high_growth_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention, matching the DCF's forecast horizon",
+          "is_percent": false
+        }
+      ],
+      "global_levers": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050019998550415036,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
+          "is_percent": true
+        }
+      ],
+      "cost_of_equity_build_up": {
+        "risk_free_rate": 0.050019998550415036,
+        "equity_risk_premium": 0.055,
+        "beta": 1.0363959083365797,
+        "cost_of_equity": 0.10702177350892692
+      },
+      "cost_of_equity_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050019998550415036,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 1.0363959083365797,
+          "source": "derived",
+          "detail": "computed from 60 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+          "is_percent": false
+        }
+      ],
+      "sensitivity": {
+        "costs_of_equity": [
+          0.0970217735,
+          0.1020217735,
+          0.1070217735,
+          0.1120217735,
+          0.1170217735
+        ],
+        "growth_rates": [
+          0.015,
+          0.02,
+          0.025,
+          0.03,
+          0.035
+        ],
+        "grid": [
+          [
+            101.50834115599118,
+            106.56318888187215,
+            112.31988654565849,
+            118.9355136831309,
+            126.6178028594553
+          ],
+          [
+            95.44529021962614,
+            99.83862147826125,
+            104.80235394411277,
+            110.45528527645035,
+            116.9516636017771
+          ],
+          [
+            90.04502397498848,
+            93.89066335616334,
+            98.20515865413627,
+            103.07981961720819,
+            108.63131214470582
+          ],
+          [
+            85.20498593818763,
+            88.59263774336924,
+            92.3695773864023,
+            96.60699715341528,
+            101.39457560601252
+          ],
+          [
+            80.84272680225737,
+            83.84398323955827,
+            87.1713860140954,
+            90.88115318327878,
+            95.04321088592441
+          ]
+        ],
+        "centre_cost_of_equity": 0.1070217735,
+        "centre_terminal_growth": 0.025,
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "projection": [
+        {
+          "period": 1,
+          "dividend": 6.542584596806652,
+          "discount_factor": 0.9033245993259013,
+          "pv_dividend": 5.910077609466182
+        },
+        {
+          "period": 2,
+          "dividend": 7.134235534395276,
+          "discount_factor": 0.8159953317472999,
+          "pv_dividend": 5.821502891652249
+        },
+        {
+          "period": 3,
+          "dividend": 7.7793899195542,
+          "discount_factor": 0.7371086561024356,
+          "pv_dividend": 5.734255648899431
+        },
+        {
+          "period": 4,
+          "dividend": 8.482886110038041,
+          "discount_factor": 0.6658483814333861,
+          "pv_dividend": 5.648315986252583
+        },
+        {
+          "period": 5,
+          "dividend": 9.249999999999996,
+          "discount_factor": 0.6014772223701134,
+          "pv_dividend": 5.563664306923546
+        }
+      ],
+      "warnings": [
+        "JPMorgan Chase & Co. returned $34.6bn through share buybacks against $16.6bn in dividends in its 2025 financial year. A dividend discount model counts only dividends, so it does not see most of the cash this company returns to shareholders and is likely to understate its value on that basis."
+      ]
+    }
+  },
+  "valuation_AAPL": {
+    "status_code": 200,
+    "body": {
+      "method": "dcf",
+      "company": {
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "sector": "Technology",
+        "exchange": "NasdaqGS"
+      },
+      "suitable": true,
+      "intrinsic_value_per_share": 91.73998884980165,
+      "current_price": 330.715,
+      "upside_downside": -0.7226010648147146,
+      "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 330.715,
+        "fiscal_year": "2025"
+      },
+      "valuation": {
+        "pv_ufcf_sum": 436567.32595016155,
+        "terminal_value": 1512085.1006125335,
+        "pv_terminal_value": 906200.4095244906,
+        "enterprise_value": 1342767.7354746521,
+        "equity_value": 1376530.7354746521,
+        "tv_pct_of_ev": 0.6748750253551182
+      },
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.01812535743479393,
+          "source": "derived",
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (394.3bn -> 416.2bn)",
+          "is_percent": true
+        },
+        {
+          "name": "operating_margin",
+          "value": 0.31510222870075566,
+          "source": "derived",
+          "detail": "median operatingIncome / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.15610002335586043,
+          "source": "derived",
+          "detail": "median effective rate over 3 profitable year(s)",
+          "is_percent": true
+        },
+        {
+          "name": "da_pct",
+          "value": 0.029268479803598143,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.02859230076835775,
+          "source": "derived",
+          "detail": "median capex / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "nwc_pct",
+          "value": -0.1,
+          "source": "derived (clamped)",
+          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025; raw -28.7% clamped to [-10%, 30%]",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.10782304722073065,
+          "source": "derived",
+          "detail": "CAPM: 5.00% + 1.08x5.50% = 10.95% equity; debt 2.92% (2.47% after tax); weights 98.0%E / 2.0%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false
+        }
+      ],
+      "global_levers": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050019998550415036,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        }
+      ],
+      "wacc_build_up": {
+        "cost_of_debt_by_year": [
+          [
+            "2023",
+            0.0340288202390583
+          ],
+          [
+            "2022",
+            0.024410963695874872
+          ]
+        ],
+        "risk_free_rate": 0.050019998550415036,
+        "equity_risk_premium": 0.055,
+        "beta": 1.0818723857638963,
+        "cost_of_equity": 0.10952297976742933,
+        "cost_of_debt": 0.029219891967466587,
+        "after_tax_cost_of_debt": 0.024658666148889334,
+        "tax_rate": 0.15610002335586043,
+        "equity_value": 4826514063360.0,
+        "debt_value": 98657000000.0,
+        "weight_equity": 0.9799688175840343,
+        "weight_debt": 0.020031182415965715,
+        "wacc": 0.10782304722073065
+      },
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050019998550415036,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 1.0818723857638963,
+          "source": "derived",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+          "is_percent": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.029219891967466587,
+          "source": "derived",
+          "detail": "median interest expense / average debt (FY2023, FY2022)",
+          "is_percent": true
+        }
+      ],
+      "sensitivity": {
+        "waccs": [
+          0.0978230472,
+          0.1028230472,
+          0.1078230472,
+          0.1128230472,
+          0.1178230472
+        ],
+        "growth_rates": [
+          0.015,
+          0.02,
+          0.025,
+          0.03,
+          0.035
+        ],
+        "grid": [
+          [
+            94.6838379526654,
+            99.03251880111544,
+            103.97835687048027,
+            109.65342169587399,
+            116.23182774368992
+          ],
+          [
+            89.41177745814205,
+            93.19588357936601,
+            97.46623461869233,
+            102.32298669498681,
+            107.89583046529981
+          ],
+          [
+            84.70784522401318,
+            88.02373771381274,
+            91.73998887211093,
+            95.93376581383778,
+            100.70342870142582
+          ],
+          [
+            80.48492203937977,
+            83.40870340290714,
+            86.66540208788304,
+            90.31531242047096,
+            94.4342239633569
+          ],
+          [
+            76.67283425118157,
+            79.26535626291961,
+            82.13717550631954,
+            85.33599538736075,
+            88.92103866746582
+          ]
+        ],
+        "centre_wacc": 0.1078230472,
+        "centre_terminal_growth": 0.025,
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "projection": [
+        {
+          "period": 1,
+          "revenue": 423704.06687542127,
+          "ebit": 133510.09578201926,
+          "nopat": 112669.16671220289,
+          "da": 12401.173924045665,
+          "capex": 12114.67411687841,
+          "delta_nwc": -754.3066875421268,
+          "ufcf": 113709.97320691227,
+          "discount_factor": 0.9026712366282381,
+          "pv_ufcf": 102642.72213164732
+        },
+        {
+          "period": 2,
+          "revenue": 431383.8545341141,
+          "ebit": 135930.01398922194,
+          "nopat": 114711.33563074196,
+          "da": 12625.94963403004,
+          "capex": 12334.25691545288,
+          "delta_nwc": -767.9787658692862,
+          "ufcf": 115771.0071151884,
+          "discount_factor": 0.8148153614359527,
+          "pv_ufcf": 94331.99500636649
+        },
+        {
+          "period": 3,
+          "revenue": 439202.8410891441,
+          "ebit": 138393.79407889314,
+          "nopat": 116790.51959087179,
+          "da": 12854.799484100538,
+          "capex": 12557.819730738041,
+          "delta_nwc": -781.8986555029987,
+          "ufcf": 117869.39799973728,
+          "discount_factor": 0.7355103899310763,
+          "pv_ufcf": 86694.16688372799
+        },
+        {
+          "period": 4,
+          "revenue": 447163.54957026185,
+          "ebit": 140902.23106333034,
+          "nopat": 118907.38950345163,
+          "da": 13087.797319502466,
+          "capex": 12785.434701959377,
+          "delta_nwc": -796.0708481117734,
+          "ufcf": 120005.8229691065,
+          "discount_factor": 0.6639240732320022,
+          "pv_ufcf": 79674.75479720776
+        },
+        {
+          "period": 5,
+          "revenue": 455268.54873803403,
+          "ebit": 143456.13436471313,
+          "nopat": 121062.62843983996,
+          "da": 13325.018323952587,
+          "capex": 13017.175275891608,
+          "delta_nwc": -810.4999167772185,
+          "ufcf": 122180.97140467816,
+          "discount_factor": 0.5993051642115884,
+          "pv_ufcf": 73223.68713121203
+        }
+      ],
+      "warnings": [
+        "The forecast has Apple Inc. growing 1.8% a year for the next 5 years, then 2.5% a year forever after. Growing faster in the long run than in the near term is unusual, so it is worth checking whether either assumption is too low or too high.",
+        "Apple Inc.'s recent figures show it freeing up an unusually large amount of cash from stock, customer payments and supplier bills as it grew. A company can rarely keep doing that indefinitely, so the forecast assumes a more typical level to keep the estimate realistic."
+      ]
+    }
+  },
+  "valuation_CRM": {
+    "status_code": 200,
+    "body": {
+      "method": "dcf",
+      "company": {
+        "ticker": "CRM",
+        "company_name": "Salesforce, Inc.",
+        "sector": "Technology",
+        "exchange": "NYSE"
+      },
+      "suitable": true,
+      "intrinsic_value_per_share": 172.26870157454317,
+      "current_price": 258.2725,
+      "upside_downside": -0.3329963446571231,
+      "note": "$172.27 is the output of these assumptions, not a fact about Salesforce, Inc. It assumes a WACC of 11.42%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "base_year": {
+        "revenue": 41525.0,
+        "total_debt": 14439.0,
+        "cash": 17156.0,
+        "shares": 956.0,
+        "current_price": 258.2725,
+        "fiscal_year": "2026"
+      },
+      "valuation": {
+        "pv_ufcf_sum": 50091.41894229284,
+        "terminal_value": 192079.85911347854,
+        "pv_terminal_value": 111880.45976297044,
+        "enterprise_value": 161971.87870526328,
+        "equity_value": 164688.87870526328,
+        "tv_pct_of_ev": 0.6907400263385034
+      },
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.09820006113830493,
+          "source": "derived",
+          "detail": "3-year revenue CAGR, FY2023-FY2026 (31.4bn -> 41.5bn)",
+          "is_percent": true
+        },
+        {
+          "name": "operating_margin",
+          "value": 0.202295817390157,
+          "source": "derived",
+          "detail": "median operatingIncome / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.16684592632428072,
+          "source": "derived",
+          "detail": "median effective rate over 3 profitable year(s)",
+          "is_percent": true
+        },
+        {
+          "name": "da_pct",
+          "value": 0.09175352948937855,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.017363768307164535,
+          "source": "derived",
+          "detail": "median capex / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "nwc_pct",
+          "value": -0.1,
+          "source": "derived (clamped)",
+          "detail": "aggregate change in NWC / change in revenue, FY2023-FY2026; raw -35.8% clamped to [-10%, 30%]",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.11415475273457956,
+          "source": "derived",
+          "detail": "CAPM: 5.00% + 1.24x5.50% = 11.79% equity; debt 7.00% (5.83% after tax); weights 93.6%E / 6.4%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false
+        }
+      ],
+      "global_levers": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050019998550415036,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        }
+      ],
+      "wacc_build_up": {
+        "cost_of_debt_by_year": [],
+        "risk_free_rate": 0.050019998550415036,
+        "equity_risk_premium": 0.055,
+        "beta": 1.2350254901085673,
+        "cost_of_equity": 0.11794640050638625,
+        "cost_of_debt": 0.07001999855041503,
+        "after_tax_cost_of_debt": 0.05833744703104624,
+        "tax_rate": 0.16684592632428072,
+        "equity_value": 212558266368.0,
+        "debt_value": 14439000000.0,
+        "weight_equity": 0.936391304481209,
+        "weight_debt": 0.06360869551879096,
+        "wacc": 0.11415475273457956
+      },
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050019998550415036,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 1.2350254901085673,
+          "source": "derived",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+          "is_percent": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.07001999855041503,
+          "source": "default",
+          "detail": "no year with usable interest expense; used risk-free + 2% spread",
+          "is_percent": true
+        }
+      ],
+      "sensitivity": {
+        "waccs": [
+          0.1041547527,
+          0.1091547527,
+          0.1141547527,
+          0.1191547527,
+          0.1241547527
+        ],
+        "growth_rates": [
+          0.015,
+          0.02,
+          0.025,
+          0.03,
+          0.035
+        ],
+        "grid": [
+          [
+            177.89762143720856,
+            185.73321034206214,
+            194.55870681880214,
+            204.57434905901667,
+            216.0382854293054
+          ],
+          [
+            168.17458004008833,
+            175.0525337781063,
+            182.7477858287384,
+            191.41521602258297,
+            201.25147624798453
+          ],
+          [
+            159.43935716412702,
+            165.51338423929212,
+            172.2687016429272,
+            179.82674464278824,
+            188.3396315076167
+          ],
+          [
+            151.5495304227267,
+            156.94291481202526,
+            162.90912045937367,
+            169.5445226965466,
+            176.968401166408
+          ],
+          [
+            144.38877725145483,
+            149.20147324473905,
+            154.4995414327223,
+            160.36030752347258,
+            166.87844362684245
+          ]
+        ],
+        "centre_wacc": 0.1141547527,
+        "centre_terminal_growth": 0.025,
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "projection": [
+        {
+          "period": 1,
+          "revenue": 45602.75753876811,
+          "ebit": 9225.24711155024,
+          "nopat": 7686.052211653245,
+          "da": 4184.21395863034,
+          "capex": 791.8357160709703,
+          "delta_nwc": -407.7757538768114,
+          "ufcf": 11486.206208089425,
+          "discount_factor": 0.8975413851133351,
+          "pv_ufcf": 10309.34542970597
+        },
+        {
+          "period": 2,
+          "revenue": 50080.95111715044,
+          "ebit": 10131.166941920445,
+          "nopat": 8440.823008749798,
+          "da": 4595.104025183588,
+          "capex": 869.5940318006332,
+          "delta_nwc": -447.81935783823286,
+          "ufcf": 12614.152359970985,
+          "discount_factor": 0.8055805379911641,
+          "pv_ufcf": 10161.715644447939
+        },
+        {
+          "period": 3,
+          "revenue": 54998.90357871907,
+          "ebit": 11126.048155019407,
+          "nopat": 9269.71234426664,
+          "da": 5046.343521393488,
+          "capex": 954.9882188889603,
+          "delta_nwc": -491.7952461568632,
+          "ufcf": 13852.862892928031,
+          "discount_factor": 0.7230418718889351,
+          "pv_ufcf": 10016.199917123453
+        },
+        {
+          "period": 4,
+          "revenue": 60399.79927268902,
+          "ebit": 12218.626764070037,
+          "nopat": 10179.998663208124,
+          "da": 5541.894763719218,
+          "capex": 1048.7681203702173,
+          "delta_nwc": -540.089569396995,
+          "ufcf": 15213.214875954118,
+          "discount_factor": 0.6489600031901334,
+          "pv_ufcf": 9872.767974431368
+        },
+        {
+          "period": 5,
+          "revenue": 66331.06325400843,
+          "ebit": 13418.496659327844,
+          "nopat": 11179.675154323024,
+          "da": 6086.109168338497,
+          "capex": 1151.7572139104777,
+          "delta_nwc": -593.1263981319411,
+          "ufcf": 16707.153506882987,
+          "discount_factor": 0.5824684601464267,
+          "pv_ufcf": 9731.389976584107
+        }
+      ],
+      "warnings": [
+        "Salesforce, Inc.'s recent figures show it freeing up an unusually large amount of cash from stock, customer payments and supplier bills as it grew. A company can rarely keep doing that indefinitely, so the forecast assumes a more typical level to keep the estimate realistic."
+      ]
+    }
+  },
+  "valuation_RIVN": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "dcf",
+      "company": {
+        "ticker": "RIVN",
+        "company_name": "Rivian Automotive, Inc.",
+        "sector": "Consumer Cyclical",
+        "exchange": "NasdaqGS"
+      },
+      "suitable": false,
+      "intrinsic_value_per_share": null,
+      "message": "A standard discounted cash flow valuation isn't suitable for Rivian Automotive, Inc. No intrinsic value is reported, deliberately: the model would produce a figure with no economic meaning.",
+      "reasons": [
+        "The company is loss-making: its day-to-day business lost $3.6bn in its 2025 financial year, and it made a loss in 4 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
+      ],
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.15,
+          "source": "derived (clamped)",
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (1.7bn -> 5.4bn); raw 48.1% clamped to [0%, 15%]",
+          "is_percent": true
+        },
+        {
+          "name": "operating_margin",
+          "value": -0.9434607645875251,
+          "source": "derived",
+          "detail": "median operatingIncome / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21,
+          "source": "default",
+          "detail": "no profitable year in window; used US statutory rate",
+          "is_percent": true
+        },
+        {
+          "name": "da_pct",
+          "value": 0.20744466800804828,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.2313937753721245,
+          "source": "derived",
+          "detail": "median capex / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "nwc_pct",
+          "value": 0.2866720300348619,
+          "source": "derived",
+          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.12255750468180261,
+          "source": "derived",
+          "detail": "CAPM: 5.00% + 1.67x5.50% = 14.16% equity; debt 6.56% (5.19% after tax); weights 78.8%E / 21.2%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false
+        }
+      ],
+      "speculative_estimate_available": true
+    }
+  },
+  "edited": {
+    "AAPL|add:GOOGL,MSFT|remove:": {
+      "status_code": 422,
+      "body": {
+        "code": "not_suitable",
+        "method": "relative",
+        "company": {
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "sector": "Technology",
+          "exchange": "NasdaqGS"
+        },
+        "message": "No relative valuation is produced for Apple Inc.: a comparison with peers could not be made meaningfully, so no market-based figure is offered. The intrinsic valuation is unaffected and included here.",
+        "reasons": [
+          "Only 2 of these companies could be compared: MSFT (Microsoft Corporation), GOOGL (Alphabet Inc.). A comparison needs at least 3 companies, because the prices of one or two say little about how the market values a group, so no relative figure is produced. This is the automatic selection with your changes. Add more companies you consider comparable to reach at least 3."
+        ],
+        "peer_selection": {
+          "mode": "automatic, edited by you",
+          "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+          "peers": [
+            {
+              "ticker": "MSFT",
+              "name": "Microsoft Corporation",
+              "industry": "Software - Infrastructure",
+              "provenance": "added by you",
+              "detail": "added to the automatic selection"
+            },
+            {
+              "ticker": "GOOGL",
+              "name": "Alphabet Inc.",
+              "industry": "Internet Content & Information",
+              "provenance": "added by you",
+              "detail": "added to the automatic selection"
+            }
+          ],
+          "excluded": [
+            {
+              "ticker": "AMZN",
+              "name": "Amazon.com, Inc.",
+              "reason": "often looked at alongside AAPL, but it is in Internet Retail, not Consumer Electronics"
+            },
+            {
+              "ticker": "TSLA",
+              "name": "Tesla, Inc.",
+              "reason": "often looked at alongside AAPL, but it is in Auto Manufacturers, not Consumer Electronics"
+            },
+            {
+              "ticker": "GOOG",
+              "name": "Alphabet Inc.",
+              "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+            },
+            {
+              "ticker": "META",
+              "name": "Meta Platforms, Inc.",
+              "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+            },
+            {
+              "ticker": "MSFT",
+              "name": "Microsoft Corporation",
+              "reason": "often looked at alongside AAPL, but it is in Software - Infrastructure, not Consumer Electronics"
+            }
+          ]
+        },
+        "intrinsic_valuation": {
+          "method": "dcf",
+          "intrinsic_value_per_share": 91.73998884980165,
+          "current_price": 330.715,
+          "upside_downside": -0.7226010648147146,
+          "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "full_valuation": "/valuation/AAPL"
+        },
+        "company_figures": null,
+        "multiples": []
+      }
+    },
+    "AAPL|add:GOOGL,META,MSFT|remove:": {
+      "status_code": 200,
+      "body": {
+        "company": {
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "sector": "Technology",
+          "exchange": "NasdaqGS"
+        },
+        "intrinsic_valuation": {
+          "method": "dcf",
+          "intrinsic_value_per_share": 91.73998884980165,
+          "current_price": 330.715,
+          "upside_downside": -0.7226010648147146,
+          "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "full_valuation": "/valuation/AAPL"
+        },
+        "relative_valuation": {
+          "method": "relative",
+          "basis": "market",
+          "is_intrinsic_valuation": false,
+          "framing": "How the market prices similar companies right now",
+          "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E, EV/EBITDA and Price/Sales multiples of 3 peers (Microsoft Corporation, Alphabet Inc., Meta Platforms, Inc.) to Apple Inc.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
+          "peer_selection": {
+            "mode": "automatic, edited by you",
+            "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+            "peers": [
+              {
+                "ticker": "MSFT",
+                "name": "Microsoft Corporation",
+                "industry": "Software - Infrastructure",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              },
+              {
+                "ticker": "GOOGL",
+                "name": "Alphabet Inc.",
+                "industry": "Internet Content & Information",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              },
+              {
+                "ticker": "META",
+                "name": "Meta Platforms, Inc.",
+                "industry": "Internet Content & Information",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              }
+            ],
+            "excluded": [
+              {
+                "ticker": "AMZN",
+                "name": "Amazon.com, Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Internet Retail, not Consumer Electronics"
+              },
+              {
+                "ticker": "TSLA",
+                "name": "Tesla, Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Auto Manufacturers, not Consumer Electronics"
+              },
+              {
+                "ticker": "GOOG",
+                "name": "Alphabet Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+              },
+              {
+                "ticker": "META",
+                "name": "Meta Platforms, Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+              },
+              {
+                "ticker": "MSFT",
+                "name": "Microsoft Corporation",
+                "reason": "often looked at alongside AAPL, but it is in Software - Infrastructure, not Consumer Electronics"
+              }
+            ]
+          },
+          "company_figures": {
+            "as_of": "2026-06-30",
+            "trading_currency": "USD",
+            "reporting_currency": "USD",
+            "price": 330.65,
+            "market_cap": 4856374261400.0,
+            "enterprise_value": 4878319261400.0,
+            "revenue": 466823000000.0,
+            "ebitda": 167959000000.0,
+            "net_income": 128930000000.0,
+            "total_debt": 84344000000.0,
+            "cash": 62399000000.0,
+            "shares": 14687356000.0,
+            "common_equity": 107520000000.0
+          },
+          "multiples": [
+            {
+              "name": "pe",
+              "label": "P/E",
+              "applicable": true,
+              "company_value": 37.66675142635539,
+              "company_reason": null,
+              "peer_median": 25.095521722197127,
+              "peer_count": 3,
+              "premium_to_median": 0.5009351805202336,
+              "implied_value_per_share": 220.29598898827504,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "MSFT",
+                  "value": 27.88130383563325,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "GOOGL",
+                  "value": 17.342761891214636,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "META",
+                  "value": 25.095521722197127,
+                  "excluded_reason": null
+                }
+              ]
+            },
+            {
+              "name": "ev_ebitda",
+              "label": "EV/EBITDA",
+              "applicable": true,
+              "company_value": 29.044702941789364,
+              "company_reason": null,
+              "peer_median": 15.416654835487254,
+              "peer_count": 3,
+              "premium_to_median": 0.883982177179709,
+              "implied_value_per_share": 174.80484094711147,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "MSFT",
+                  "value": 17.874370571909616,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "GOOGL",
+                  "value": 12.55969154579666,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "META",
+                  "value": 15.416654835487254,
+                  "excluded_reason": null
+                }
+              ]
+            },
+            {
+              "name": "ps",
+              "label": "Price/Sales",
+              "applicable": true,
+              "company_value": 10.40303125895682,
+              "company_reason": null,
+              "peer_median": 9.495448610392865,
+              "peer_count": 3,
+              "premium_to_median": 0.09558080779570521,
+              "implied_value_per_share": 301.8033883463728,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "MSFT",
+                  "value": 11.237667985716302,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "GOOGL",
+                  "value": 9.495448610392865,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "META",
+                  "value": 7.487304710415383,
+                  "excluded_reason": null
+                }
+              ]
+            }
+          ],
+          "relative_value_per_share": {
+            "central": 220.29598898827504,
+            "low": 174.80484094711147,
+            "high": 301.8033883463728,
+            "multiples_applied": [
+              "P/E",
+              "EV/EBITDA",
+              "Price/Sales"
+            ]
+          },
+          "current_price": 330.65,
+          "relative_value_vs_price": -0.33374871015189755,
+          "comparison_with_intrinsic": {
+            "intrinsic_method": "dcf",
+            "intrinsic_value_per_share": 91.73998884980165,
+            "relative_value_per_share": 220.29598898827504,
+            "gap": 1.401308216299738,
+            "statement": "The relative figure of $220.30 is 140% above the DCF intrinsic value of $91.74. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+          },
+          "warnings": [
+            "MSFT (Microsoft Corporation) is in Software - Infrastructure, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "GOOGL (Alphabet Inc.) is in Internet Content & Information, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "META (Meta Platforms, Inc.) is in Internet Content & Information, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "With only 3 peers, a single company's share price can move the result a lot."
+          ]
+        }
+      }
+    },
+    "AAPL|add:AMZN,GOOGL,META,MSFT|remove:": {
+      "status_code": 200,
+      "body": {
+        "company": {
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "sector": "Technology",
+          "exchange": "NasdaqGS"
+        },
+        "intrinsic_valuation": {
+          "method": "dcf",
+          "intrinsic_value_per_share": 91.73998884980165,
+          "current_price": 330.715,
+          "upside_downside": -0.7226010648147146,
+          "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "full_valuation": "/valuation/AAPL"
+        },
+        "relative_valuation": {
+          "method": "relative",
+          "basis": "market",
+          "is_intrinsic_valuation": false,
+          "framing": "How the market prices similar companies right now",
+          "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E, EV/EBITDA and Price/Sales multiples of 4 peers (Microsoft Corporation, Alphabet Inc., Meta Platforms, Inc., Amazon.com, Inc.) to Apple Inc.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
+          "peer_selection": {
+            "mode": "automatic, edited by you",
+            "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+            "peers": [
+              {
+                "ticker": "MSFT",
+                "name": "Microsoft Corporation",
+                "industry": "Software - Infrastructure",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              },
+              {
+                "ticker": "GOOGL",
+                "name": "Alphabet Inc.",
+                "industry": "Internet Content & Information",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              },
+              {
+                "ticker": "META",
+                "name": "Meta Platforms, Inc.",
+                "industry": "Internet Content & Information",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              },
+              {
+                "ticker": "AMZN",
+                "name": "Amazon.com, Inc.",
+                "industry": "Internet Retail",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              }
+            ],
+            "excluded": [
+              {
+                "ticker": "AMZN",
+                "name": "Amazon.com, Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Internet Retail, not Consumer Electronics"
+              },
+              {
+                "ticker": "TSLA",
+                "name": "Tesla, Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Auto Manufacturers, not Consumer Electronics"
+              },
+              {
+                "ticker": "GOOG",
+                "name": "Alphabet Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+              },
+              {
+                "ticker": "META",
+                "name": "Meta Platforms, Inc.",
+                "reason": "often looked at alongside AAPL, but it is in Internet Content & Information, not Consumer Electronics"
+              },
+              {
+                "ticker": "MSFT",
+                "name": "Microsoft Corporation",
+                "reason": "often looked at alongside AAPL, but it is in Software - Infrastructure, not Consumer Electronics"
+              }
+            ]
+          },
+          "company_figures": {
+            "as_of": "2026-06-30",
+            "trading_currency": "USD",
+            "reporting_currency": "USD",
+            "price": 330.65,
+            "market_cap": 4856374261400.0,
+            "enterprise_value": 4878319261400.0,
+            "revenue": 466823000000.0,
+            "ebitda": 167959000000.0,
+            "net_income": 128930000000.0,
+            "total_debt": 84344000000.0,
+            "cash": 62399000000.0,
+            "shares": 14687356000.0,
+            "common_equity": 107520000000.0
+          },
+          "multiples": [
+            {
+              "name": "pe",
+              "label": "P/E",
+              "applicable": true,
+              "company_value": 37.66675142635539,
+              "company_reason": null,
+              "peer_median": 22.605948698773293,
+              "peer_count": 4,
+              "premium_to_median": 0.66623183695004,
+              "implied_value_per_share": 198.4417730279596,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "MSFT",
+                  "value": 27.88130383563325,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "GOOGL",
+                  "value": 17.342761891214636,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "META",
+                  "value": 25.095521722197127,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "AMZN",
+                  "value": 20.11637567534946,
+                  "excluded_reason": null
+                }
+              ]
+            },
+            {
+              "name": "ev_ebitda",
+              "label": "EV/EBITDA",
+              "applicable": true,
+              "company_value": 29.044702941789364,
+              "company_reason": null,
+              "peer_median": 13.988173190641957,
+              "peer_count": 4,
+              "premium_to_median": 1.0763757029559926,
+              "implied_value_per_share": 158.46926982140505,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "MSFT",
+                  "value": 17.874370571909616,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "GOOGL",
+                  "value": 12.55969154579666,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "META",
+                  "value": 15.416654835487254,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "AMZN",
+                  "value": 10.977147044008198,
+                  "excluded_reason": null
+                }
+              ]
+            },
+            {
+              "name": "ps",
+              "label": "Price/Sales",
+              "applicable": true,
+              "company_value": 10.40303125895682,
+              "company_reason": null,
+              "peer_median": 8.491376660404125,
+              "peer_count": 4,
+              "premium_to_median": 0.22512893668548162,
+              "implied_value_per_share": 269.8899602310882,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "MSFT",
+                  "value": 11.237667985716302,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "GOOGL",
+                  "value": 9.495448610392865,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "META",
+                  "value": 7.487304710415383,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "AMZN",
+                  "value": 3.5083583665131886,
+                  "excluded_reason": null
+                }
+              ]
+            }
+          ],
+          "relative_value_per_share": {
+            "central": 198.4417730279596,
+            "low": 158.46926982140505,
+            "high": 269.8899602310882,
+            "multiples_applied": [
+              "P/E",
+              "EV/EBITDA",
+              "Price/Sales"
+            ]
+          },
+          "current_price": 330.65,
+          "relative_value_vs_price": -0.3998434204507496,
+          "comparison_with_intrinsic": {
+            "intrinsic_method": "dcf",
+            "intrinsic_value_per_share": 91.73998884980165,
+            "relative_value_per_share": 198.4417730279596,
+            "gap": 1.1630891339310279,
+            "statement": "The relative figure of $198.44 is 116% above the DCF intrinsic value of $91.74. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+          },
+          "warnings": [
+            "MSFT (Microsoft Corporation) is in Software - Infrastructure, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "GOOGL (Alphabet Inc.) is in Internet Content & Information, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "META (Meta Platforms, Inc.) is in Internet Content & Information, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "AMZN (Amazon.com, Inc.) is in Internet Retail, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "With only 4 peers, a single company's share price can move the result a lot."
+          ]
+        }
+      }
+    },
+    "JPM|add:|remove:WFC": {
+      "status_code": 422,
+      "body": {
+        "code": "not_suitable",
+        "method": "relative",
+        "company": {
+          "ticker": "JPM",
+          "company_name": "JPMorgan Chase & Co.",
+          "sector": "Financial Services",
+          "exchange": "NYSE"
+        },
+        "message": "No relative valuation is produced for JPMorgan Chase & Co.: a comparison with peers could not be made meaningfully, so no market-based figure is offered. The intrinsic valuation is unaffected and included here.",
+        "reasons": [
+          "Only 2 of these companies could be compared: C (Citigroup Inc.), BAC (Bank of America Corporation). A comparison needs at least 3 companies, because the prices of one or two say little about how the market values a group, so no relative figure is produced. This is the automatic selection with your changes. Add more companies you consider comparable to reach at least 3."
+        ],
+        "peer_selection": {
+          "mode": "automatic, edited by you",
+          "rule": "Companies that people on Yahoo Finance often look at alongside JPM and that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+          "peers": [
+            {
+              "ticker": "C",
+              "name": "Citigroup Inc.",
+              "industry": "Banks - Diversified",
+              "provenance": "selected",
+              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+            },
+            {
+              "ticker": "BAC",
+              "name": "Bank of America Corporation",
+              "industry": "Banks - Diversified",
+              "provenance": "selected",
+              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+            }
+          ],
+          "excluded": [
+            {
+              "ticker": "GS",
+              "name": "Goldman Sachs Group, Inc. (The)",
+              "reason": "often looked at alongside JPM, but it is in Capital Markets, not Banks - Diversified"
+            },
+            {
+              "ticker": "KO",
+              "name": "Coca-Cola Company (The)",
+              "reason": "often looked at alongside JPM, but it is in Beverages - Non-Alcoholic, not Banks - Diversified"
+            },
+            {
+              "ticker": "WFC",
+              "name": null,
+              "reason": "removed by you"
+            }
+          ]
+        },
+        "intrinsic_valuation": {
+          "method": "ddm",
+          "intrinsic_value_per_share": 98.20515864307912,
+          "current_price": 350.95,
+          "upside_downside": -0.7201733618946313,
+          "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "full_valuation": "/valuation/JPM"
+        },
+        "company_figures": null,
+        "multiples": []
+      }
+    },
+    "JPM|add:MS|remove:": {
+      "status_code": 200,
+      "body": {
+        "company": {
+          "ticker": "JPM",
+          "company_name": "JPMorgan Chase & Co.",
+          "sector": "Financial Services",
+          "exchange": "NYSE"
+        },
+        "intrinsic_valuation": {
+          "method": "ddm",
+          "intrinsic_value_per_share": 98.20515864307912,
+          "current_price": 350.95,
+          "upside_downside": -0.7201733618946313,
+          "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "full_valuation": "/valuation/JPM"
+        },
+        "relative_valuation": {
+          "method": "relative",
+          "basis": "market",
+          "is_intrinsic_valuation": false,
+          "framing": "How the market prices similar companies right now",
+          "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E and Price/Book multiples of 4 peers (Citigroup Inc., Bank of America Corporation, Wells Fargo & Company, Morgan Stanley) to JPMorgan Chase & Co.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
+          "peer_selection": {
+            "mode": "automatic, edited by you",
+            "rule": "Companies that people on Yahoo Finance often look at alongside JPM and that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+            "peers": [
+              {
+                "ticker": "C",
+                "name": "Citigroup Inc.",
+                "industry": "Banks - Diversified",
+                "provenance": "selected",
+                "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              },
+              {
+                "ticker": "BAC",
+                "name": "Bank of America Corporation",
+                "industry": "Banks - Diversified",
+                "provenance": "selected",
+                "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              },
+              {
+                "ticker": "WFC",
+                "name": "Wells Fargo & Company",
+                "industry": "Banks - Diversified",
+                "provenance": "selected",
+                "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              },
+              {
+                "ticker": "MS",
+                "name": "Morgan Stanley",
+                "industry": "Capital Markets",
+                "provenance": "added by you",
+                "detail": "added to the automatic selection"
+              }
+            ],
+            "excluded": [
+              {
+                "ticker": "GS",
+                "name": "Goldman Sachs Group, Inc. (The)",
+                "reason": "often looked at alongside JPM, but it is in Capital Markets, not Banks - Diversified"
+              },
+              {
+                "ticker": "KO",
+                "name": "Coca-Cola Company (The)",
+                "reason": "often looked at alongside JPM, but it is in Beverages - Non-Alcoholic, not Banks - Diversified"
+              }
+            ]
+          },
+          "company_figures": {
+            "as_of": "2026-06-30",
+            "trading_currency": "USD",
+            "reporting_currency": "USD",
+            "price": 350.95,
+            "market_cap": 932890445135.25,
+            "enterprise_value": 1156032445135.25,
+            "revenue": 194911000000.0,
+            "ebitda": null,
+            "net_income": 63634000000.0,
+            "total_debt": 532953000000.0,
+            "cash": 309811000000.0,
+            "shares": 2658186195.0,
+            "common_equity": 353558000000.0
+          },
+          "multiples": [
+            {
+              "name": "pe",
+              "label": "P/E",
+              "applicable": true,
+              "company_value": 14.660251518610334,
+              "company_reason": null,
+              "peer_median": 13.687747602918748,
+              "peer_count": 4,
+              "premium_to_median": 0.07104922912840772,
+              "implied_value_per_share": 327.6693455870316,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "C",
+                  "value": 14.122189116160298,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "BAC",
+                  "value": 13.2533060896772,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "WFC",
+                  "value": 12.832414252983206,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "MS",
+                  "value": 16.488911566190207,
+                  "excluded_reason": null
+                }
+              ]
+            },
+            {
+              "name": "pb",
+              "label": "Price/Book",
+              "applicable": true,
+              "company_value": 2.6385782393136346,
+              "company_reason": null,
+              "peer_median": 1.6135552890384344,
+              "peer_count": 4,
+              "premium_to_median": 0.6352574078115674,
+              "implied_value_per_share": 214.61452999602642,
+              "reason": null,
+              "peers": [
+                {
+                  "ticker": "C",
+                  "value": 1.207538338319435,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "BAC",
+                  "value": 1.5444530388682203,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "WFC",
+                  "value": 1.6826575392086482,
+                  "excluded_reason": null
+                },
+                {
+                  "ticker": "MS",
+                  "value": 3.024130029220766,
+                  "excluded_reason": null
+                }
+              ]
+            }
+          ],
+          "relative_value_per_share": {
+            "central": 271.141937791529,
+            "low": 214.61452999602642,
+            "high": 327.6693455870316,
+            "multiples_applied": [
+              "P/E",
+              "Price/Book"
+            ]
+          },
+          "current_price": 350.95,
+          "relative_value_vs_price": -0.22740579059259436,
+          "comparison_with_intrinsic": {
+            "intrinsic_method": "ddm",
+            "intrinsic_value_per_share": 98.20515864307912,
+            "relative_value_per_share": 271.141937791529,
+            "gap": 1.7609744899143074,
+            "statement": "The relative figure of $271.14 is 176% above the dividend discount model intrinsic value of $98.21. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+          },
+          "warnings": [
+            "MS (Morgan Stanley) is in Capital Markets, not Banks - Diversified. You chose it, so it is included, but its multiples may reflect a different kind of business.",
+            "With only 4 peers, a single company's share price can move the result a lot."
+          ]
+        }
+      }
+    }
+  }
+}
