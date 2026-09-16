@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    Replaced by the value of `flutter build`'s --base-href. It stays "/" for a
+    site served from its own domain root; a project served from a subfolder
+    (e.g. GitHub Pages) needs "/<folder>/" or none of the assets resolve.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description"
+        content="A discounted cash flow model built from a company's own filings - not from anyone's opinion of it.">
+
+  <!--
+    viewport-fit=cover lets the page paint under the iPhone's notch and home
+    indicator, which a home-screen app must do or it is letterboxed in black.
+    user-scalable=no keeps a double-tap from zooming the canvas; the app's own
+    text scales with the system font size setting.
+  -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- The browser UI's colour when the page is shown with browser chrome. -->
+  <meta name="theme-color" content="#3A5BD9">
+
+  <!--
+    Home-screen behaviour. iOS Safari ignores the web manifest's "display"
+    field, so apple-mobile-web-app-capable is what actually removes the
+    browser's address bar and toolbar after "Add to Home Screen".
+    black-translucent puts the page behind the status bar, matching the app's
+    own background rather than a black band.
+  -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Intrinsic">
+  <!-- iOS uses this one, and applies its own rounded mask to it. -->
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Intrinsic</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    /*
+      The ground behind the Flutter canvas, painted before the app boots and
+      visible for a moment on a cold load. It follows the system theme so the
+      first frame is not a white flash on a dark phone.
+    */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background-color: #F5F7FA;
+      overscroll-behavior: none;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body { background-color: #0B0E13; }
+    }
+    /* The brand mark, centred while the engine loads, then removed. */
+    #boot {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #boot img { width: 96px; height: 96px; }
+  </style>
+</head>
+<body>
+  <div id="boot"><img src="icons/Icon-192.png" alt="Intrinsic"></div>
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // The loader removes nothing itself; the placeholder goes when Flutter
+    // has painted its first frame.
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('boot');
+      if (boot) boot.remove();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+    "name": "Intrinsic",
+    "short_name": "Intrinsic",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#F5F7FA",
+    "theme_color": "#3A5BD9",
+    "description": "A discounted cash flow model built from a company's own filings.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

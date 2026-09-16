@@ -135,5 +135,51 @@ def main() -> None:
     print(f"\n{len(written)} files written")
 
 
+
+
+# ---------------------------------------------------------------------------
+# Web / PWA icons
+# ---------------------------------------------------------------------------
+#
+# The same mark, sized for the two ways a browser uses an icon:
+#
+#   * "any" icons are shown whole, so the mark fills the plate as it does on
+#     Android's legacy launcher icon;
+#   * "maskable" icons may be cropped to a circle by the launcher, so the mark
+#     is drawn smaller, inside the safe zone, on a full-bleed square plate;
+#   * iOS uses apple-touch-icon and applies its own rounded mask, so that one
+#     is a square plate with no corner radius of its own.
+
+WEB = pathlib.Path(__file__).resolve().parents[1] / "app" / "web"
+
+
+def main_web() -> None:
+    written = []
+
+    def save(image: Image.Image, path: pathlib.Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        image.save(path)
+        written.append(path)
+
+    for size in (192, 512):
+        save(compose(brand_background(size, 0.22), draw_mark(size, 0.62, INK)),
+             WEB / "icons" / f"Icon-{size}.png")
+        save(compose(brand_background(size, None), draw_mark(size, 0.40, INK)),
+             WEB / "icons" / f"Icon-maskable-{size}.png")
+
+    # iOS home-screen icon. Rounding is applied by iOS itself; a plate that is
+    # already rounded would show the page's background in the corners.
+    save(compose(brand_background(180, None), draw_mark(180, 0.62, INK)),
+         WEB / "icons" / "apple-touch-icon-180.png")
+    save(compose(brand_background(32, 0.22), draw_mark(32, 0.66, INK)),
+         WEB / "favicon.png")
+
+    for path in written:
+        print(f"  {path.relative_to(WEB.parents[1])}  ({path.stat().st_size:,} bytes)")
+    print(f"\n{len(written)} files written")
+
+
 if __name__ == "__main__":
-    main()
+    # Android icons by default; `--web` writes the PWA and iOS icons instead.
+    import sys
+    main_web() if "--web" in sys.argv else main()

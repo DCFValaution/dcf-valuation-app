@@ -1,4 +1,7 @@
-# Render Blueprint for the DCF valuation API.
+# Render Blueprint for the DCF valuation API and the web (PWA) build.
+#
+# Two services from one repository: the FastAPI backend, and a static site
+# holding the Flutter web app. Both redeploy when main is pushed.
 #
 # With this file in the repository root, Render can configure the whole
 # service from "New > Blueprint" - no build or start command typed by hand,
@@ -39,3 +42,53 @@ services:
       # Keeps pip from spending build minutes checking for its own upgrade.
       - key: PIP_DISABLE_PIP_VERSION_CHECK
         value: "1"
+
+      # Which browser origins may read this API's responses.
+      #
+      # PRODUCTION IS EXACTLY THIS ONE ORIGIN: the static site below. A
+      # browser refuses to hand a response to a page from anywhere else, so a
+      # random site cannot spend this instance's rate-limit budget through a
+      # visitor's browser.
+      #
+      # This variable REPLACES the localhost and LAN defaults compiled into
+      # api.py. Those defaults still serve local development, where the
+      # variable is simply unset; nothing in production depends on them.
+      #
+      # Serving the web app from a custom domain later means adding that
+      # origin here (comma separated), not replacing the scheme or adding a
+      # path - an origin is scheme + host + port and nothing else.
+      - key: ALLOWED_ORIGINS
+        value: https://intrinsic-web.onrender.com
+
+  # -------------------------------------------------------------------------
+  # The web (PWA) build: static files only, no server of its own.
+  # -------------------------------------------------------------------------
+  - type: web
+    name: intrinsic-web
+    runtime: static
+    plan: free
+    region: oregon
+
+    # Flutter is not in Render's build image; the script fetches a pinned SDK
+    # and builds app/build/web from the same source the Android app is built
+    # from.
+    buildCommand: ./tools/render_build_web.sh
+    staticPublishPath: app/build/web
+
+    routes:
+      # A single-page app: every path must return index.html, or a reload on
+      # any route the app pushes would 404. Render tries real files first, so
+      # main.dart.js and the icons are unaffected.
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    headers:
+      # The service worker must never be served from cache, or a browser can
+      # pin an old build indefinitely and users stop receiving updates.
+      - path: /flutter_service_worker.js
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate

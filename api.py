@@ -68,6 +68,7 @@ from typing import Annotated, Any, Literal, Union
 
 from fastapi import FastAPI, HTTPException, Path, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -124,6 +125,68 @@ app = FastAPI(
     ),
 )
 
+
+# ---------------------------------------------------------------------------
+# Cross-origin access
+#
+# The Android app is not a browser and is unaffected by any of this. The web
+# (PWA) build is: a browser refuses a response from a different origin unless
+# the server says that origin may read it.
+#
+# WHAT IS ALLOWED, AND WHY IT IS A LIST AND NOT "*":
+#
+#   * the origins the web build is served from - for now the local addresses
+#     used while developing and testing on a phone over the LAN;
+#   * nothing else. "*" would let any page on the internet call this API with
+#     the caller's own rate-limit budget, and would have to be abandoned the
+#     moment anything here needed a credential.
+#
+# TO BE TIGHTENED AT DEPLOY TIME: when the web build has a real home, set
+# ALLOWED_ORIGINS in the Render environment to exactly that origin (comma
+# separated for more than one) and the localhost entries stop being used in
+# production. The environment variable replaces this default entirely.
+# ---------------------------------------------------------------------------
+
+DEFAULT_ALLOWED_ORIGINS = (
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+)
+
+ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get(
+        "ALLOWED_ORIGINS", ",".join(DEFAULT_ALLOWED_ORIGINS)).split(",")
+    if origin.strip()
+]
+
+# A phone on the same wifi loads the web build from the host's LAN address,
+# which changes from network to network. This matches those private addresses
+# rather than hard-coding one, and only for plain http on a development port.
+LAN_ORIGIN_PATTERN = (
+    r"^http://("
+    r"localhost|127\.0\.0\.1|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r")(:\d+)?$"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=LAN_ORIGIN_PATTERN,
+    # Nothing here reads a cookie or an Authorization header, so the browser
+    # is never asked to send credentials cross-origin.
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+    # The Excel export arrives as a download; the browser can only read the
+    # filename the API chose if that header is exposed to it.
+    expose_headers=["Content-Disposition"],
+    max_age=600,
+)
 
 # ---------------------------------------------------------------------------
 # Rate limiting
@@ -220,6 +283,12 @@ def _rate_limited(key: str, now: float, limit: int = RATE_LIMIT_REQUESTS) -> boo
 @app.middleware("http")
 async def _rate_limit_middleware(request: Request, call_next):
     if request.url.path in _RATE_LIMIT_EXEMPT:
+        return await call_next(request)
+
+    # A CORS preflight is the browser asking permission, not a valuation. It
+    # costs nothing upstream, and a 429 on one fails in the browser as an
+    # opaque CORS error rather than the message above.
+    if request.method == "OPTIONS":
         return await call_next(request)
 
     client = _client_key(request)
