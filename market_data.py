@@ -371,6 +371,22 @@ def _income_row(frame, column: int) -> dict:
         # For the speculative estimate: a company that loses money on what it
         # sells, before any operating cost, has no path to operating profit.
         "grossProfit": _frame_value(frame, ("Gross Profit",), column),
+        # For telling a fee-earning financial from a lender. Interest income
+        # is the lender's revenue, not its cost, and a company whose expense
+        # line is missing can still be given away by what it earns: probing
+        # found fee businesses at or below 2.9% of revenue and lenders at or
+        # above 35%.
+        "interestIncome": _frame_value(
+            frame, ("Interest Income", "Total Interest Income",
+                    "Interest Income Non Operating"), column),
+        # Underwriting, which no fee business does. Present for insurers even
+        # where the industry label says otherwise - an asset manager that
+        # earns premiums has an insurer inside it.
+        "premiumsEarned": _frame_value(
+            frame, ("Net Premiums Earned", "Total Premiums Earned"), column),
+        "policyholderBenefits": _frame_value(
+            frame, ("Policyholder Benefits Gross", "Policyholder Benefits Ceded",
+                    "Total Policyholder Benefits"), column),
     }
 
 
@@ -411,6 +427,16 @@ def _balance_row(frame, column: int) -> dict:
         # return on equity is measured against.
         "commonStockEquity": _frame_value(
             frame, ("Common Stock Equity", "Stockholders Equity"), column),
+        # The lender's stock in trade. Absent entirely for fee businesses, and
+        # the clearest line between the two: probing put fee businesses at or
+        # below 0.26x revenue and every lender at or above 2.4x.
+        "loans": _frame_value(
+            frame, ("Net Loan", "Gross Loan", "Loans Receivable",
+                    "Loans And Advances"), column),
+        # Scale of the balance sheet the business runs, for the one case where
+        # nothing else distinguishes an asset manager from an insurer wearing
+        # its label.
+        "totalAssets": _frame_value(frame, ("Total Assets",), column),
     }
 
 
@@ -748,13 +774,13 @@ def _call(description: str, ticker: str, fn: Callable[[], Any]) -> Any:
     assert last is not None
     if _is_rate_limit(last):
         raise RateLimitedError(
-            "Yahoo Finance is rate-limiting requests right now. "
+            "The market data provider is rate-limiting requests right now. "
             "Wait a moment and try again."
         ) from last
     logging.getLogger(__name__).warning("%s: %s failed after retries: %r",
                                         ticker, description, last)
     raise DataUnavailableError(
-        f"Yahoo Finance did not return {description} for '{ticker}' just now. "
+        f"The market data provider did not return {description} for '{ticker}' just now. "
         "This is usually temporary - try again shortly."
     ) from last
 
@@ -1091,7 +1117,7 @@ def _monthly_closes(symbol: str) -> list[tuple[int, float]]:
         logging.getLogger(__name__).warning("%s: chart request returned HTTP %s",
                                             symbol, response.status_code)
         raise DataUnavailableError(
-            f"Yahoo Finance did not return price history for {symbol} just now.")
+            f"The market data provider did not return price history for {symbol} just now.")
 
     result = response.json()["chart"]["result"][0]
     stamps = result.get("timestamp") or []
@@ -1167,7 +1193,7 @@ def fetch_beta(ticker: str) -> tuple[float, str] | None:
         return None
 
     result = (beta, f"computed from {n} monthly returns vs {MARKET_INDEX} "
-                    f"(5y), matching Yahoo's convention")
+                    f"(5y), the convention market data providers use")
     _beta_cache.put(ticker, result)
     return result
 
@@ -1204,19 +1230,19 @@ def fetch_dividends(ticker: str) -> list[tuple[int, float]]:
     except Exception as e:
         logging.getLogger(__name__).warning("%s: dividend history request failed: %r", ticker, e)
         raise DataUnavailableError(
-            f"Could not reach Yahoo Finance for {ticker}'s dividend history just now. "
+            f"Could not reach the market data provider for {ticker}'s dividend history just now. "
             "Try again shortly."
         ) from e
 
     if response.status_code == 429:
         raise RateLimitedError(
-            "Yahoo Finance is rate-limiting requests right now. "
+            "The market data provider is rate-limiting requests right now. "
             "Wait a moment and try again.")
     if response.status_code != 200:
         logging.getLogger(__name__).warning("%s: dividend history returned HTTP %s",
                                             ticker, response.status_code)
         raise DataUnavailableError(
-            f"Yahoo Finance did not return {ticker}'s dividend history just now. "
+            f"The market data provider did not return {ticker}'s dividend history just now. "
             "Try again shortly.")
 
     try:
@@ -1224,7 +1250,7 @@ def fetch_dividends(ticker: str) -> list[tuple[int, float]]:
         events = ((result.get("events") or {}).get("dividends") or {}).values()
     except Exception as e:
         raise DataUnavailableError(
-            f"Yahoo Finance returned an unreadable dividend history for {ticker}."
+            f"The market data provider returned an unreadable dividend history for {ticker}."
         ) from e
 
     dividends = sorted(
@@ -1313,26 +1339,26 @@ def _get_json(url: str, params: dict, what: str, ticker: str) -> dict:
     except Exception as e:
         logging.getLogger(__name__).warning("%s: %s request failed: %r", ticker, what, e)
         raise DataUnavailableError(
-            f"Could not reach Yahoo Finance for {ticker}'s {what} just now. "
+            f"Could not reach the market data provider for {ticker}'s {what} just now. "
             "Try again shortly.") from e
     if response.status_code == 429:
         raise RateLimitedError(
-            "Yahoo Finance is rate-limiting requests right now. Wait a moment and try again.")
+            "The market data provider is rate-limiting requests right now. Wait a moment and try again.")
     if response.status_code == 404:
-        raise TickerNotFoundError(f"No security found for '{ticker}' on Yahoo Finance.")
+        raise TickerNotFoundError(f"No security found for '{ticker}' with the market data provider.")
     if response.status_code != 200:
         logging.getLogger(__name__).warning("%s: %s returned HTTP %s",
                                             ticker, what, response.status_code)
         raise DataUnavailableError(
-            f"Yahoo Finance did not return {ticker}'s {what} just now. Try again shortly.")
+            f"The market data provider did not return {ticker}'s {what} just now. Try again shortly.")
     try:
         return response.json()
     except Exception as e:
-        raise DataUnavailableError(f"Yahoo Finance returned an unreadable {what} for {ticker}.") from e
+        raise DataUnavailableError(f"The market data provider returned an unreadable {what} for {ticker}.") from e
 
 
 def fetch_also_watched(ticker: str) -> list[str]:
-    """Symbols Yahoo Finance users also watch alongside *ticker*: candidates, not peers."""
+    """Symbols Yahoo Finance commonly watched alongside *ticker*: candidates, not peers."""
     ticker = _validate_ticker(ticker)
     key = ("also_watched", ticker)
     cached = _peer_cache.get(key)
@@ -1415,7 +1441,7 @@ def fetch_market_figures(ticker: str) -> MarketFigures:
     try:
         meta = chart["chart"]["result"][0]["meta"]
     except (KeyError, IndexError, TypeError) as e:
-        raise DataUnavailableError(f"Yahoo Finance returned no price for {ticker}.") from e
+        raise DataUnavailableError(f"The market data provider returned no price for {ticker}.") from e
 
     price = meta.get("regularMarketPrice") or meta.get("previousClose")
     trailing_dates = [row.get("asOfDate") for series, row in latest.items()
@@ -1461,7 +1487,7 @@ def _empty_quote_error(ticker: str) -> MarketDataError:
         logging.getLogger(__name__).warning("%s: empty profile, probe found it (%s)",
                                             ticker, detail)
         return DataUnavailableError(
-            f"Yahoo Finance recognises '{ticker}' but returned no data for it "
+            f"The market data provider recognises '{ticker}' but returned no data for it "
             "just now.\n"
             "  This is a temporary problem on the data provider's side, not an "
             "unknown ticker. Try again shortly."
@@ -1472,7 +1498,7 @@ def _empty_quote_error(ticker: str) -> MarketDataError:
         logging.getLogger(__name__).warning("%s: data provider blocked us (%s)",
                                             ticker, detail)
         return RateLimitedError(
-            "Yahoo Finance is limiting requests right now.\n"
+            "The market data provider is limiting requests right now.\n"
             "  This is temporary, not a problem with the ticker. Try again "
             "shortly."
         )
@@ -1482,13 +1508,13 @@ def _empty_quote_error(ticker: str) -> MarketDataError:
         logging.getLogger(__name__).warning("%s: data provider unreachable (%s)",
                                             ticker, detail)
         return DataUnavailableError(
-            f"Could not reach Yahoo Finance to look up '{ticker}' just now.\n"
+            f"Could not reach the market data provider to look up '{ticker}' just now.\n"
             "  Try again shortly."
         )
 
     # "absent": Yahoo answered normally and positively had no such symbol.
     return TickerNotFoundError(
-        f"No security found for '{ticker}' on Yahoo Finance.\n"
+        f"No security found for '{ticker}' with the market data provider.\n"
         "  Check the spelling. Delisted companies and some foreign "
         "listings are not covered."
     )
@@ -1547,7 +1573,7 @@ def _with_computed_beta(profile: dict, ticker: str) -> None:
     quoted = profile.get("beta")
     if isinstance(quoted, (int, float)) and quoted == quoted and quoted != 0:
         profile["betaSource"] = (
-            "quoted by Yahoo; price history was unavailable to compute one")
+            "quoted by the market data provider; price history was unavailable to compute one")
         return
 
     profile["beta"] = None
@@ -1627,7 +1653,7 @@ def fetch_financials(ticker: str,
             # Statements came back, but no period carried revenue - so there
             # is nothing to project, and saying "no statements" would be wrong.
             raise DataUnavailableError(
-                f"Yahoo Finance returned an income statement for '{ticker}' "
+                f"The market data provider returned an income statement for '{ticker}' "
                 "with no revenue in any period, so there is nothing to "
                 "project from."
             )
@@ -1651,7 +1677,7 @@ def fetch_financials(ticker: str,
             # heavier endpoints than a genuine absence of filings, so report
             # it as transient rather than as an unknown ticker.
             raise DataUnavailableError(
-                f"Yahoo Finance returned no financial statements for '{ticker}' "
+                f"The market data provider returned no financial statements for '{ticker}' "
                 "just now.\n"
                 "  The ticker is valid and trading, so this is most likely a "
                 "temporary limit on the data provider's side. Try again shortly - "
@@ -1685,7 +1711,7 @@ def fetch_financials(ticker: str,
     # which is exactly what happened here.
     if not profile.get("sector"):
         raise DataUnavailableError(
-            f"Yahoo Finance did not report a sector for '{ticker}' just now, so "
+            f"The market data provider did not report a sector for '{ticker}' just now, so "
             "it cannot be told whether a discounted cash flow applies to it.\n"
             "  Banks and insurers need a different model, and valuing one as an "
             "ordinary company produces a confident but meaningless figure. This "
@@ -1709,7 +1735,7 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
     revenue = income.get("revenue")
     if revenue is None:
         raise DataUnavailableError(
-            f"Yahoo Finance did not report revenue for '{ticker}', which the "
+            f"The market data provider did not report revenue for '{ticker}', which the "
             "model requires."
         )
     revenue_mm = float(revenue) / 1e6
@@ -1717,7 +1743,7 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
     price = fin.profile.get("price")
     if price is None:
         raise DataUnavailableError(
-            f"Yahoo Finance did not return a current price for '{ticker}'."
+            f"The market data provider did not return a current price for '{ticker}'."
         )
     current_price = float(price)
 
@@ -1757,7 +1783,7 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
         "cash_source": "balance sheet: Cash And Cash Equivalents + "
                        "Other Short Term Investments + Investments And Advances",
         "shares_source": shares_source,
-        "price_source": "Yahoo Finance quote (live)",
+        "price_source": "market data provider quote (live)",
     }
     return base, meta
 

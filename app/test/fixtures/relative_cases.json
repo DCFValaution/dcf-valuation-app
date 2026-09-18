@@ -10,10 +10,10 @@
       },
       "intrinsic_valuation": {
         "method": "ddm",
-        "intrinsic_value_per_share": 98.20515864307912,
-        "current_price": 350.95,
-        "upside_downside": -0.7201733618946313,
-        "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+        "intrinsic_value_per_share": 98.2701076412906,
+        "current_price": 348.92,
+        "upside_downside": -0.7183592008446332,
+        "note": "$98.27 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
         "full_valuation": "/valuation/JPM"
       },
       "relative_valuation": {
@@ -24,28 +24,28 @@
         "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E and Price/Book multiples of 3 peers (Citigroup Inc., Bank of America Corporation, Wells Fargo & Company) to JPMorgan Chase & Co.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
         "peer_selection": {
           "mode": "automatic",
-          "rule": "Companies that people on Yahoo Finance often look at alongside JPM and that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+          "rule": "Companies commonly watched alongside JPM that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
           "peers": [
             {
               "ticker": "C",
               "name": "Citigroup Inc.",
               "industry": "Banks - Diversified",
               "provenance": "selected",
-              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
             },
             {
               "ticker": "BAC",
               "name": "Bank of America Corporation",
               "industry": "Banks - Diversified",
               "provenance": "selected",
-              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
             },
             {
               "ticker": "WFC",
               "name": "Wells Fargo & Company",
               "industry": "Banks - Diversified",
               "provenance": "selected",
-              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
             }
           ],
           "excluded": [
@@ -65,9 +65,9 @@
           "as_of": "2026-06-30",
           "trading_currency": "USD",
           "reporting_currency": "USD",
-          "price": 350.95,
-          "market_cap": 932890445135.25,
-          "enterprise_value": 1156032445135.25,
+          "price": 348.92,
+          "market_cap": 927494327159.4,
+          "enterprise_value": 1150636327159.4,
           "revenue": 194911000000.0,
           "ebitda": null,
           "net_income": 63634000000.0,
@@ -81,27 +81,27 @@
             "name": "pe",
             "label": "P/E",
             "applicable": true,
-            "company_value": 14.660251518610334,
+            "company_value": 14.575452229301947,
             "company_reason": null,
-            "peer_median": 13.2533060896772,
+            "peer_median": 12.850480157285602,
             "peer_count": 3,
-            "premium_to_median": 0.10615807251512765,
-            "implied_value_per_share": 317.2693023900528,
+            "premium_to_median": 0.13423405591878756,
+            "implied_value_per_share": 307.6261007851303,
             "reason": null,
             "peers": [
               {
                 "ticker": "C",
-                "value": 14.122189116160298,
+                "value": 13.55138970042231,
                 "excluded_reason": null
               },
               {
                 "ticker": "BAC",
-                "value": 13.2533060896772,
+                "value": 12.850480157285602,
                 "excluded_reason": null
               },
               {
                 "ticker": "WFC",
-                "value": 12.832414252983206,
+                "value": 12.196727272671755,
                 "excluded_reason": null
               }
             ]
@@ -110,49 +110,49 @@
             "name": "pb",
             "label": "Price/Book",
             "applicable": true,
-            "company_value": 2.6385782393136346,
+            "company_value": 2.6233159118430356,
             "company_reason": null,
-            "peer_median": 1.5444530388682203,
+            "peer_median": 1.4975103567021677,
             "peer_count": 3,
-            "premium_to_median": 0.7084224465945512,
-            "implied_value_per_share": 205.42343066233937,
+            "premium_to_median": 0.7517848207875693,
+            "implied_value_per_share": 199.17971423175834,
             "reason": null,
             "peers": [
               {
                 "ticker": "C",
-                "value": 1.207538338319435,
+                "value": 1.158731303353077,
                 "excluded_reason": null
               },
               {
                 "ticker": "BAC",
-                "value": 1.5444530388682203,
+                "value": 1.4975103567021677,
                 "excluded_reason": null
               },
               {
                 "ticker": "WFC",
-                "value": 1.6826575392086482,
+                "value": 1.599302726239672,
                 "excluded_reason": null
               }
             ]
           }
         ],
         "relative_value_per_share": {
-          "central": 261.3463665261961,
-          "low": 205.42343066233937,
-          "high": 317.2693023900528,
+          "central": 253.40290750844431,
+          "low": 199.17971423175834,
+          "high": 307.6261007851303,
           "multiples_applied": [
             "P/E",
             "Price/Book"
           ]
         },
-        "current_price": 350.95,
-        "relative_value_vs_price": -0.25531737704460433,
+        "current_price": 348.92,
+        "relative_value_vs_price": -0.27375069497751836,
         "comparison_with_intrinsic": {
           "intrinsic_method": "ddm",
-          "intrinsic_value_per_share": 98.20515864307912,
-          "relative_value_per_share": 261.3463665261961,
-          "gap": 1.6612284948904175,
-          "statement": "The relative figure of $261.35 is 166% above the dividend discount model intrinsic value of $98.21. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+          "intrinsic_value_per_share": 98.2701076412906,
+          "relative_value_per_share": 253.40290750844431,
+          "gap": 1.5786367145686415,
+          "statement": "The relative figure of $253.40 is 158% above the dividend discount model intrinsic value of $98.27. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
         },
         "warnings": [
           "With only 3 peers, a single company's share price can move the result a lot."
@@ -177,7 +177,7 @@
       ],
       "peer_selection": {
         "mode": "automatic",
-        "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+        "rule": "Companies commonly watched alongside AAPL that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
         "peers": [],
         "excluded": [
           {
@@ -209,10 +209,10 @@
       },
       "intrinsic_valuation": {
         "method": "dcf",
-        "intrinsic_value_per_share": 91.73998884980165,
-        "current_price": 330.715,
-        "upside_downside": -0.7226010648147146,
-        "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+        "intrinsic_value_per_share": 91.98350188387948,
+        "current_price": 332.41,
+        "upside_downside": -0.7232829882257469,
+        "note": "$91.98 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.76%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
         "full_valuation": "/valuation/AAPL"
       },
       "company_figures": null,
@@ -236,28 +236,28 @@
       ],
       "peer_selection": {
         "mode": "automatic",
-        "rule": "Companies that people on Yahoo Finance often look at alongside CRM and that are in the same industry (Software - Application), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+        "rule": "Companies commonly watched alongside CRM that are in the same industry (Software - Application), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
         "peers": [
           {
             "ticker": "ADBE",
             "name": "Adobe Inc.",
             "industry": "Software - Application",
             "provenance": "selected",
-            "detail": "in the same industry (Software - Application), and among the companies Yahoo Finance users also watch alongside CRM"
+            "detail": "in the same industry (Software - Application), and among the companies commonly watched alongside CRM"
           },
           {
             "ticker": "NOW",
             "name": "ServiceNow, Inc.",
             "industry": "Software - Application",
             "provenance": "selected",
-            "detail": "in the same industry (Software - Application), and among the companies Yahoo Finance users also watch alongside CRM"
+            "detail": "in the same industry (Software - Application), and among the companies commonly watched alongside CRM"
           },
           {
             "ticker": "SNOW",
             "name": "Snowflake Inc.",
             "industry": "Software - Application",
             "provenance": "selected",
-            "detail": "in the same industry (Software - Application), and among the companies Yahoo Finance users also watch alongside CRM"
+            "detail": "in the same industry (Software - Application), and among the companies commonly watched alongside CRM"
           }
         ],
         "excluded": [
@@ -275,19 +275,19 @@
       },
       "intrinsic_valuation": {
         "method": "dcf",
-        "intrinsic_value_per_share": 172.26870157454317,
-        "current_price": 258.2725,
-        "upside_downside": -0.3329963446571231,
-        "note": "$172.27 is the output of these assumptions, not a fact about Salesforce, Inc. It assumes a WACC of 11.42%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+        "intrinsic_value_per_share": 173.03499962840212,
+        "current_price": 250.54,
+        "upside_downside": -0.3093518015949464,
+        "note": "$173.03 is the output of these assumptions, not a fact about Salesforce, Inc. It assumes a WACC of 11.38%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
         "full_valuation": "/valuation/CRM"
       },
       "company_figures": {
         "as_of": "2026-07-31",
         "trading_currency": "USD",
         "reporting_currency": "USD",
-        "price": 258.275,
-        "market_cap": 212560324999.99997,
-        "enterprise_value": 242900324999.99997,
+        "price": 250.54,
+        "market_cap": 206194420000.0,
+        "enterprise_value": 236534420000.0,
         "revenue": 43938000000.0,
         "ebitda": 16387000000.0,
         "net_income": 9662000000.0,
@@ -301,7 +301,7 @@
           "name": "pe",
           "label": "P/E",
           "applicable": false,
-          "company_value": 21.99961964396605,
+          "company_value": 21.34075967708549,
           "company_reason": null,
           "peer_median": null,
           "peer_count": 2,
@@ -311,12 +311,12 @@
           "peers": [
             {
               "ticker": "ADBE",
-              "value": 14.29421334431631,
+              "value": 13.721787479406919,
               "excluded_reason": null
             },
             {
               "ticker": "NOW",
-              "value": 87.2499047724551,
+              "value": 86.55963164071856,
               "excluded_reason": null
             },
             {
@@ -330,7 +330,7 @@
           "name": "ev_ebitda",
           "label": "EV/EBITDA",
           "applicable": false,
-          "company_value": 14.82274516384939,
+          "company_value": 14.43427228900958,
           "company_reason": null,
           "peer_median": null,
           "peer_count": 2,
@@ -340,12 +340,12 @@
           "peers": [
             {
               "ticker": "ADBE",
-              "value": 10.241394198117783,
+              "value": 9.836858445716503,
               "excluded_reason": null
             },
             {
               "ticker": "NOW",
-              "value": 42.71324027714286,
+              "value": 42.38388138285714,
               "excluded_reason": null
             },
             {
@@ -359,27 +359,27 @@
           "name": "ps",
           "label": "Price/Sales",
           "applicable": true,
-          "company_value": 4.837733283262779,
+          "company_value": 4.692849469707315,
           "company_reason": null,
-          "peer_median": 9.890533598289437,
+          "peer_median": 9.81228515069237,
           "peer_count": 3,
-          "premium_to_median": -0.5108723674828362,
+          "premium_to_median": -0.5217373529573608,
           "implied_value_per_share": null,
           "reason": null,
           "peers": [
             {
               "ticker": "ADBE",
-              "value": 4.009204851752021,
+              "value": 3.8486522911051213,
               "excluded_reason": null
             },
             {
               "ticker": "NOW",
-              "value": 9.890533598289437,
+              "value": 9.81228515069237,
               "excluded_reason": null
             },
             {
               "ticker": "SNOW",
-              "value": 20.69148262987458,
+              "value": 21.111128652882147,
               "excluded_reason": null
             }
           ]
@@ -410,10 +410,10 @@
         "exchange": "NYSE"
       },
       "suitable": true,
-      "intrinsic_value_per_share": 98.20515864307912,
-      "current_price": 350.95,
-      "upside_downside": -0.7201733618946313,
-      "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "intrinsic_value_per_share": 98.2701076412906,
+      "current_price": 348.92,
+      "upside_downside": -0.7183592008446332,
+      "note": "$98.27 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
       "why_not_dcf": "JPMorgan Chase & Co. is in the Financial Services sector. For banks and insurers, borrowing is an input to operations rather than financing, so unlevered free cash flow and an enterprise-to-equity bridge are not meaningful. A dividend discount or excess-return model is the appropriate tool.",
       "dividend_base": {
         "current_annual_dividend": 6.0,
@@ -422,7 +422,7 @@
         "last_regular_payment_date": "2026-07-06",
         "payments_per_year": 4,
         "trailing_twelve_months": 6.0,
-        "dividend_yield": 0.017096452486109134,
+        "dividend_yield": 0.017195918835263096,
         "payout_ratio": 0.2818886097152429,
         "return_on_equity": 0.16894174410419488,
         "sustainable_growth": 0.12131899073579505,
@@ -471,17 +471,17 @@
         "variable_dividends_included": []
       },
       "valuation": {
-        "pv_dividends_sum": 28.67781644319399,
-        "terminal_value": 115.59430617490969,
-        "pv_terminal_value": 69.52734219988513,
-        "tv_pct_of_value": 0.7079805497038926
+        "pv_dividends_sum": 28.681848404817465,
+        "terminal_value": 115.6682047548192,
+        "pv_terminal_value": 69.58825923647314,
+        "tv_pct_of_value": 0.7081325227655895
       },
       "assumptions": [
         {
           "name": "cost_of_equity",
-          "value": 0.10702177350892692,
+          "value": 0.1069693710998395,
           "source": "derived",
-          "detail": "CAPM: 5.00% + 1.04x5.50%",
+          "detail": "CAPM: 5.01% + 1.03x5.50%",
           "is_percent": true
         },
         {
@@ -509,9 +509,9 @@
       "global_levers": [
         {
           "name": "risk_free_rate",
-          "value": 0.050019998550415036,
+          "value": 0.050060000419616696,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
           "is_percent": true
         },
         {
@@ -530,17 +530,17 @@
         }
       ],
       "cost_of_equity_build_up": {
-        "risk_free_rate": 0.050019998550415036,
+        "risk_free_rate": 0.050060000419616696,
         "equity_risk_premium": 0.055,
-        "beta": 1.0363959083365797,
-        "cost_of_equity": 0.10702177350892692
+        "beta": 1.0347158305495057,
+        "cost_of_equity": 0.1069693710998395
       },
       "cost_of_equity_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050019998550415036,
+          "value": 0.050060000419616696,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
           "is_percent": true
         },
         {
@@ -552,19 +552,19 @@
         },
         {
           "name": "beta",
-          "value": 1.0363959083365797,
+          "value": 1.0347158305495057,
           "source": "derived",
-          "detail": "computed from 60 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
           "is_percent": false
         }
       ],
       "sensitivity": {
         "costs_of_equity": [
-          0.0970217735,
-          0.1020217735,
-          0.1070217735,
-          0.1120217735,
-          0.1170217735
+          0.0969693711,
+          0.1019693711,
+          0.1069693711,
+          0.1119693711,
+          0.1169693711
         ],
         "growth_rates": [
           0.015,
@@ -575,42 +575,42 @@
         ],
         "grid": [
           [
-            101.50834115599118,
-            106.56318888187215,
-            112.31988654565849,
-            118.9355136831309,
-            126.6178028594553
+            101.57582516229829,
+            106.63831529138419,
+            112.40422828657398,
+            119.03111890488948,
+            126.72739113878107
           ],
           [
-            95.44529021962614,
-            99.83862147826125,
-            104.80235394411277,
-            110.45528527645035,
-            116.9516636017771
+            95.50519732640186,
+            99.90482282162861,
+            104.8760556240673,
+            110.53803126980961,
+            117.04546440645288
           ],
           [
-            90.04502397498848,
-            93.89066335616334,
-            98.20515865413627,
-            103.07981961720819,
-            108.63131214470582
+            90.09855665078474,
+            93.94943476520082,
+            98.27010764109164,
+            103.15213015699409,
+            108.71249992552423
           ],
           [
-            85.20498593818763,
-            88.59263774336924,
-            92.3695773864023,
-            96.60699715341528,
-            101.39457560601252
+            85.2531051959878,
+            88.64515829320331,
+            92.42723986300777,
+            96.67072323680927,
+            101.46552765080591
           ],
           [
-            80.84272680225737,
-            83.84398323955827,
-            87.1713860140954,
-            90.88115318327878,
-            95.04321088592441
+            80.88620989190761,
+            83.89119524914693,
+            87.22291822797676,
+            90.93773274083634,
+            95.10574269279809
           ]
         ],
-        "centre_cost_of_equity": 0.1070217735,
+        "centre_cost_of_equity": 0.1069693711,
         "centre_terminal_growth": 0.025,
         "centre_row": 2,
         "centre_col": 2
@@ -619,32 +619,32 @@
         {
           "period": 1,
           "dividend": 6.542584596806652,
-          "discount_factor": 0.9033245993259013,
-          "pv_dividend": 5.910077609466182
+          "discount_factor": 0.9033673614712942,
+          "pv_dividend": 5.910357384419956
         },
         {
           "period": 2,
           "dividend": 7.134235534395276,
-          "discount_factor": 0.8159953317472999,
-          "pv_dividend": 5.821502891652249
+          "discount_factor": 0.8160725897716079,
+          "pv_dividend": 5.822054068594584
         },
         {
           "period": 3,
           "dividend": 7.7793899195542,
-          "discount_factor": 0.7371086561024356,
-          "pv_dividend": 5.734255648899431
+          "discount_factor": 0.7372133421910233,
+          "pv_dividend": 5.735070042801707
         },
         {
           "period": 4,
           "dividend": 8.482886110038041,
-          "discount_factor": 0.6658483814333861,
-          "pv_dividend": 5.648315986252583
+          "discount_factor": 0.665974471776539,
+          "pv_dividend": 5.649385596273125
         },
         {
           "period": 5,
           "dividend": 9.249999999999996,
-          "discount_factor": 0.6014772223701134,
-          "pv_dividend": 5.563664306923546
+          "discount_factor": 0.6016196013760109,
+          "pv_dividend": 5.564981312728099
         }
       ],
       "warnings": [
@@ -663,25 +663,25 @@
         "exchange": "NasdaqGS"
       },
       "suitable": true,
-      "intrinsic_value_per_share": 91.73998884980165,
-      "current_price": 330.715,
-      "upside_downside": -0.7226010648147146,
-      "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "intrinsic_value_per_share": 91.98350188387948,
+      "current_price": 332.41,
+      "upside_downside": -0.7232829882257469,
+      "note": "$91.98 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.76%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
       "base_year": {
         "revenue": 416161.0,
         "total_debt": 98657.0,
         "cash": 132420.0,
         "shares": 15004.697,
-        "current_price": 330.715,
+        "current_price": 332.41,
         "fiscal_year": "2025"
       },
       "valuation": {
-        "pv_ufcf_sum": 436567.32595016155,
-        "terminal_value": 1512085.1006125335,
-        "pv_terminal_value": 906200.4095244906,
-        "enterprise_value": 1342767.7354746521,
-        "equity_value": 1376530.7354746521,
-        "tv_pct_of_ev": 0.6748750253551182
+        "pv_ufcf_sum": 436819.2598070885,
+        "terminal_value": 1516216.2921275832,
+        "pv_terminal_value": 909602.3149594524,
+        "enterprise_value": 1346421.574766541,
+        "equity_value": 1380184.574766541,
+        "tv_pct_of_ev": 0.6755702166441966
       },
       "assumptions": [
         {
@@ -728,9 +728,9 @@
         },
         {
           "name": "wacc",
-          "value": 0.10782304722073065,
+          "value": 0.10759738161371574,
           "source": "derived",
-          "detail": "CAPM: 5.00% + 1.08x5.50% = 10.95% equity; debt 2.92% (2.47% after tax); weights 98.0%E / 2.0%D",
+          "detail": "CAPM: 5.01% + 1.08x5.50% = 10.93% equity; debt 2.92% (2.47% after tax); weights 98.0%E / 2.0%D",
           "is_percent": true
         },
         {
@@ -751,9 +751,9 @@
       "global_levers": [
         {
           "name": "risk_free_rate",
-          "value": 0.050019998550415036,
+          "value": 0.050060000419616696,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
           "is_percent": true
         },
         {
@@ -782,25 +782,25 @@
             0.024410963695874872
           ]
         ],
-        "risk_free_rate": 0.050019998550415036,
+        "risk_free_rate": 0.050060000419616696,
         "equity_risk_premium": 0.055,
-        "beta": 1.0818723857638963,
-        "cost_of_equity": 0.10952297976742933,
+        "beta": 1.076801022286298,
+        "cost_of_equity": 0.10928405664536309,
         "cost_of_debt": 0.029219891967466587,
         "after_tax_cost_of_debt": 0.024658666148889334,
         "tax_rate": 0.15610002335586043,
-        "equity_value": 4826514063360.0,
+        "equity_value": 4851251544064.0,
         "debt_value": 98657000000.0,
-        "weight_equity": 0.9799688175840343,
-        "weight_debt": 0.020031182415965715,
-        "wacc": 0.10782304722073065
+        "weight_equity": 0.9800689246838084,
+        "weight_debt": 0.01993107531619162,
+        "wacc": 0.10759738161371574
       },
       "wacc_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050019998550415036,
+          "value": 0.050060000419616696,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
           "is_percent": true
         },
         {
@@ -812,9 +812,9 @@
         },
         {
           "name": "beta",
-          "value": 1.0818723857638963,
+          "value": 1.076801022286298,
           "source": "derived",
-          "detail": "computed from 59 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
           "is_percent": false
         },
         {
@@ -827,11 +827,11 @@
       ],
       "sensitivity": {
         "waccs": [
-          0.0978230472,
-          0.1028230472,
-          0.1078230472,
-          0.1128230472,
-          0.1178230472
+          0.0975973816,
+          0.1025973816,
+          0.1075973816,
+          0.1125973816,
+          0.1175973816
         ],
         "growth_rates": [
           0.015,
@@ -842,42 +842,42 @@
         ],
         "grid": [
           [
-            94.6838379526654,
-            99.03251880111544,
-            103.97835687048027,
-            109.65342169587399,
-            116.23182774368992
+            94.93684075443285,
+            99.31368157148397,
+            104.29341476847884,
+            110.00982342229273,
+            116.63943459475861
           ],
           [
-            89.41177745814205,
-            93.19588357936601,
-            97.46623461869233,
-            102.32298669498681,
-            107.89583046529981
+            89.63674959867272,
+            93.44408481733616,
+            97.74207257351559,
+            102.63209101474926,
+            108.2455129851566
           ],
           [
-            84.70784522401318,
-            88.02373771381274,
-            91.73998887211093,
-            95.93376581383778,
-            100.70342870142582
+            84.90919859178595,
+            88.24445199276776,
+            91.98350189872038,
+            96.20440439155877,
+            101.00671938162672
           ],
           [
-            80.48492203937977,
-            83.40870340290714,
-            86.66540208788304,
-            90.31531242047096,
-            94.4342239633569
+            80.66618900562445,
+            83.60625677768316,
+            86.88195875687883,
+            90.55424739726662,
+            94.6997850783653
           ],
           [
-            76.67283425118157,
-            79.26535626291961,
-            82.13717550631954,
-            85.33599538736075,
-            88.92103866746582
+            76.83687639244859,
+            79.44321238909335,
+            82.33101811540105,
+            85.5484918835567,
+            89.15550266920964
           ]
         ],
-        "centre_wacc": 0.1078230472,
+        "centre_wacc": 0.1075973816,
         "centre_terminal_growth": 0.025,
         "centre_row": 2,
         "centre_col": 2
@@ -892,8 +892,8 @@
           "capex": 12114.67411687841,
           "delta_nwc": -754.3066875421268,
           "ufcf": 113709.97320691227,
-          "discount_factor": 0.9026712366282381,
-          "pv_ufcf": 102642.72213164732
+          "discount_factor": 0.9028551498948548,
+          "pv_ufcf": 102663.6349042667
         },
         {
           "period": 2,
@@ -904,8 +904,8 @@
           "capex": 12334.25691545288,
           "delta_nwc": -767.9787658692862,
           "ufcf": 115771.0071151884,
-          "discount_factor": 0.8148153614359527,
-          "pv_ufcf": 94331.99500636649
+          "discount_factor": 0.8151474216916609,
+          "pv_ufcf": 94370.43795659275
         },
         {
           "period": 3,
@@ -916,8 +916,8 @@
           "capex": 12557.819730738041,
           "delta_nwc": -781.8986555029987,
           "ufcf": 117869.39799973728,
-          "discount_factor": 0.7355103899310763,
-          "pv_ufcf": 86694.16688372799
+          "discount_factor": 0.7359600475978288,
+          "pv_ufcf": 86747.16776221409
         },
         {
           "period": 4,
@@ -928,8 +928,8 @@
           "capex": 12785.434701959377,
           "delta_nwc": -796.0708481117734,
           "ufcf": 120005.8229691065,
-          "discount_factor": 0.6639240732320022,
-          "pv_ufcf": 79674.75479720776
+          "discount_factor": 0.6644653190905623,
+          "pv_ufcf": 79739.70745189289
         },
         {
           "period": 5,
@@ -940,8 +940,8 @@
           "capex": 13017.175275891608,
           "delta_nwc": -810.4999167772185,
           "ufcf": 122180.97140467816,
-          "discount_factor": 0.5993051642115884,
-          "pv_ufcf": 73223.68713121203
+          "discount_factor": 0.5999159352674421,
+          "pv_ufcf": 73298.3117321221
         }
       ],
       "warnings": [
@@ -961,25 +961,25 @@
         "exchange": "NYSE"
       },
       "suitable": true,
-      "intrinsic_value_per_share": 172.26870157454317,
-      "current_price": 258.2725,
-      "upside_downside": -0.3329963446571231,
-      "note": "$172.27 is the output of these assumptions, not a fact about Salesforce, Inc. It assumes a WACC of 11.42%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "intrinsic_value_per_share": 173.03499962840212,
+      "current_price": 250.54,
+      "upside_downside": -0.3093518015949464,
+      "note": "$173.03 is the output of these assumptions, not a fact about Salesforce, Inc. It assumes a WACC of 11.38%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
       "base_year": {
         "revenue": 41525.0,
         "total_debt": 14439.0,
         "cash": 17156.0,
         "shares": 956.0,
-        "current_price": 258.2725,
+        "current_price": 250.54,
         "fiscal_year": "2026"
       },
       "valuation": {
-        "pv_ufcf_sum": 50091.41894229284,
-        "terminal_value": 192079.85911347854,
-        "pv_terminal_value": 111880.45976297044,
-        "enterprise_value": 161971.87870526328,
-        "equity_value": 164688.87870526328,
-        "tv_pct_of_ev": 0.6907400263385034
+        "pv_ufcf_sum": 50142.9964610492,
+        "terminal_value": 192914.67112494493,
+        "pv_terminal_value": 112561.46318370322,
+        "enterprise_value": 162704.45964475244,
+        "equity_value": 165421.45964475244,
+        "tv_pct_of_ev": 0.6918154759216126
       },
       "assumptions": [
         {
@@ -1026,9 +1026,9 @@
         },
         {
           "name": "wacc",
-          "value": 0.11415475273457956,
+          "value": 0.11376894766320717,
           "source": "derived",
-          "detail": "CAPM: 5.00% + 1.24x5.50% = 11.79% equity; debt 7.00% (5.83% after tax); weights 93.6%E / 6.4%D",
+          "detail": "CAPM: 5.01% + 1.23x5.50% = 11.76% equity; debt 7.01% (5.84% after tax); weights 93.5%E / 6.5%D",
           "is_percent": true
         },
         {
@@ -1049,9 +1049,9 @@
       "global_levers": [
         {
           "name": "risk_free_rate",
-          "value": 0.050019998550415036,
+          "value": 0.050060000419616696,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
           "is_percent": true
         },
         {
@@ -1071,25 +1071,25 @@
       ],
       "wacc_build_up": {
         "cost_of_debt_by_year": [],
-        "risk_free_rate": 0.050019998550415036,
+        "risk_free_rate": 0.050060000419616696,
         "equity_risk_premium": 0.055,
-        "beta": 1.2350254901085673,
-        "cost_of_equity": 0.11794640050638625,
-        "cost_of_debt": 0.07001999855041503,
-        "after_tax_cost_of_debt": 0.05833744703104624,
+        "beta": 1.2288775970155539,
+        "cost_of_equity": 0.11764826825547216,
+        "cost_of_debt": 0.0700600004196167,
+        "after_tax_cost_of_debt": 0.05837077475132625,
         "tax_rate": 0.16684592632428072,
-        "equity_value": 212558266368.0,
+        "equity_value": 206194409472.0,
         "debt_value": 14439000000.0,
-        "weight_equity": 0.936391304481209,
-        "weight_debt": 0.06360869551879096,
-        "wacc": 0.11415475273457956
+        "weight_equity": 0.9345566021276918,
+        "weight_debt": 0.06544339787230825,
+        "wacc": 0.11376894766320717
       },
       "wacc_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050019998550415036,
+          "value": 0.050060000419616696,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
           "is_percent": true
         },
         {
@@ -1101,14 +1101,14 @@
         },
         {
           "name": "beta",
-          "value": 1.2350254901085673,
+          "value": 1.2288775970155539,
           "source": "derived",
-          "detail": "computed from 59 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
           "is_percent": false
         },
         {
           "name": "cost_of_debt",
-          "value": 0.07001999855041503,
+          "value": 0.0700600004196167,
           "source": "default",
           "detail": "no year with usable interest expense; used risk-free + 2% spread",
           "is_percent": true
@@ -1116,11 +1116,11 @@
       ],
       "sensitivity": {
         "waccs": [
-          0.1041547527,
-          0.1091547527,
-          0.1141547527,
-          0.1191547527,
-          0.1241547527
+          0.1037689477,
+          0.1087689477,
+          0.1137689477,
+          0.1187689477,
+          0.1237689477
         ],
         "growth_rates": [
           0.015,
@@ -1131,42 +1131,42 @@
         ],
         "grid": [
           [
-            177.89762143720856,
-            185.73321034206214,
-            194.55870681880214,
-            204.57434905901667,
-            216.0382854293054
+            178.69372065790492,
+            186.61066799171826,
+            195.53270014194499,
+            205.66418863232596,
+            217.2689421397286
           ],
           [
-            168.17458004008833,
-            175.0525337781063,
-            182.7477858287384,
-            191.41521602258297,
-            201.25147624798453
+            168.88762739016343,
+            175.83355484280764,
+            183.60865917344236,
+            192.37084084326503,
+            202.32080977900557
           ],
           [
-            159.43935716412702,
-            165.51338423929212,
-            172.2687016429272,
-            179.82674464278824,
-            188.3396315076167
+            160.08163314264104,
+            166.21296304343474,
+            173.03499955500348,
+            180.671423342392,
+            189.27731847735674
           ],
           [
-            151.5495304227267,
-            156.94291481202526,
-            162.90912045937367,
-            169.5445226965466,
-            176.968401166408
+            152.13101048627,
+            157.57309298156318,
+            163.59554697816665,
+            170.29644249656855,
+            177.79726396633845
           ],
           [
-            144.38877725145483,
-            149.20147324473905,
-            154.4995414327223,
-            160.36030752347258,
-            166.87844362684245
+            144.91764824387036,
+            149.77203222444965,
+            155.11790508828852,
+            161.03388916644343,
+            167.61632071653958
           ]
         ],
-        "centre_wacc": 0.1141547527,
+        "centre_wacc": 0.1137689477,
         "centre_terminal_growth": 0.025,
         "centre_row": 2,
         "centre_col": 2
@@ -1181,8 +1181,8 @@
           "capex": 791.8357160709703,
           "delta_nwc": -407.7757538768114,
           "ufcf": 11486.206208089425,
-          "discount_factor": 0.8975413851133351,
-          "pv_ufcf": 10309.34542970597
+          "discount_factor": 0.8978522898291381,
+          "pv_ufcf": 10312.916545382752
         },
         {
           "period": 2,
@@ -1193,8 +1193,8 @@
           "capex": 869.5940318006332,
           "delta_nwc": -447.81935783823286,
           "ufcf": 12614.152359970985,
-          "discount_factor": 0.8055805379911641,
-          "pv_ufcf": 10161.715644447939
+          "discount_factor": 0.8061387343514266,
+          "pv_ufcf": 10168.75681838307
         },
         {
           "period": 3,
@@ -1205,8 +1205,8 @@
           "capex": 954.9882188889603,
           "delta_nwc": -491.7952461568632,
           "ufcf": 13852.862892928031,
-          "discount_factor": 0.7230418718889351,
-          "pv_ufcf": 10016.199917123453
+          "discount_factor": 0.7237935085573918,
+          "pv_ufcf": 10026.61223683688
         },
         {
           "period": 4,
@@ -1217,8 +1217,8 @@
           "capex": 1048.7681203702173,
           "delta_nwc": -540.089569396995,
           "ufcf": 15213.214875954118,
-          "discount_factor": 0.6489600031901334,
-          "pv_ufcf": 9872.767974431368
+          "discount_factor": 0.64985965902172,
+          "pv_ufcf": 9886.454631911702
         },
         {
           "period": 5,
@@ -1229,8 +1229,8 @@
           "capex": 1151.7572139104777,
           "delta_nwc": -593.1263981319411,
           "ufcf": 16707.153506882987,
-          "discount_factor": 0.5824684601464267,
-          "pv_ufcf": 9731.389976584107
+          "discount_factor": 0.5834779829202342,
+          "pv_ufcf": 9748.256228534803
         }
       ],
       "warnings": [
@@ -1300,9 +1300,9 @@
         },
         {
           "name": "wacc",
-          "value": 0.12255750468180261,
+          "value": 0.12221178196914914,
           "source": "derived",
-          "detail": "CAPM: 5.00% + 1.67x5.50% = 14.16% equity; debt 6.56% (5.19% after tax); weights 78.8%E / 21.2%D",
+          "detail": "CAPM: 5.01% + 1.67x5.50% = 14.17% equity; debt 6.56% (5.19% after tax); weights 78.3%E / 21.7%D",
           "is_percent": true
         },
         {
@@ -1341,7 +1341,7 @@
         ],
         "peer_selection": {
           "mode": "automatic, edited by you",
-          "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+          "rule": "Companies commonly watched alongside AAPL that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
           "peers": [
             {
               "ticker": "MSFT",
@@ -1388,10 +1388,10 @@
         },
         "intrinsic_valuation": {
           "method": "dcf",
-          "intrinsic_value_per_share": 91.73998884980165,
-          "current_price": 330.715,
-          "upside_downside": -0.7226010648147146,
-          "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "intrinsic_value_per_share": 91.98350188387948,
+          "current_price": 332.41,
+          "upside_downside": -0.7232829882257469,
+          "note": "$91.98 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.76%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
           "full_valuation": "/valuation/AAPL"
         },
         "company_figures": null,
@@ -1409,10 +1409,10 @@
         },
         "intrinsic_valuation": {
           "method": "dcf",
-          "intrinsic_value_per_share": 91.73998884980165,
-          "current_price": 330.715,
-          "upside_downside": -0.7226010648147146,
-          "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "intrinsic_value_per_share": 91.98350188387948,
+          "current_price": 332.41,
+          "upside_downside": -0.7232829882257469,
+          "note": "$91.98 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.76%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
           "full_valuation": "/valuation/AAPL"
         },
         "relative_valuation": {
@@ -1423,7 +1423,7 @@
           "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E, EV/EBITDA and Price/Sales multiples of 3 peers (Microsoft Corporation, Alphabet Inc., Meta Platforms, Inc.) to Apple Inc.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
           "peer_selection": {
             "mode": "automatic, edited by you",
-            "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+            "rule": "Companies commonly watched alongside AAPL that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
             "peers": [
               {
                 "ticker": "MSFT",
@@ -1479,9 +1479,9 @@
             "as_of": "2026-06-30",
             "trading_currency": "USD",
             "reporting_currency": "USD",
-            "price": 330.65,
-            "market_cap": 4856374261400.0,
-            "enterprise_value": 4878319261400.0,
+            "price": 332.41,
+            "market_cap": 4882224007960.0,
+            "enterprise_value": 4904169007960.0,
             "revenue": 466823000000.0,
             "ebitda": 167959000000.0,
             "net_income": 128930000000.0,
@@ -1495,27 +1495,27 @@
               "name": "pe",
               "label": "P/E",
               "applicable": true,
-              "company_value": 37.66675142635539,
+              "company_value": 37.86724585402932,
               "company_reason": null,
-              "peer_median": 25.095521722197127,
+              "peer_median": 25.196748802607416,
               "peer_count": 3,
-              "premium_to_median": 0.5009351805202336,
-              "implied_value_per_share": 220.29598898827504,
+              "premium_to_median": 0.5028623792173827,
+              "implied_value_per_share": 221.18459054986985,
               "reason": null,
               "peers": [
                 {
                   "ticker": "MSFT",
-                  "value": 27.88130383563325,
+                  "value": 27.23131788178753,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "GOOGL",
-                  "value": 17.342761891214636,
+                  "value": 17.1771871730794,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "META",
-                  "value": 25.095521722197127,
+                  "value": 25.196748802607416,
                   "excluded_reason": null
                 }
               ]
@@ -1524,27 +1524,27 @@
               "name": "ev_ebitda",
               "label": "EV/EBITDA",
               "applicable": true,
-              "company_value": 29.044702941789364,
+              "company_value": 29.198608041010008,
               "company_reason": null,
-              "peer_median": 15.416654835487254,
+              "peer_median": 15.478048128461909,
               "peer_count": 3,
-              "premium_to_median": 0.883982177179709,
-              "implied_value_per_share": 174.80484094711147,
+              "premium_to_median": 0.886452852366957,
+              "implied_value_per_share": 175.5069112240715,
               "reason": null,
               "peers": [
                 {
                   "ticker": "MSFT",
-                  "value": 17.874370571909616,
+                  "value": 17.455445214034377,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "GOOGL",
-                  "value": 12.55969154579666,
+                  "value": 12.435991637557366,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "META",
-                  "value": 15.416654835487254,
+                  "value": 15.478048128461909,
                   "excluded_reason": null
                 }
               ]
@@ -1553,50 +1553,50 @@
               "name": "ps",
               "label": "Price/Sales",
               "applicable": true,
-              "company_value": 10.40303125895682,
+              "company_value": 10.458405022803076,
               "company_reason": null,
-              "peer_median": 9.495448610392865,
+              "peer_median": 9.404793717181777,
               "peer_count": 3,
-              "premium_to_median": 0.09558080779570521,
-              "implied_value_per_share": 301.8033883463728,
+              "premium_to_median": 0.11202917759870035,
+              "implied_value_per_share": 298.9220127459257,
               "reason": null,
               "peers": [
                 {
                   "ticker": "MSFT",
-                  "value": 11.237667985716302,
+                  "value": 10.975688618188942,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "GOOGL",
-                  "value": 9.495448610392865,
+                  "value": 9.404793717181777,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "META",
-                  "value": 7.487304710415383,
+                  "value": 7.517506034953186,
                   "excluded_reason": null
                 }
               ]
             }
           ],
           "relative_value_per_share": {
-            "central": 220.29598898827504,
-            "low": 174.80484094711147,
-            "high": 301.8033883463728,
+            "central": 221.18459054986985,
+            "low": 175.5069112240715,
+            "high": 298.9220127459257,
             "multiples_applied": [
               "P/E",
               "EV/EBITDA",
               "Price/Sales"
             ]
           },
-          "current_price": 330.65,
-          "relative_value_vs_price": -0.33374871015189755,
+          "current_price": 332.41,
+          "relative_value_vs_price": -0.33460307887888496,
           "comparison_with_intrinsic": {
             "intrinsic_method": "dcf",
-            "intrinsic_value_per_share": 91.73998884980165,
-            "relative_value_per_share": 220.29598898827504,
-            "gap": 1.401308216299738,
-            "statement": "The relative figure of $220.30 is 140% above the DCF intrinsic value of $91.74. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+            "intrinsic_value_per_share": 91.98350188387948,
+            "relative_value_per_share": 221.18459054986985,
+            "gap": 1.4046115446778118,
+            "statement": "The relative figure of $221.18 is 140% above the DCF intrinsic value of $91.98. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
           },
           "warnings": [
             "MSFT (Microsoft Corporation) is in Software - Infrastructure, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
@@ -1618,10 +1618,10 @@
         },
         "intrinsic_valuation": {
           "method": "dcf",
-          "intrinsic_value_per_share": 91.73998884980165,
-          "current_price": 330.715,
-          "upside_downside": -0.7226010648147146,
-          "note": "$91.74 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.78%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "intrinsic_value_per_share": 91.98350188387948,
+          "current_price": 332.41,
+          "upside_downside": -0.7232829882257469,
+          "note": "$91.98 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.76%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
           "full_valuation": "/valuation/AAPL"
         },
         "relative_valuation": {
@@ -1632,7 +1632,7 @@
           "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E, EV/EBITDA and Price/Sales multiples of 4 peers (Microsoft Corporation, Alphabet Inc., Meta Platforms, Inc., Amazon.com, Inc.) to Apple Inc.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
           "peer_selection": {
             "mode": "automatic, edited by you",
-            "rule": "Companies that people on Yahoo Finance often look at alongside AAPL and that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+            "rule": "Companies commonly watched alongside AAPL that are in the same industry (Consumer Electronics), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
             "peers": [
               {
                 "ticker": "MSFT",
@@ -1695,9 +1695,9 @@
             "as_of": "2026-06-30",
             "trading_currency": "USD",
             "reporting_currency": "USD",
-            "price": 330.65,
-            "market_cap": 4856374261400.0,
-            "enterprise_value": 4878319261400.0,
+            "price": 332.41,
+            "market_cap": 4882224007960.0,
+            "enterprise_value": 4904169007960.0,
             "revenue": 466823000000.0,
             "ebitda": 167959000000.0,
             "net_income": 128930000000.0,
@@ -1711,32 +1711,32 @@
               "name": "pe",
               "label": "P/E",
               "applicable": true,
-              "company_value": 37.66675142635539,
+              "company_value": 37.86724585402932,
               "company_reason": null,
-              "peer_median": 22.605948698773293,
+              "peer_median": 22.37475013951543,
               "peer_count": 4,
-              "premium_to_median": 0.66623183695004,
-              "implied_value_per_share": 198.4417730279596,
+              "premium_to_median": 0.6924097752114344,
+              "implied_value_per_share": 196.41224298558058,
               "reason": null,
               "peers": [
                 {
                   "ticker": "MSFT",
-                  "value": 27.88130383563325,
+                  "value": 27.23131788178753,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "GOOGL",
-                  "value": 17.342761891214636,
+                  "value": 17.1771871730794,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "META",
-                  "value": 25.095521722197127,
+                  "value": 25.196748802607416,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "AMZN",
-                  "value": 20.11637567534946,
+                  "value": 19.552751476423445,
                   "excluded_reason": null
                 }
               ]
@@ -1745,32 +1745,32 @@
               "name": "ev_ebitda",
               "label": "EV/EBITDA",
               "applicable": true,
-              "company_value": 29.044702941789364,
+              "company_value": 29.198608041010008,
               "company_reason": null,
-              "peer_median": 13.988173190641957,
+              "peer_median": 13.957019883009638,
               "peer_count": 4,
-              "premium_to_median": 1.0763757029559926,
-              "implied_value_per_share": 158.46926982140505,
+              "premium_to_median": 1.0920374324718476,
+              "implied_value_per_share": 158.1130124802868,
               "reason": null,
               "peers": [
                 {
                   "ticker": "MSFT",
-                  "value": 17.874370571909616,
+                  "value": 17.455445214034377,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "GOOGL",
-                  "value": 12.55969154579666,
+                  "value": 12.435991637557366,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "META",
-                  "value": 15.416654835487254,
+                  "value": 15.478048128461909,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "AMZN",
-                  "value": 10.977147044008198,
+                  "value": 10.676955918699985,
                   "excluded_reason": null
                 }
               ]
@@ -1779,55 +1779,55 @@
               "name": "ps",
               "label": "Price/Sales",
               "applicable": true,
-              "company_value": 10.40303125895682,
+              "company_value": 10.458405022803076,
               "company_reason": null,
-              "peer_median": 8.491376660404125,
+              "peer_median": 8.46114987606748,
               "peer_count": 4,
-              "premium_to_median": 0.22512893668548162,
-              "implied_value_per_share": 269.8899602310882,
+              "premium_to_median": 0.2360500849163385,
+              "implied_value_per_share": 268.9292319594793,
               "reason": null,
               "peers": [
                 {
                   "ticker": "MSFT",
-                  "value": 11.237667985716302,
+                  "value": 10.975688618188942,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "GOOGL",
-                  "value": 9.495448610392865,
+                  "value": 9.404793717181777,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "META",
-                  "value": 7.487304710415383,
+                  "value": 7.517506034953186,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "AMZN",
-                  "value": 3.5083583665131886,
+                  "value": 3.410060556520782,
                   "excluded_reason": null
                 }
               ]
             }
           ],
           "relative_value_per_share": {
-            "central": 198.4417730279596,
-            "low": 158.46926982140505,
-            "high": 269.8899602310882,
+            "central": 196.41224298558058,
+            "low": 158.1130124802868,
+            "high": 268.9292319594793,
             "multiples_applied": [
               "P/E",
               "EV/EBITDA",
               "Price/Sales"
             ]
           },
-          "current_price": 330.65,
-          "relative_value_vs_price": -0.3998434204507496,
+          "current_price": 332.41,
+          "relative_value_vs_price": -0.40912655159116584,
           "comparison_with_intrinsic": {
             "intrinsic_method": "dcf",
-            "intrinsic_value_per_share": 91.73998884980165,
-            "relative_value_per_share": 198.4417730279596,
-            "gap": 1.1630891339310279,
-            "statement": "The relative figure of $198.44 is 116% above the DCF intrinsic value of $91.74. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+            "intrinsic_value_per_share": 91.98350188387948,
+            "relative_value_per_share": 196.41224298558058,
+            "gap": 1.1352986020637976,
+            "statement": "The relative figure of $196.41 is 114% above the DCF intrinsic value of $91.98. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
           },
           "warnings": [
             "MSFT (Microsoft Corporation) is in Software - Infrastructure, not Consumer Electronics. You chose it, so it is included, but its multiples may reflect a different kind of business.",
@@ -1856,21 +1856,21 @@
         ],
         "peer_selection": {
           "mode": "automatic, edited by you",
-          "rule": "Companies that people on Yahoo Finance often look at alongside JPM and that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+          "rule": "Companies commonly watched alongside JPM that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
           "peers": [
             {
               "ticker": "C",
               "name": "Citigroup Inc.",
               "industry": "Banks - Diversified",
               "provenance": "selected",
-              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
             },
             {
               "ticker": "BAC",
               "name": "Bank of America Corporation",
               "industry": "Banks - Diversified",
               "provenance": "selected",
-              "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+              "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
             }
           ],
           "excluded": [
@@ -1893,10 +1893,10 @@
         },
         "intrinsic_valuation": {
           "method": "ddm",
-          "intrinsic_value_per_share": 98.20515864307912,
-          "current_price": 350.95,
-          "upside_downside": -0.7201733618946313,
-          "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "intrinsic_value_per_share": 98.2701076412906,
+          "current_price": 348.92,
+          "upside_downside": -0.7183592008446332,
+          "note": "$98.27 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
           "full_valuation": "/valuation/JPM"
         },
         "company_figures": null,
@@ -1914,10 +1914,10 @@
         },
         "intrinsic_valuation": {
           "method": "ddm",
-          "intrinsic_value_per_share": 98.20515864307912,
-          "current_price": 350.95,
-          "upside_downside": -0.7201733618946313,
-          "note": "$98.21 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+          "intrinsic_value_per_share": 98.2701076412906,
+          "current_price": 348.92,
+          "upside_downside": -0.7183592008446332,
+          "note": "$98.27 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
           "full_valuation": "/valuation/JPM"
         },
         "relative_valuation": {
@@ -1928,28 +1928,28 @@
           "note": "How the market prices similar companies right now: this is a relative, market-based figure, not an estimate of intrinsic value. It applies the median P/E and Price/Book multiples of 4 peers (Citigroup Inc., Bank of America Corporation, Wells Fargo & Company, Morgan Stanley) to JPMorgan Chase & Co.'s own trailing figures. It inherits the market's own mispricing - if the whole group is overpriced or underpriced, so is this figure - and agreeing with the intrinsic value would not make either one right. It also rests on a judgement that these companies are comparable: change the peer group and the figure changes. Read it beside the intrinsic value as a second opinion, never as a replacement for it.",
           "peer_selection": {
             "mode": "automatic, edited by you",
-            "rule": "Companies that people on Yahoo Finance often look at alongside JPM and that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
+            "rule": "Companies commonly watched alongside JPM that are in the same industry (Banks - Diversified), up to 6. Left out: other share classes, companies whose results and share price are in different currencies, out-of-date figures, and companies more than ten times larger or smaller.",
             "peers": [
               {
                 "ticker": "C",
                 "name": "Citigroup Inc.",
                 "industry": "Banks - Diversified",
                 "provenance": "selected",
-                "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+                "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
               },
               {
                 "ticker": "BAC",
                 "name": "Bank of America Corporation",
                 "industry": "Banks - Diversified",
                 "provenance": "selected",
-                "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+                "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
               },
               {
                 "ticker": "WFC",
                 "name": "Wells Fargo & Company",
                 "industry": "Banks - Diversified",
                 "provenance": "selected",
-                "detail": "in the same industry (Banks - Diversified), and among the companies Yahoo Finance users also watch alongside JPM"
+                "detail": "in the same industry (Banks - Diversified), and among the companies commonly watched alongside JPM"
               },
               {
                 "ticker": "MS",
@@ -1976,9 +1976,9 @@
             "as_of": "2026-06-30",
             "trading_currency": "USD",
             "reporting_currency": "USD",
-            "price": 350.95,
-            "market_cap": 932890445135.25,
-            "enterprise_value": 1156032445135.25,
+            "price": 348.92,
+            "market_cap": 927494327159.4,
+            "enterprise_value": 1150636327159.4,
             "revenue": 194911000000.0,
             "ebitda": null,
             "net_income": 63634000000.0,
@@ -1992,32 +1992,32 @@
               "name": "pe",
               "label": "P/E",
               "applicable": true,
-              "company_value": 14.660251518610334,
+              "company_value": 14.575452229301947,
               "company_reason": null,
-              "peer_median": 13.687747602918748,
+              "peer_median": 13.200934928853957,
               "peer_count": 4,
-              "premium_to_median": 0.07104922912840772,
-              "implied_value_per_share": 327.6693455870316,
+              "premium_to_median": 0.10412272372039633,
+              "implied_value_per_share": 316.01559546233847,
               "reason": null,
               "peers": [
                 {
                   "ticker": "C",
-                  "value": 14.122189116160298,
+                  "value": 13.55138970042231,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "BAC",
-                  "value": 13.2533060896772,
+                  "value": 12.850480157285602,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "WFC",
-                  "value": 12.832414252983206,
+                  "value": 12.196727272671755,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "MS",
-                  "value": 16.488911566190207,
+                  "value": 16.278216344265616,
                   "excluded_reason": null
                 }
               ]
@@ -2026,54 +2026,54 @@
               "name": "pb",
               "label": "Price/Book",
               "applicable": true,
-              "company_value": 2.6385782393136346,
+              "company_value": 2.6233159118430356,
               "company_reason": null,
-              "peer_median": 1.6135552890384344,
+              "peer_median": 1.5484065414709198,
               "peer_count": 4,
-              "premium_to_median": 0.6352574078115674,
-              "implied_value_per_share": 214.61452999602642,
+              "premium_to_median": 0.6942035838669331,
+              "implied_value_per_share": 205.94927511816962,
               "reason": null,
               "peers": [
                 {
                   "ticker": "C",
-                  "value": 1.207538338319435,
+                  "value": 1.158731303353077,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "BAC",
-                  "value": 1.5444530388682203,
+                  "value": 1.4975103567021677,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "WFC",
-                  "value": 1.6826575392086482,
+                  "value": 1.599302726239672,
                   "excluded_reason": null
                 },
                 {
                   "ticker": "MS",
-                  "value": 3.024130029220766,
+                  "value": 2.9854877122262358,
                   "excluded_reason": null
                 }
               ]
             }
           ],
           "relative_value_per_share": {
-            "central": 271.141937791529,
-            "low": 214.61452999602642,
-            "high": 327.6693455870316,
+            "central": 260.98243529025405,
+            "low": 205.94927511816962,
+            "high": 316.01559546233847,
             "multiples_applied": [
               "P/E",
               "Price/Book"
             ]
           },
-          "current_price": 350.95,
-          "relative_value_vs_price": -0.22740579059259436,
+          "current_price": 348.92,
+          "relative_value_vs_price": -0.2520278708865814,
           "comparison_with_intrinsic": {
             "intrinsic_method": "ddm",
-            "intrinsic_value_per_share": 98.20515864307912,
-            "relative_value_per_share": 271.141937791529,
-            "gap": 1.7609744899143074,
-            "statement": "The relative figure of $271.14 is 176% above the dividend discount model intrinsic value of $98.21. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
+            "intrinsic_value_per_share": 98.2701076412906,
+            "relative_value_per_share": 260.98243529025405,
+            "gap": 1.655766250332221,
+            "statement": "The relative figure of $260.98 is 166% above the dividend discount model intrinsic value of $98.27. The two answer different questions - what the cash flows are worth on stated assumptions, and what the market pays for similar companies today - so a gap between them is information, not an error in either."
           },
           "warnings": [
             "MS (Morgan Stanley) is in Capital Markets, not Banks - Diversified. You chose it, so it is included, but its multiples may reflect a different kind of business.",

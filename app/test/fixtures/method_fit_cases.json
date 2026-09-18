@@ -1,0 +1,594 @@
+{
+  "hood": {
+    "status_code": 200,
+    "body": {
+      "method": "dcf",
+      "company": {
+        "ticker": "HOOD",
+        "company_name": "Robinhood Markets, Inc.",
+        "sector": "Financial Services",
+        "exchange": "NasdaqGS"
+      },
+      "suitable": true,
+      "intrinsic_value_per_share": 16.08136759790625,
+      "current_price": 109.81,
+      "upside_downside": -0.8535527948464963,
+      "note": "$16.08 is the output of these assumptions, not a fact about Robinhood Markets, Inc. It assumes a WACC of 17.61%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "base_year": {
+        "revenue": 4473.0,
+        "total_debt": 11626.0,
+        "cash": 10451.0,
+        "shares": 918.781846,
+        "current_price": 109.81,
+        "fiscal_year": "2025"
+      },
+      "valuation": {
+        "pv_ufcf_sum": 6946.07292209679,
+        "terminal_value": 20262.962952926937,
+        "pv_terminal_value": 9004.195685712102,
+        "enterprise_value": 15950.268607808892,
+        "equity_value": 14775.268607808892,
+        "tv_pct_of_ev": 0.5645168684685254
+      },
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.15,
+          "source": "derived (clamped)",
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (1.4bn -> 4.5bn); raw 48.8% clamped to [0%, 15%]",
+          "is_percent": true
+        },
+        {
+          "name": "operating_margin",
+          "value": 0.357167062012877,
+          "source": "derived",
+          "detail": "median operatingIncome / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.0,
+          "source": "derived (clamped)",
+          "detail": "median effective rate over 2 profitable year(s); raw -11.0% clamped to [0%, 35%]",
+          "is_percent": true
+        },
+        {
+          "name": "da_pct",
+          "value": 0.026092849881396138,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.012072434607645875,
+          "source": "derived",
+          "detail": "median capex / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "nwc_pct",
+          "value": 0.3,
+          "source": "derived (clamped)",
+          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025; raw 258.9% clamped to [-10%, 30%]",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.17611991840770772,
+          "source": "derived",
+          "detail": "CAPM: 4.95% + 2.53x5.50% = 18.87% equity; debt 6.95% (6.95% after tax); weights 89.5%E / 10.5%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false
+        }
+      ],
+      "global_levers": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.04947000026702881,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-17",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        }
+      ],
+      "wacc_build_up": {
+        "cost_of_debt_by_year": [],
+        "risk_free_rate": 0.04947000026702881,
+        "equity_risk_premium": 0.055,
+        "beta": 2.531068329034711,
+        "cost_of_equity": 0.1886787583639379,
+        "cost_of_debt": 0.0694700002670288,
+        "after_tax_cost_of_debt": 0.0694700002670288,
+        "tax_rate": 0.0,
+        "equity_value": 98728222720.0,
+        "debt_value": 11626000000.0,
+        "weight_equity": 0.8946483449981025,
+        "weight_debt": 0.10535165500189751,
+        "wacc": 0.17611991840770772
+      },
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.04947000026702881,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-17",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 2.531068329034711,
+          "source": "derived",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.0694700002670288,
+          "source": "default",
+          "detail": "no year with usable interest expense; used risk-free + 2% spread",
+          "is_percent": true
+        }
+      ],
+      "sensitivity": {
+        "waccs": [
+          0.1661199184,
+          0.1711199184,
+          0.1761199184,
+          0.1811199184,
+          0.1861199184
+        ],
+        "growth_rates": [
+          0.015,
+          0.02,
+          0.025,
+          0.03,
+          0.035
+        ],
+        "grid": [
+          [
+            16.602815506082642,
+            17.00097255482067,
+            17.42734369645588,
+            17.88503803800532,
+            18.377638925191345
+          ],
+          [
+            15.97312051226771,
+            16.339450859996724,
+            16.730851735531957,
+            17.149987949917506,
+            17.599915852934092
+          ],
+          [
+            15.383438949918899,
+            15.721227111608917,
+            16.08136759887364,
+            16.466154998839134,
+            16.878209095407637
+          ],
+          [
+            14.830137844334986,
+            15.142250571090354,
+            15.474355156024622,
+            15.828435969403854,
+            16.206748989949386
+          ],
+          [
+            14.31000935010421,
+            14.598958701927867,
+            14.905841860737839,
+            15.232381906507214,
+            15.580529960620332
+          ]
+        ],
+        "centre_wacc": 0.1761199184,
+        "centre_terminal_growth": 0.025,
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "projection": [
+        {
+          "period": 1,
+          "revenue": 5143.95,
+          "ebit": 1837.2495086411386,
+          "nopat": 1837.2495086411386,
+          "da": 134.22031514740766,
+          "capex": 62.099999999999994,
+          "delta_nwc": 201.28499999999994,
+          "ufcf": 1708.0848237885466,
+          "discount_factor": 0.8502534344914862,
+          "pv_ufcf": 1452.3049878289967
+        },
+        {
+          "period": 2,
+          "revenue": 5915.5425,
+          "ebit": 2112.8369349373093,
+          "nopat": 2112.8369349373093,
+          "da": 154.3533624195188,
+          "capex": 71.41499999999999,
+          "delta_nwc": 231.4777499999999,
+          "ufcf": 1964.297547356828,
+          "discount_factor": 0.722930902864568,
+          "pv_ufcf": 1420.051399405328
+        },
+        {
+          "period": 3,
+          "revenue": 6802.873874999999,
+          "ebit": 2429.762475177906,
+          "nopat": 2429.762475177906,
+          "da": 177.5063667824466,
+          "capex": 82.12724999999999,
+          "delta_nwc": 266.19941249999994,
+          "ufcf": 2258.9421794603522,
+          "discount_factor": 0.6146744830606298,
+          "pv_ufcf": 1388.5141164236443
+        },
+        {
+          "period": 4,
+          "revenue": 7823.304956249998,
+          "ebit": 2794.2268464545914,
+          "nopat": 2794.2268464545914,
+          "da": 204.13232179981358,
+          "capex": 94.44633749999997,
+          "delta_nwc": 306.12932437499967,
+          "ufcf": 2597.7835063794055,
+          "discount_factor": 0.5226290903165793,
+          "pv_ufcf": 1357.6772307784825
+        },
+        {
+          "period": 5,
+          "revenue": 8996.800699687497,
+          "ebit": 3213.3608734227796,
+          "nopat": 3213.3608734227796,
+          "da": 234.75217006978562,
+          "capex": 108.61328812499997,
+          "delta_nwc": 352.0487230312497,
+          "ufcf": 2987.4510323363156,
+          "discount_factor": 0.44436717900683265,
+          "pv_ufcf": 1327.5251876603386
+        }
+      ],
+      "warnings": [
+        "Robinhood Markets, Inc.'s revenue grew 48.8% a year over the period used - faster than a company can usually keep up for a whole forecast. The forecast uses 15% a year instead, to keep the estimate realistic.",
+        "Robinhood Markets, Inc.'s recent tax figures showed a net tax credit, which will not keep happening. The forecast assumes no tax benefit instead.",
+        "Robinhood Markets, Inc.'s recent figures show it tying up an unusually large amount of cash in stock and unpaid customer bills as it grew. That is unlikely to continue at the same pace, so the forecast assumes a more typical level to keep the estimate realistic."
+      ],
+      "method_fit_warnings": [
+        "Robinhood Markets, Inc. is a financial company, and its published statements do not itemise interest or a loan book. Part of its revenue may come from lending activity - margin loans, securities lending, interest on customer balances - that this data does not fully capture. A discounted cash flow values a business by the cash its operations throw off, and it describes lending income poorly, so treat this valuation with extra caution."
+      ]
+    }
+  },
+  "aapl": {
+    "status_code": 200,
+    "body": {
+      "method": "dcf",
+      "company": {
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "sector": "Technology",
+        "exchange": "NasdaqGS"
+      },
+      "suitable": true,
+      "intrinsic_value_per_share": 92.49060628531127,
+      "current_price": 337.0,
+      "upside_downside": -0.7255471623581268,
+      "note": "$92.49 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.71%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "base_year": {
+        "revenue": 416161.0,
+        "total_debt": 98657.0,
+        "cash": 132420.0,
+        "shares": 15004.697,
+        "current_price": 337.0,
+        "fiscal_year": "2025"
+      },
+      "valuation": {
+        "pv_ufcf_sum": 437340.25813774584,
+        "terminal_value": 1524819.3458749754,
+        "pv_terminal_value": 916690.2645196454,
+        "enterprise_value": 1354030.5226573911,
+        "equity_value": 1387793.5226573911,
+        "tv_pct_of_ev": 0.6770085675177904
+      },
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.01812535743479393,
+          "source": "derived",
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (394.3bn -> 416.2bn)",
+          "is_percent": true
+        },
+        {
+          "name": "operating_margin",
+          "value": 0.31510222870075566,
+          "source": "derived",
+          "detail": "median operatingIncome / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.15610002335586043,
+          "source": "derived",
+          "detail": "median effective rate over 3 profitable year(s)",
+          "is_percent": true
+        },
+        {
+          "name": "da_pct",
+          "value": 0.029268479803598143,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.02859230076835775,
+          "source": "derived",
+          "detail": "median capex / revenue over 3 years",
+          "is_percent": true
+        },
+        {
+          "name": "nwc_pct",
+          "value": -0.1,
+          "source": "derived (clamped)",
+          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025; raw -28.7% clamped to [-10%, 30%]",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.10713136594088278,
+          "source": "derived",
+          "detail": "CAPM: 4.95% + 1.08x5.50% = 10.88% equity; debt 2.92% (2.47% after tax); weights 98.0%E / 2.0%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false
+        }
+      ],
+      "global_levers": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.04947000026702881,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-17",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth)",
+          "is_percent": true
+        }
+      ],
+      "wacc_build_up": {
+        "cost_of_debt_by_year": [
+          [
+            "2023",
+            0.0340288202390583
+          ],
+          [
+            "2022",
+            0.024410963695874872
+          ]
+        ],
+        "risk_free_rate": 0.04947000026702881,
+        "equity_risk_premium": 0.055,
+        "beta": 1.0784676347068598,
+        "cost_of_equity": 0.1087857201759061,
+        "cost_of_debt": 0.029219891967466587,
+        "after_tax_cost_of_debt": 0.024658666148889334,
+        "tax_rate": 0.15610002335586043,
+        "equity_value": 4918238773248.0,
+        "debt_value": 98657000000.0,
+        "weight_equity": 0.9803350509041713,
+        "weight_debt": 0.019664949095828683,
+        "wacc": 0.10713136594088278
+      },
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.04947000026702881,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-17",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 1.0784676347068598,
+          "source": "derived",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.029219891967466587,
+          "source": "derived",
+          "detail": "median interest expense / average debt (FY2023, FY2022)",
+          "is_percent": true
+        }
+      ],
+      "sensitivity": {
+        "waccs": [
+          0.0971313659,
+          0.1021313659,
+          0.1071313659,
+          0.1121313659,
+          0.1171313659
+        ],
+        "growth_rates": [
+          0.015,
+          0.02,
+          0.025,
+          0.03,
+          0.035
+        ],
+        "grid": [
+          [
+            95.46371098220696,
+            99.89950892631569,
+            104.95026790558052,
+            110.75339634903715,
+            117.49053426732115
+          ],
+          [
+            90.10502238932295,
+            93.96095407723763,
+            98.31680322971705,
+            103.27652964115732,
+            108.97506515396883
+          ],
+          [
+            85.3281305058286,
+            88.7038604544688,
+            92.49060633005097,
+            96.76829980281325,
+            101.63903534810368
+          ],
+          [
+            81.04318490392261,
+            84.01728091340901,
+            87.33271163959195,
+            91.05181649073953,
+            95.25309935179934
+          ],
+          [
+            77.1779303212149,
+            79.81311301097004,
+            82.73432019021504,
+            85.99079207569659,
+            89.64375948390526
+          ]
+        ],
+        "centre_wacc": 0.1071313659,
+        "centre_terminal_growth": 0.025,
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "projection": [
+        {
+          "period": 1,
+          "revenue": 423704.06687542127,
+          "ebit": 133510.09578201926,
+          "nopat": 112669.16671220289,
+          "da": 12401.173924045665,
+          "capex": 12114.67411687841,
+          "delta_nwc": -754.3066875421268,
+          "ufcf": 113709.97320691227,
+          "discount_factor": 0.9032351812651984,
+          "pv_ufcf": 102706.84826120627
+        },
+        {
+          "period": 2,
+          "revenue": 431383.8545341141,
+          "ebit": 135930.01398922194,
+          "nopat": 114711.33563074196,
+          "da": 12625.94963403004,
+          "capex": 12334.25691545288,
+          "delta_nwc": -767.9787658692862,
+          "ufcf": 115771.0071151884,
+          "discount_factor": 0.8158337926751759,
+          "pv_ufcf": 94449.89981660893
+        },
+        {
+          "period": 3,
+          "revenue": 439202.8410891441,
+          "ebit": 138393.79407889314,
+          "nopat": 116790.51959087179,
+          "da": 12854.799484100538,
+          "capex": 12557.819730738041,
+          "delta_nwc": -781.8986555029987,
+          "ufcf": 117869.39799973728,
+          "discount_factor": 0.7368897836092368,
+          "pv_ufcf": 86856.75518617743
+        },
+        {
+          "period": 4,
+          "revenue": 447163.54957026185,
+          "ebit": 140902.23106333034,
+          "nopat": 118907.38950345163,
+          "da": 13087.797319502466,
+          "capex": 12785.434701959377,
+          "delta_nwc": -796.0708481117734,
+          "ufcf": 120005.8229691065,
+          "discount_factor": 0.6655847772707618,
+          "pv_ufcf": 79874.04895208722
+        },
+        {
+          "period": 5,
+          "revenue": 455268.54873803403,
+          "ebit": 143456.13436471313,
+          "nopat": 121062.62843983996,
+          "da": 13325.018323952587,
+          "capex": 13017.175275891608,
+          "delta_nwc": -810.4999167772185,
+          "ufcf": 122180.97140467816,
+          "discount_factor": 0.6011795869455132,
+          "pv_ufcf": 73452.70592166598
+        }
+      ],
+      "warnings": [
+        "The forecast has Apple Inc. growing 1.8% a year for the next 5 years, then 2.5% a year forever after. Growing faster in the long run than in the near term is unusual, so it is worth checking whether either assumption is too low or too high.",
+        "Apple Inc.'s recent figures show it freeing up an unusually large amount of cash from stock, customer payments and supplier bills as it grew. A company can rarely keep doing that indefinitely, so the forecast assumes a more typical level to keep the estimate realistic."
+      ],
+      "method_fit_warnings": []
+    }
+  }
+}

@@ -453,6 +453,10 @@ def build_workbook(report: ValuationReport) -> Workbook:
     note = honesty_note(report)
     if note:
         notes.append(note)
+    # A doubt about the method goes first: the workbook is read top down,
+    # and this qualifies every figure in it.
+    for warning in report.suitability.method_fit:
+        notes.append(f"This model may not fit this company: {warning}")
     for warning in report.suitability.warnings:
         notes.append(f"Warning: {warning}")
     notes.append(

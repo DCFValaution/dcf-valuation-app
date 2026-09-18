@@ -212,10 +212,15 @@ class _ValuationScreenState extends State<ValuationScreen> {
   @override
   void initState() {
     super.initState();
-    _pingServer();
+    // After the first frame, not during it: on a phone the first frame is
+    // still downloading and compiling the engine, and the ping's connection to
+    // a second origin has no business competing with that. Nothing ever waits
+    // on this - it is fire-and-forget, and the screen is fully usable while a
+    // sleeping server takes a minute to answer it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pingServer());
   }
 
-  /// Start waking the server as soon as the app opens.
+  /// Start waking the server as soon as the app is on screen.
   ///
   /// `/health` touches no upstream service, so this costs the backend
   /// essentially nothing, and the spin-up then overlaps with the user typing
@@ -223,6 +228,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// Failure is deliberately silent: the real request will report anything
   /// genuinely wrong, and an error about a ping the user never asked for
   /// would be noise.
+  ///
+  /// Never awaited by anything that draws or handles input. Only a valuation
+  /// consults [_serverAwake], and only to decide whether a slow answer should
+  /// be explained as the server waking up.
   Future<void> _pingServer() async {
     final awake = await _api.wakeUp();
     if (!mounted) return;
@@ -1429,6 +1438,15 @@ class _SuccessCard extends StatelessWidget {
           ),
         ),
 
+        // A doubt about the method itself, not about an assumption: pinned
+        // directly under the figure it qualifies, so the number and its
+        // upside or downside are never on screen without it. Robinhood is the
+        // case - valued with a DCF, with lending income the data cannot see.
+        if (result.methodFitWarnings.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          _MethodFitWarning(warnings: result.methodFitWarnings),
+        ],
+
         // An update to the figure, not a loss: amber for "notice this", so
         // red keeps meaning downside.
         if (correctionNote != null) ...[
@@ -1514,6 +1532,72 @@ class _SuccessCard extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         const DisclaimerLine(),
       ],
+    );
+  }
+}
+
+/// Doubts about whether the method fits this company at all.
+///
+/// Deliberately not one of the "Keep in mind" bullets. Those are caveats about
+/// an assumption - growth capped, a tax credit ignored - and a reader can
+/// weigh them against the figure. This says the figure itself may not
+/// describe the company, which qualifies the implied upside or downside too,
+/// so it sits under the figure with a heading of its own and amber rather
+/// than red: a warning to read, not a loss.
+class _MethodFitWarning extends StatelessWidget {
+  const _MethodFitWarning({required this.warnings});
+
+  final List<String> warnings;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      key: const Key('method-fit-warning'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.cautionSurface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: colors.caution.withValues(alpha: 0.55),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 20,
+                color: colors.caution,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'This model may not fit this company',
+                  style: context.text.titleSmall?.copyWith(
+                    color: colors.caution,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          for (final warning in warnings) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              warning,
+              style: context.text.bodySmall?.copyWith(
+                color: context.scheme.onSurface,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

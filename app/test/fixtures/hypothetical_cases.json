@@ -1,0 +1,846 @@
+{
+  "intc_speculative_refused": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "speculative",
+      "company": {
+        "ticker": "INTC",
+        "company_name": "Intel Corporation",
+        "sector": "Technology",
+        "exchange": "NasdaqGS"
+      },
+      "suitable": false,
+      "intrinsic_value_per_share": null,
+      "message": "No speculative estimate is produced for Intel Corporation. It was refused a standard valuation because it loses money, and even a projected path to profitability does not apply to it. No figure is reported, deliberately.",
+      "reasons": [
+        "The company is loss-making: its day-to-day business lost $23m in its 2025 financial year, and it made a loss in 2 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on.",
+        "Intel Corporation's revenue has fallen - -0.5% in the latest year and -5.7% a year over the period. This approach projects growth into profitability; a shrinking company offers no growth to extend, and assuming a reversal would invent it."
+      ],
+      "assumptions": [
+        {
+          "name": "speculative_revenue_growth",
+          "value": 0.0,
+          "source": "derived (clamped)",
+          "detail": "the lower of the latest year's revenue growth (-0.5%) and the 3-year CAGR (-5.7%), so an early ramp from a small base is not extrapolated; raw -5.7% clamped to [0%, 30%]",
+          "is_percent": true
+        },
+        {
+          "name": "target_operating_margin",
+          "value": 0.1,
+          "source": "default",
+          "detail": "a generic mature-company operating margin. It is not specific to this company or its industry, and the company has never earned it",
+          "is_percent": true
+        },
+        {
+          "name": "years_to_profitability",
+          "value": 2.0,
+          "source": "derived (clamped)",
+          "detail": "the distance from today's -0% operating margin to the 10% target, closed at 15 percentage points a year - a fast pace to sustain; 1 year(s) clamped to [2, 10]",
+          "is_percent": false
+        },
+        {
+          "name": "post_profitability_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "half the 0.0% assumed until profitability, as growth slows with scale; floored at terminal growth",
+          "is_percent": true
+        },
+        {
+          "name": "mature_capex_pct",
+          "value": 0.05,
+          "source": "default",
+          "detail": "5% of revenue, typical of a mature business - today's build-out rate of 40.0% is not assumed to last. Depreciation is assumed to equal capex once mature",
+          "is_percent": true
+        },
+        {
+          "name": "mature_nwc_pct",
+          "value": 0.0,
+          "source": "derived",
+          "detail": "the company's working-capital investment of 0.0% of revenue growth",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21,
+          "source": "default",
+          "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.16766422819576496,
+          "source": "derived",
+          "detail": "CAPM: 5.01% + 2.37x5.50% = 18.05% equity; debt 2.00% (2.00% after tax); weights 92.0%E / 8.0%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "years of mature-company forecast after profitability, before the terminal value",
+          "is_percent": false
+        }
+      ],
+      "speculative_estimate_available": false,
+      "hypothetical_available": true,
+      "hypothetical_placeholders": {
+        "revenue_growth": 0.0,
+        "target_operating_margin": 0.0,
+        "years_to_target": 5.0
+      }
+    }
+  },
+  "qs_speculative_refused": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "speculative",
+      "company": {
+        "ticker": "QS",
+        "company_name": "QuantumScape Corporation",
+        "sector": "Consumer Cyclical",
+        "exchange": "NasdaqGS"
+      },
+      "suitable": false,
+      "intrinsic_value_per_share": null,
+      "message": "No speculative estimate is produced for QuantumScape Corporation. It was refused a standard valuation because it loses money, and even a projected path to profitability does not apply to it. No figure is reported, deliberately.",
+      "reasons": [
+        "The company reported no revenue in its 2025 financial year. The valuation projects future revenue, so without any to start from there is nothing to project.",
+        "The company is loss-making: its day-to-day business lost $473m in its 2025 financial year, and it made a loss in 4 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on.",
+        "QuantumScape Corporation reported no revenue in its 2025 financial year. A path to profitability grows revenue until it covers costs; with no revenue, both the revenue and the margins would have to be invented, which makes any figure fiction rather than speculation."
+      ],
+      "assumptions": [
+        {
+          "name": "speculative_revenue_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "no usable revenue history; fell back to terminal growth",
+          "is_percent": true
+        },
+        {
+          "name": "target_operating_margin",
+          "value": 0.1,
+          "source": "default",
+          "detail": "a generic mature-company operating margin. It is not specific to this company or its industry, and the company has never earned it",
+          "is_percent": true
+        },
+        {
+          "name": "years_to_profitability",
+          "value": 5.0,
+          "source": "default",
+          "detail": "no operating margin to measure the distance from",
+          "is_percent": false
+        },
+        {
+          "name": "post_profitability_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "half the 2.5% assumed until profitability, as growth slows with scale; floored at terminal growth",
+          "is_percent": true
+        },
+        {
+          "name": "mature_capex_pct",
+          "value": 0.0,
+          "source": "derived",
+          "detail": "the company's current capex of 0.0% of revenue, already at a mature level; depreciation is assumed to equal it",
+          "is_percent": true
+        },
+        {
+          "name": "mature_nwc_pct",
+          "value": 0.0,
+          "source": "derived",
+          "detail": "the company's working-capital investment of 0.0% of revenue growth",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21,
+          "source": "default",
+          "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.1,
+          "source": "derived (clamped)",
+          "detail": "derivation failed (computed WACC of 20.1% is outside the plausible range); fell back to global default; that gave 8.50%, raised to a 10% floor for a company that has never been profitable",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "years of mature-company forecast after profitability, before the terminal value",
+          "is_percent": false
+        }
+      ],
+      "speculative_estimate_available": false,
+      "hypothetical_available": false,
+      "hypothetical_placeholders": null
+    }
+  },
+  "intc_neutral": {
+    "status_code": 422,
+    "body": {
+      "code": "hypothetical_incomplete",
+      "message": "This hypothetical has no profit in it yet. A path to profitability needs a target operating margin above 0%, and choosing it is the point of this screen: nothing here will pick one for you.",
+      "method": "hypothetical",
+      "reasons": []
+    }
+  },
+  "intc_hypothetical": {
+    "status_code": 200,
+    "body": {
+      "method": "hypothetical",
+      "is_valuation": false,
+      "derived_from_company_data": false,
+      "disclaimer_headline": "A HYPOTHETICAL YOU BUILT - NOT A VALUATION",
+      "disclaimer": "THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT INTEL CORPORATION IS WORTH. It is arithmetic on assumptions you typed in. Intel Corporation loses money and was refused a standard valuation; it was then refused a speculative estimate as well, because its own figures show no path to profitability to project. Nothing here is derived from the company's data: you have assumed revenue grows +8.0% a year and that the operating margin reaches 15% from -0.0% today within 5 years, and the figure below is what those assumptions imply. Intel Corporation's revenue is actually falling 5.7% a year, so this figure assumes a reversal the company's own figures do not show. Change any one of them and it moves by multiples or changes sign. Treat it as a way of seeing what your own beliefs would have to be worth, not as information about the company, and never as a reason to buy or sell.",
+      "company": {
+        "ticker": "INTC",
+        "company_name": "Intel Corporation",
+        "sector": "Technology",
+        "exchange": "NasdaqGS"
+      },
+      "hypothetical_value_per_share": 6.379879139411701,
+      "current_price": 101.05,
+      "your_assumptions": {
+        "revenue_growth": 0.08,
+        "target_operating_margin": 0.15,
+        "years_to_target": 5
+      },
+      "reality": [
+        {
+          "name": "revenue_growth",
+          "label": "Revenue growth",
+          "assumed": 0.08,
+          "actual": -0.05712887978236014,
+          "statement": "You have assumed revenue grows +8.0% a year. Intel Corporation's revenue has actually fallen 5.7% a year, and -0.5% in the latest year alone.",
+          "contradicts": true
+        },
+        {
+          "name": "target_operating_margin",
+          "label": "Target operating margin",
+          "assumed": 0.15,
+          "actual": -0.0004351692429947212,
+          "statement": "You have assumed an operating margin of 15%. Intel Corporation actually earned -0.0% in its 2025 financial year. Its gross margin - what is left before operating costs - was 35%.",
+          "contradicts": true
+        },
+        {
+          "name": "years_to_target",
+          "label": "Years to the target",
+          "assumed": 5.0,
+          "actual": -0.0004351692429947212,
+          "statement": "Reaching it in 5 years means the operating margin improving by about 3.0 percentage points every year, every year, starting from -0.0%. Nothing in Intel Corporation's figures says that happens.",
+          "contradicts": true
+        }
+      ],
+      "why_standard_valuation_refused": [
+        "The company is loss-making: its day-to-day business lost $23m in its 2025 financial year, and it made a loss in 2 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
+      ],
+      "why_speculative_estimate_refused": [
+        "Intel Corporation's revenue has fallen - -0.5% in the latest year and -5.7% a year over the period. This approach projects growth into profitability; a shrinking company offers no growth to extend, and assuming a reversal would invent it."
+      ],
+      "starting_point": {
+        "fiscal_year": "2025",
+        "revenue": 52853.0,
+        "operating_margin": -0.0004351692429947212,
+        "gross_margin": 0.34766238434904356,
+        "latest_revenue_growth": -0.004670345191239322,
+        "revenue_cagr": -0.05712887978236014,
+        "cash": 45928.0,
+        "total_debt": 46585.0,
+        "shares": 4530.0,
+        "history": [
+          {
+            "fiscal_year": "2025",
+            "revenue": 52853.0,
+            "operating_margin": -0.0004351692429947212,
+            "gross_margin": 0.34766238434904356
+          },
+          {
+            "fiscal_year": "2024",
+            "revenue": 53101.0,
+            "operating_margin": -0.0886612304853016,
+            "gross_margin": 0.32664168283083184
+          },
+          {
+            "fiscal_year": "2023",
+            "revenue": 54228.0,
+            "operating_margin": 0.0005716603968429593,
+            "gross_margin": 0.400365125027661
+          },
+          {
+            "fiscal_year": "2022",
+            "revenue": 63054.0,
+            "operating_margin": 0.03704760998509214,
+            "gross_margin": 0.426079233672725
+          }
+        ]
+      },
+      "path": [
+        {
+          "period": 1,
+          "revenue": 57081.240000000005,
+          "operating_margin": 0.029651864605604223,
+          "ebit": 1692.5652000000002,
+          "ufcf": -7143.330585252483,
+          "discount_factor": 0.8564105809297301,
+          "pv_ufcf": -6117.6238962891875
+        },
+        {
+          "period": 2,
+          "revenue": 61647.73920000001,
+          "operating_margin": 0.05973889845420317,
+          "ebit": 3682.7680320000004,
+          "ufcf": -3959.7835002545107,
+          "discount_factor": 0.7334390831283978,
+          "pv_ufcf": -2904.259979813626
+        },
+        {
+          "period": 3,
+          "revenue": 66579.55833600002,
+          "operating_margin": 0.0898259323028021,
+          "ebit": 5980.5708998400005,
+          "ufcf": -221.15156591124833,
+          "discount_factor": 0.6281249912585597,
+          "pv_ufcf": -138.91082540481963
+        },
+        {
+          "period": 4,
+          "revenue": 71905.92300288002,
+          "operating_margin": 0.11991296615140105,
+          "ebit": 8622.452511129602,
+          "ufcf": 4141.004092328571,
+          "discount_factor": 0.5379328886602247,
+          "pv_ufcf": 2227.58229334012
+        },
+        {
+          "period": 5,
+          "revenue": 77658.39684311043,
+          "operating_margin": 0.15,
+          "ebit": 11648.759526466563,
+          "ufcf": 9202.520025908587,
+          "discount_factor": 0.46069141767871086,
+          "pv_ufcf": 4239.521996952554
+        }
+      ],
+      "valuation": {
+        "pv_path_sum": -2693.6904112149577,
+        "cumulative_cash_burn": 11324.265651418242,
+        "revenue_at_profitability": 77658.39684311043,
+        "value_at_profitability": 70006.82381984897,
+        "pv_value_at_profitability": 32251.542912749966,
+        "enterprise_value": 29557.85250153501,
+        "equity_value": 28900.852501535002,
+        "share_from_after_profitability": 1.0911328186333924
+      },
+      "assumptions": [
+        {
+          "name": "speculative_revenue_growth",
+          "value": 0.08,
+          "source": "override",
+          "detail": "supplied by caller (would have been 0 from derived (clamped))",
+          "is_percent": true
+        },
+        {
+          "name": "target_operating_margin",
+          "value": 0.15,
+          "source": "override",
+          "detail": "supplied by caller (would have been 0.1 from default)",
+          "is_percent": true
+        },
+        {
+          "name": "years_to_profitability",
+          "value": 5.0,
+          "source": "override",
+          "detail": "supplied by caller (would have been 2 from derived)",
+          "is_percent": false
+        },
+        {
+          "name": "post_profitability_growth",
+          "value": 0.04,
+          "source": "default",
+          "detail": "half the 8.0% assumed until profitability, as growth slows with scale; floored at terminal growth",
+          "is_percent": true
+        },
+        {
+          "name": "mature_capex_pct",
+          "value": 0.05,
+          "source": "default",
+          "detail": "5% of revenue, typical of a mature business - today's build-out rate of 40.0% is not assumed to last. Depreciation is assumed to equal capex once mature",
+          "is_percent": true
+        },
+        {
+          "name": "mature_nwc_pct",
+          "value": 0.0,
+          "source": "derived",
+          "detail": "the company's working-capital investment of 0.0% of revenue growth",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21,
+          "source": "default",
+          "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.16766422819576496,
+          "source": "derived",
+          "detail": "CAPM: 5.01% + 2.37x5.50% = 18.05% equity; debt 2.00% (2.00% after tax); weights 92.0%E / 8.0%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "years of mature-company forecast after profitability, before the terminal value",
+          "is_percent": false
+        }
+      ],
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050060000419616696,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 2.372349429048373,
+          "source": "derived",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.02003479580691838,
+          "source": "derived",
+          "detail": "median interest expense / average debt (FY2025, FY2024, FY2023, FY2022)",
+          "is_percent": true
+        }
+      ],
+      "sensitivity": {
+        "target_operating_margins": [
+          0.05,
+          0.1,
+          0.15,
+          0.2,
+          0.25
+        ],
+        "years_to_profitability": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "grid": [
+          [
+            1.4410980739641985,
+            0.4714863616575345,
+            -0.45355172313894154,
+            -1.3363197513959237,
+            -2.178994833259553
+          ],
+          [
+            4.984764361721143,
+            3.951769044671534,
+            2.963163708136381,
+            2.0168411996324735,
+            1.1107979407018327
+          ],
+          [
+            8.528430649478086,
+            7.432051727685534,
+            6.379879139411701,
+            5.370002150660868,
+            4.400590714663216
+          ],
+          [
+            12.072096937235031,
+            10.912334410699536,
+            9.796594570687025,
+            8.723163101689266,
+            7.690383488624604
+          ],
+          [
+            15.615763224991975,
+            14.392617093713536,
+            13.213310001962352,
+            12.07632405271766,
+            10.98017626258599
+          ]
+        ],
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "warnings": [
+        "On your assumptions Intel Corporation burns $11.3bn of cash before turning profitable, covered by today's $45.9bn only if nothing goes worse than you have assumed.",
+        "Every dollar of this figure comes from after your assumed turn to profit. The years before it subtract value, so the figure is a statement about a future you have described, and nothing else."
+      ]
+    }
+  },
+  "intc_pessimistic": {
+    "status_code": 200,
+    "body": {
+      "method": "hypothetical",
+      "is_valuation": false,
+      "derived_from_company_data": false,
+      "disclaimer_headline": "A HYPOTHETICAL YOU BUILT - NOT A VALUATION",
+      "disclaimer": "THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT INTEL CORPORATION IS WORTH. It is arithmetic on assumptions you typed in. Intel Corporation loses money and was refused a standard valuation; it was then refused a speculative estimate as well, because its own figures show no path to profitability to project. Nothing here is derived from the company's data: you have assumed revenue grows -10.0% a year and that the operating margin reaches 15% from -0.0% today within 5 years, and the figure below is what those assumptions imply. Change any one of them and it moves by multiples or changes sign. Treat it as a way of seeing what your own beliefs would have to be worth, not as information about the company, and never as a reason to buy or sell.",
+      "company": {
+        "ticker": "INTC",
+        "company_name": "Intel Corporation",
+        "sector": "Technology",
+        "exchange": "NasdaqGS"
+      },
+      "hypothetical_value_per_share": 1.5820846522846141,
+      "current_price": 101.05,
+      "your_assumptions": {
+        "revenue_growth": -0.1,
+        "target_operating_margin": 0.15,
+        "years_to_target": 5
+      },
+      "reality": [
+        {
+          "name": "revenue_growth",
+          "label": "Revenue growth",
+          "assumed": -0.1,
+          "actual": -0.05712887978236014,
+          "statement": "You have assumed revenue grows -10.0% a year. Intel Corporation's revenue has actually fallen 5.7% a year, and -0.5% in the latest year alone.",
+          "contradicts": false
+        },
+        {
+          "name": "target_operating_margin",
+          "label": "Target operating margin",
+          "assumed": 0.15,
+          "actual": -0.0004351692429947212,
+          "statement": "You have assumed an operating margin of 15%. Intel Corporation actually earned -0.0% in its 2025 financial year. Its gross margin - what is left before operating costs - was 35%.",
+          "contradicts": true
+        },
+        {
+          "name": "years_to_target",
+          "label": "Years to the target",
+          "assumed": 5.0,
+          "actual": -0.0004351692429947212,
+          "statement": "Reaching it in 5 years means the operating margin improving by about 3.0 percentage points every year, every year, starting from -0.0%. Nothing in Intel Corporation's figures says that happens.",
+          "contradicts": true
+        }
+      ],
+      "why_standard_valuation_refused": [
+        "The company is loss-making: its day-to-day business lost $23m in its 2025 financial year, and it made a loss in 2 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
+      ],
+      "why_speculative_estimate_refused": [
+        "Intel Corporation's revenue has fallen - -0.5% in the latest year and -5.7% a year over the period. This approach projects growth into profitability; a shrinking company offers no growth to extend, and assuming a reversal would invent it."
+      ],
+      "starting_point": {
+        "fiscal_year": "2025",
+        "revenue": 52853.0,
+        "operating_margin": -0.0004351692429947212,
+        "gross_margin": 0.34766238434904356,
+        "latest_revenue_growth": -0.004670345191239322,
+        "revenue_cagr": -0.05712887978236014,
+        "cash": 45928.0,
+        "total_debt": 46585.0,
+        "shares": 4530.0,
+        "history": [
+          {
+            "fiscal_year": "2025",
+            "revenue": 52853.0,
+            "operating_margin": -0.0004351692429947212,
+            "gross_margin": 0.34766238434904356
+          },
+          {
+            "fiscal_year": "2024",
+            "revenue": 53101.0,
+            "operating_margin": -0.0886612304853016,
+            "gross_margin": 0.32664168283083184
+          },
+          {
+            "fiscal_year": "2023",
+            "revenue": 54228.0,
+            "operating_margin": 0.0005716603968429593,
+            "gross_margin": 0.400365125027661
+          },
+          {
+            "fiscal_year": "2022",
+            "revenue": 63054.0,
+            "operating_margin": 0.03704760998509214,
+            "gross_margin": 0.426079233672725
+          }
+        ]
+      },
+      "path": [
+        {
+          "period": 1,
+          "revenue": 47567.700000000004,
+          "operating_margin": 0.029651864605604223,
+          "ebit": 1410.4710000000002,
+          "ufcf": -5952.775487710402,
+          "discount_factor": 0.8564105809297301,
+          "pv_ufcf": -5098.019913574322
+        },
+        {
+          "period": 2,
+          "revenue": 42810.93000000001,
+          "operating_margin": 0.05973889845420317,
+          "ebit": 2557.4778000000006,
+          "ufcf": -2749.849652954521,
+          "discount_factor": 0.7334390831283978,
+          "pv_ufcf": -2016.8472082039066
+        },
+        {
+          "period": 3,
+          "revenue": 38529.83700000001,
+          "operating_margin": 0.0898259323028021,
+          "ebit": 3460.9785300000003,
+          "ufcf": -127.9812302727114,
+          "discount_factor": 0.6281249912585597,
+          "pv_ufcf": -80.38820914630656
+        },
+        {
+          "period": 4,
+          "revenue": 34676.85330000001,
+          "operating_margin": 0.11991296615140105,
+          "ebit": 4158.204336000001,
+          "ufcf": 1997.0120044022806,
+          "discount_factor": 0.5379328886602247,
+          "pv_ufcf": 1074.2584362172643
+        },
+        {
+          "period": 5,
+          "revenue": 31209.16797000001,
+          "operating_margin": 0.15,
+          "ebit": 4681.375195500002,
+          "ufcf": 3698.2864044450025,
+          "discount_factor": 0.46069141767871086,
+          "pv_ufcf": 1703.7688066456703
+        }
+      ],
+      "valuation": {
+        "pv_path_sum": -4417.2280880616,
+        "cumulative_cash_burn": 8830.606370937634,
+        "revenue_at_profitability": 31209.16797000001,
+        "value_at_profitability": 26571.086617133173,
+        "pv_value_at_profitability": 12241.071562910904,
+        "enterprise_value": 7823.843474849304,
+        "equity_value": 7166.843474849302,
+        "share_from_after_profitability": 1.564585437101511
+      },
+      "assumptions": [
+        {
+          "name": "speculative_revenue_growth",
+          "value": -0.1,
+          "source": "override",
+          "detail": "supplied by caller (would have been 0 from derived (clamped))",
+          "is_percent": true
+        },
+        {
+          "name": "target_operating_margin",
+          "value": 0.15,
+          "source": "override",
+          "detail": "supplied by caller (would have been 0.1 from default)",
+          "is_percent": true
+        },
+        {
+          "name": "years_to_profitability",
+          "value": 5.0,
+          "source": "override",
+          "detail": "supplied by caller (would have been 2 from derived)",
+          "is_percent": false
+        },
+        {
+          "name": "post_profitability_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "half the -10.0% assumed until profitability, as growth slows with scale; floored at terminal growth",
+          "is_percent": true
+        },
+        {
+          "name": "mature_capex_pct",
+          "value": 0.05,
+          "source": "default",
+          "detail": "5% of revenue, typical of a mature business - today's build-out rate of 40.0% is not assumed to last. Depreciation is assumed to equal capex once mature",
+          "is_percent": true
+        },
+        {
+          "name": "mature_nwc_pct",
+          "value": 0.0,
+          "source": "derived",
+          "detail": "the company's working-capital investment of 0.0% of revenue growth",
+          "is_percent": true
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21,
+          "source": "default",
+          "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
+          "is_percent": true
+        },
+        {
+          "name": "wacc",
+          "value": 0.16766422819576496,
+          "source": "derived",
+          "detail": "CAPM: 5.01% + 2.37x5.50% = 18.05% equity; debt 2.00% (2.00% after tax); weights 92.0%E / 8.0%D",
+          "is_percent": true
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
+          "is_percent": true
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "years of mature-company forecast after profitability, before the terminal value",
+          "is_percent": false
+        }
+      ],
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.050060000419616696,
+          "source": "derived",
+          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
+          "is_percent": true
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.055,
+          "source": "default",
+          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
+          "is_percent": true
+        },
+        {
+          "name": "beta",
+          "value": 2.372349429048373,
+          "source": "derived",
+          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.02003479580691838,
+          "source": "derived",
+          "detail": "median interest expense / average debt (FY2025, FY2024, FY2023, FY2022)",
+          "is_percent": true
+        }
+      ],
+      "sensitivity": {
+        "target_operating_margins": [
+          0.05,
+          0.1,
+          0.15,
+          0.2,
+          0.25
+        ],
+        "years_to_profitability": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "grid": [
+          [
+            0.33780355442670434,
+            -0.5779503354895966,
+            -1.3447370961618133,
+            -1.9900790872703855,
+            -2.536068510734916
+          ],
+          [
+            2.3659452333835347,
+            1.1373009903483964,
+            0.1186737780614012,
+            -0.730292984315026,
+            -1.4417376255125074
+          ],
+          [
+            4.394086912340368,
+            2.8525523161863906,
+            1.5820846522846141,
+            0.5294931186403352,
+            -0.3474067402901003
+          ],
+          [
+            6.422228591297198,
+            4.567803642024385,
+            3.0454955265078287,
+            1.7892792215956947,
+            0.7469241449323099
+          ],
+          [
+            8.450370270254028,
+            6.283054967862377,
+            4.5089064007310435,
+            3.049065324551056,
+            1.8412550301547168
+          ]
+        ],
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "warnings": [
+        "On your assumptions Intel Corporation burns $8.8bn of cash before turning profitable, covered by today's $45.9bn only if nothing goes worse than you have assumed.",
+        "Every dollar of this figure comes from after your assumed turn to profit. The years before it subtract value, so the figure is a statement about a future you have described, and nothing else."
+      ]
+    }
+  },
+  "qs_hypothetical_refused": {
+    "status_code": 422,
+    "body": {
+      "code": "hypothetical_not_applicable",
+      "message": "No hypothetical is built for QuantumScape Corporation, even on assumptions you supply yourself.",
+      "method": "hypothetical",
+      "reasons": [
+        "QuantumScape Corporation reported no revenue in its 2025 financial year. Growth of any rate applied to nothing is still nothing, so there is no hypothetical to build: both the revenue and the margin would have to be invented outright."
+      ]
+    }
+  },
+  "rivn_hypothetical_refused": {
+    "status_code": 422,
+    "body": {
+      "code": "hypothetical_not_applicable",
+      "message": "A speculative estimate is already produced for Rivian Automotive, Inc from its own figures, so there is no need to build one by hand. Adjust that estimate's assumptions instead.",
+      "method": "hypothetical",
+      "reasons": []
+    }
+  }
+}

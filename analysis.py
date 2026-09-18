@@ -35,6 +35,8 @@ from relative import (FINANCIAL_MULTIPLES, MAX_AUTO_PEERS, MAX_PEERS,
                       MIN_APPLICABLE_MULTIPLES, MIN_PEERS, SIZE_BAND,
                       STANDARD_MULTIPLES, WIDE_RANGE_RATIO, RelativeResult,
                       peer_exclusion, run_relative)
+from hypothetical import (HYPOTHETICAL_HEADLINE, HypotheticalRefused,
+                          UserAssumptions, validate)
 from speculative import SpeculativeResult, run_speculative
 from speculative_assumptions import (MARGIN_IMPROVEMENT_PACE,
                                      DerivedSpeculativeAssumptions,
@@ -84,12 +86,41 @@ NOT_DDM_INDUSTRIES = frozenset({"Insurance Brokers"})
 MAX_FEE_BUSINESS_INTEREST_BURDEN = 0.10
 INTEREST_BURDEN_WINDOW = 3
 
+# A loan book this large relative to revenue means lending IS the business.
+# Probing 36 financial companies found nothing between 0.26x (PayPal, whose
+# instalment receivables are incidental to taking payments) and 2.4x (Schwab,
+# a broker with a bank inside it). Every bank and lender sat above: AXP 3.1x,
+# Goldman 4.1x, Synchrony 6.2x, Capital One 8.1x, Ally 15.3x.
+MAX_FEE_BUSINESS_LOANS_TO_REVENUE = 1.0
+
+# Interest a company EARNS, as a share of revenue. A lender whose interest
+# expense line is missing is still given away by its interest income: fee
+# businesses probed at or below 2.9%, lenders at or above 35%.
+MAX_FEE_BUSINESS_INTEREST_INCOME = 0.25
+
+# An asset manager whose own balance sheet dwarfs its revenue is holding
+# investment assets rather than collecting fees on someone else's - an annuity
+# or insurance book, usually. Deliberately scoped to asset managers: exchanges
+# hold member collateral (CME 30x, ICE 10.8x) and are fee businesses all the
+# same. The weakest test here, and the only one without a clean gap behind it.
+MAX_ASSET_MANAGER_ASSETS_TO_REVENUE = 10.0
+
+ASSET_MANAGEMENT_INDUSTRY = "Asset Management"
+
 
 @dataclass
 class FinancialClassification:
     kind: str                       # see classify_financial()
     industry: str
     interest_burden: float | None
+
+    # Which test refused it, for the message that explains the refusal.
+    evidence: str = ""
+
+    # True when a fee business was admitted because no lending evidence was
+    # found, rather than because the data positively showed there is none.
+    # See lending_not_itemised_warning().
+    admitted_on_absence: bool = False
 
 
 def interest_burden(fin: CompanyFinancials) -> float | None:
@@ -98,6 +129,55 @@ def interest_burden(fin: CompanyFinancials) -> float | None:
               for row in fin.income[:INTEREST_BURDEN_WINDOW]
               if row.get("interestExpense") is not None and num(row, "revenue") > 0]
     return median(ratios) if ratios else None
+
+
+def _income_ratio(fin: CompanyFinancials, field: str) -> float | None:
+    """Median of `field` / revenue over recent years, or None if never reported."""
+    ratios = [abs(num(row, field)) / num(row, "revenue")
+              for row in fin.income[:INTEREST_BURDEN_WINDOW]
+              if row.get(field) is not None and num(row, "revenue") > 0]
+    return median(ratios) if ratios else None
+
+
+def _latest_revenue(fin: CompanyFinancials) -> float:
+    return num(fin.income[0], "revenue") if fin.income else 0.0
+
+
+def loans_to_revenue(fin: CompanyFinancials) -> float | None:
+    """The loan book against a year of revenue, or None when none is reported."""
+    if not fin.balance or not fin.income:
+        return None
+    loans = fin.balance[0].get("loans")
+    revenue = _latest_revenue(fin)
+    if loans is None or revenue <= 0:
+        return None
+    return abs(num(fin.balance[0], "loans")) / revenue
+
+
+def assets_to_revenue(fin: CompanyFinancials) -> float | None:
+    """The whole balance sheet against a year of revenue."""
+    if not fin.balance or not fin.income:
+        return None
+    assets = fin.balance[0].get("totalAssets")
+    revenue = _latest_revenue(fin)
+    if assets is None or revenue <= 0:
+        return None
+    return abs(num(fin.balance[0], "totalAssets")) / revenue
+
+
+def underwrites_insurance(fin: CompanyFinancials) -> bool:
+    """
+    Whether the company earns premiums or pays policyholder benefits.
+
+    Insurance inside a company the industry label calls something else -
+    Ameriprise files as Asset Management and earns $2.3bn of premiums. A DCF
+    on an underwriter is meaningless whatever the label says.
+    """
+    for row in fin.income[:INTEREST_BURDEN_WINDOW]:
+        for field in ("premiumsEarned", "policyholderBenefits"):
+            if row.get(field) is not None and abs(num(row, field)) > 0:
+                return True
+    return False
 
 
 def classify_financial(fin: CompanyFinancials) -> FinancialClassification:
@@ -134,11 +214,56 @@ def classify_financial(fin: CompanyFinancials) -> FinancialClassification:
         # so without an industry the two are indistinguishable.
         return FinancialClassification("unclassified", industry, None)
 
+    # --- What the company's own statements say it does ---------------------
+    #
+    # Ordered, first match wins, and every test looks for POSITIVE evidence of
+    # lending or underwriting. A missing interest-expense line used to end the
+    # sequence here as "unclassified"; it no longer does, because absence of
+    # one line is not evidence of a loan book - Robinhood and T. Rowe Price
+    # publish no interest expense at all and neither lends the way a bank does.
     burden = interest_burden(fin)
-    if burden is None:
-        return FinancialClassification("unclassified", industry, None)
-    kind = "balance_sheet" if burden > MAX_FEE_BUSINESS_INTEREST_BURDEN else "fee_based"
-    return FinancialClassification(kind, industry, burden)
+
+    if underwrites_insurance(fin):
+        return FinancialClassification(
+            "balance_sheet", industry, burden,
+            evidence="underwrites insurance")
+
+    loans = loans_to_revenue(fin)
+    if loans is not None and loans >= MAX_FEE_BUSINESS_LOANS_TO_REVENUE:
+        return FinancialClassification(
+            "balance_sheet", industry, burden,
+            evidence=f"a loan book {loans:.1f} times its annual revenue")
+
+    if burden is not None and burden > MAX_FEE_BUSINESS_INTEREST_BURDEN:
+        return FinancialClassification(
+            "balance_sheet", industry, burden,
+            evidence=f"interest expense of {burden:.0%} of revenue")
+
+    earned = _income_ratio(fin, "interestIncome")
+    if earned is not None and earned > MAX_FEE_BUSINESS_INTEREST_INCOME:
+        return FinancialClassification(
+            "balance_sheet", industry, burden,
+            evidence=f"interest income of {earned:.0%} of revenue")
+
+    if industry == ASSET_MANAGEMENT_INDUSTRY:
+        assets = assets_to_revenue(fin)
+        if assets is not None and assets > MAX_ASSET_MANAGER_ASSETS_TO_REVENUE:
+            return FinancialClassification(
+                "balance_sheet", industry, burden,
+                evidence=f"a balance sheet {assets:.0f} times its annual revenue")
+
+    # Nothing here lends or underwrites as far as this data can see. Without a
+    # balance sheet to check, that conclusion rests on nothing: refuse instead.
+    if not fin.balance or fin.balance[0].get("totalAssets") is None:
+        return FinancialClassification("unclassified", industry, burden)
+
+    return FinancialClassification(
+        "fee_based", industry, burden,
+        # An interest-expense line, even a small one, is the company stating
+        # what its borrowing costs. With none at all, the fee conclusion rests
+        # on absent lines rather than reported ones, and the valuation says so.
+        admitted_on_absence=burden is None)
+
 
 MIN_HISTORY_YEARS = 2
 HIGH_TV_SHARE = 0.90  # terminal value share of EV above which we warn
@@ -153,6 +278,12 @@ class Suitability:
     # company was refused without parsing prose. Internal: never serialised,
     # so no response changes because they exist.
     codes: list[str] = field(default_factory=list)
+
+    # Not caveats about an assumption but doubts about the method itself: the
+    # company was valued, and the model may still not fit it. These belong
+    # beside the figure they qualify, not among notes on growth or tax, so
+    # they are kept apart from `warnings` and never repeated in it.
+    method_fit: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -205,10 +336,43 @@ def financial_refusal_reason(fin: CompanyFinancials,
             understated = (
                 "it counts only dividends, so it would understate an institution "
                 "that returns capital through buybacks, as lenders commonly do")
+        if classification.evidence == "underwrites insurance":
+            # Filed under something other than Insurance, but earning premiums
+            # all the same - Ameriprise files as an asset manager. What it does
+            # decides the treatment, not what the label says.
+            return (
+                f"{fin.company_name} earns insurance premiums, whatever its "
+                f"{classification.industry} label says. An underwriter's money is made by "
+                "holding reserves against policies and investing the float, so free cash "
+                "flow to the firm does not describe it and a DCF would produce a figure "
+                "with no economic meaning. No value is reported rather than a misleading "
+                "one."
+            )
+
+        if classification.evidence.startswith("a balance sheet"):
+            # Caught by size alone, which is the weakest evidence here: it says
+            # the company holds investment assets, not what they are. Refused
+            # rather than guessed, and the wording claims no more than that.
+            return (
+                f"{fin.company_name} runs {classification.evidence} - filed as "
+                f"{classification.industry}, but holding an investment book of its own "
+                "rather than only collecting fees on other people's. That balance sheet is "
+                "usually an annuity or insurance business, and free cash flow to the firm "
+                "does not describe one. This data cannot say which it is, so no value is "
+                "reported rather than one that assumes the fee business is the whole "
+                "company."
+            )
+
+        # "a loan book 3.1 times its annual revenue", "interest expense of 34%
+        # of revenue".
+        evidence = classification.evidence or (
+            f"interest expense of {classification.interest_burden:.0%} of revenue"
+            if classification.interest_burden is not None else "a lender's balance sheet")
+        article = "an" if classification.industry[:1].upper() in "AEIOU" else "a"
         return (
-            f"{fin.company_name} is a {classification.industry} company whose "
-            f"interest expense is {classification.interest_burden:.0%} of its revenue. "
-            "Borrowing is part of how it earns that revenue rather than how it is "
+            f"{fin.company_name} is {article} {classification.industry} company with "
+            f"{evidence}. "
+            "Lending is part of how it earns that revenue rather than how it is "
             "financed, so - as for a bank - unlevered free cash flow and an "
             "enterprise-to-equity bridge are not meaningful, and a DCF would produce "
             "a figure with no economic meaning. A dividend discount model is not "
@@ -230,8 +394,8 @@ def financial_refusal_reason(fin: CompanyFinancials,
 
     missing = ("its industry is not available from the data source"
                if classification.industry == "Unknown"
-               else "the data source reports no interest expense to show that "
-                    "borrowing is not part of how it earns its revenue")
+               else "the data source published no balance sheet to show whether it "
+                    "lends")
     return (
         f"{fin.company_name} is in the {fin.sector} sector, but {missing}. Without "
         "that it cannot be told apart from a bank, insurer or lender, for which a "
@@ -265,6 +429,29 @@ def _count(n: int, noun: str) -> str:
     return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
 
 
+def lending_not_itemised_warning(fin: CompanyFinancials) -> str:
+    """
+    The caveat a fee-earning financial carries when nothing in its statements
+    itemises lending.
+
+    The classifier admits these companies because no loan book, no interest
+    expense and no interest income appear - which is the absence of evidence
+    rather than evidence of absence. Robinhood is the case that matters: it
+    earns real money from margin and securities lending, and this data shows
+    none of it. The valuation is still produced, because refusing every
+    company whose provider omits a line would refuse most fee businesses; but
+    it is produced with this attached.
+    """
+    return (
+        f"{fin.company_name} is a financial company, and its published statements do "
+        "not itemise interest or a loan book. Part of its revenue may come from "
+        "lending activity - margin loans, securities lending, interest on customer "
+        "balances - that this data does not fully capture. A discounted cash flow "
+        "values a business by the cash its operations throw off, and it describes "
+        "lending income poorly, so treat this valuation with extra caution."
+    )
+
+
 def uses_dividend_discount_model(fin: CompanyFinancials) -> bool:
     """
     Whether *fin* is valued with the DDM rather than the DCF: genuine banks
@@ -284,6 +471,7 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
     """Decide whether a standard growth-perpetuity DCF applies to this company."""
     reasons: list[str] = []
     warnings: list[str] = []
+    method_fit: list[str] = []
     codes: list[str] = []
 
     a = derived.assumptions
@@ -342,6 +530,11 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
     elif classification.kind in ("balance_sheet", "unclassified"):
         codes.append("financial")
         reasons.append(financial_refusal_reason(fin, classification))
+    elif classification.admitted_on_absence:
+        # Valued, but the fee conclusion rests on lines the provider did not
+        # publish rather than on lines that say there is no lending. A doubt
+        # about whether a DCF fits the company at all, so it is carried as one.
+        method_fit.append(lending_not_itemised_warning(fin))
 
     # --- Blocking: perpetuity formula breaks down -------------------------
     if a.terminal_growth >= a.wacc:
@@ -393,7 +586,7 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
             warnings.append(clamp_warning(prov, fin.company_name))
 
     return Suitability(suitable=not reasons, reasons=reasons, warnings=warnings,
-                       codes=codes)
+                       codes=codes, method_fit=method_fit)
 
 
 def value_company(ticker: str,
@@ -957,6 +1150,341 @@ def speculative_disclaimer(report: SpeculativeReport) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# The user-built hypothetical - the last opt-in, and the weakest claim here
+#
+# Reached only from the speculative refusal, and only for companies that refusal
+# turned down for the SHAPE of their trajectory - shrinking revenue, a gross
+# margin that does not cover costs, losses too deep to close in a decade. Those
+# are the judgements the user replaces with their own; the ones that stay are
+# the ones no assumption can replace. See hypothetical.py.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RealityContrast:
+    """One assumed figure, beside the company's actual one."""
+    name: str
+    label: str
+    assumed: float
+    actual: float | None
+    statement: str
+    contradicts: bool
+
+
+@dataclass
+class HypotheticalReport:
+    ticker: str
+    company_name: str
+    sector: str
+    industry: str
+    exchange: str
+    fiscal_year: str
+    user: UserAssumptions
+    derived: DerivedSpeculativeAssumptions
+    result: SpeculativeResult
+    why_standard_refused: list[str]
+    why_speculative_refused: list[str]
+    reality: list[RealityContrast]
+    warnings: list[str]
+
+    @property
+    def method(self) -> str:
+        return "hypothetical"
+
+
+def hypothetical_available(report: SpeculativeReport) -> bool:
+    """
+    Whether the user-built hypothetical can be offered on this refusal.
+
+    True only when the speculative engine declined for reasons the user's own
+    assumptions genuinely replace. A company with no revenue, too little of it,
+    or too short a history is refused here as well, so the opt-in is not
+    offered where it would only be refused a step later.
+    """
+    if report.suitable:
+        return False
+    return not _hypothetical_blocks(report.derived)
+
+
+def _hypothetical_blocks(derived: DerivedSpeculativeAssumptions,
+                         name: str = "This company",
+                         years_available: int | None = None) -> list[str]:
+    """
+    The refusals no user assumption can lift.
+
+    Growth, margin and the horizon are the user's to assume. What is left is
+    the existence of a business to assume them about: revenue to grow, enough
+    of it to anchor the arithmetic, and enough history to show what the
+    assumption contradicts.
+    """
+    inputs, d = derived.inputs, derived.diagnostics
+    fiscal_year = d["fiscal_year"]
+    blocks: list[str] = []
+
+    if inputs.revenue <= 0:
+        blocks.append(
+            f"{name} reported no revenue in its {fiscal_year} financial year. Growth of any "
+            "rate applied to nothing is still nothing, so there is no hypothetical to build: "
+            "both the revenue and the margin would have to be invented outright.")
+    elif inputs.revenue < MIN_SPECULATIVE_REVENUE_MM:
+        blocks.append(
+            f"{name}'s revenue of {_money(inputs.revenue * 1e6)} in its {fiscal_year} financial "
+            "year is too small to anchor a projection. Nearly all of any figure would come "
+            "from the assumed growth rather than from the business as it is.")
+
+    if years_available is not None and years_available < MIN_HISTORY_YEARS:
+        blocks.append(
+            f"Only {_count(years_available, 'year')} of financial history is available, too "
+            "little to show what an assumed turnaround would be departing from. This screen "
+            "exists to set assumptions against a real trajectory; there is none to set them "
+            "against.")
+
+    return blocks
+
+
+def _reality_contrast(user: UserAssumptions,
+                      derived: DerivedSpeculativeAssumptions,
+                      name: str) -> list[RealityContrast]:
+    """
+    Each assumed driver beside what the company actually did.
+
+    The point of this screen is that the two disagree, so the comparison is
+    computed for every input and shown whether or not it flatters the
+    hypothetical.
+    """
+    d = derived.diagnostics
+    short = name.rstrip(".")
+    fiscal_year = d["fiscal_year"]
+    cagr, latest = d["revenue_cagr"], d["latest_revenue_growth"]
+    actual_margin, gross = d["operating_margin"], d["gross_margin"]
+    out: list[RealityContrast] = []
+
+    # --- Revenue growth ------------------------------------------------------
+    if cagr is None and latest is None:
+        growth_statement = (
+            f"No usable revenue history for {short}, so there is nothing to compare this "
+            "assumption against.")
+        contradicts = False
+        actual_growth = None
+    else:
+        actual_growth = cagr if cagr is not None else latest
+        direction = "fallen" if actual_growth < 0 else "grown"
+        recent = ("" if latest is None
+                  else f", and {latest:+.1%} in the latest year alone")
+        growth_statement = (
+            f"You have assumed revenue grows {user.revenue_growth:+.1%} a year. "
+            f"{short}'s revenue has actually {direction} {abs(actual_growth):.1%} a "
+            f"year{recent}.")
+        contradicts = user.revenue_growth > actual_growth
+
+    out.append(RealityContrast(
+        name="revenue_growth",
+        label="Revenue growth",
+        assumed=user.revenue_growth,
+        actual=actual_growth,
+        statement=growth_statement,
+        contradicts=contradicts,
+    ))
+
+    # --- Target operating margin ---------------------------------------------
+    if actual_margin is None:
+        margin_statement = (
+            f"{short}'s operating margin is not available, so there is nothing to compare "
+            "this assumption against.")
+        contradicts = False
+    else:
+        gross_note = ("" if gross is None else
+                      f" Its gross margin - what is left before operating costs - was "
+                      f"{gross:.0%}.")
+        margin_statement = (
+            f"You have assumed an operating margin of {user.target_operating_margin:.0%}. "
+            f"{short} actually earned {actual_margin:.1%} in its {fiscal_year} financial "
+            f"year.{gross_note}")
+        contradicts = user.target_operating_margin > actual_margin
+
+    out.append(RealityContrast(
+        name="target_operating_margin",
+        label="Target operating margin",
+        assumed=user.target_operating_margin,
+        actual=actual_margin,
+        statement=margin_statement,
+        contradicts=contradicts,
+    ))
+
+    # --- Years to the target -------------------------------------------------
+    if actual_margin is None:
+        years_statement = (
+            "No operating margin is available, so the pace this assumes cannot be compared "
+            "with anything.")
+        contradicts = False
+    else:
+        pace = (user.target_operating_margin - actual_margin) / user.years_to_target
+        years_statement = (
+            f"Reaching it in {_count(user.years_to_target, 'year')} means the operating margin "
+            f"improving by about {pace * 100:.1f} percentage points every year, every year, "
+            f"starting from {actual_margin:.1%}. Nothing in {short}'s figures says that "
+            "happens.")
+        contradicts = True
+
+    out.append(RealityContrast(
+        name="years_to_target",
+        label="Years to the target",
+        assumed=float(user.years_to_target),
+        actual=actual_margin,
+        statement=years_statement,
+        contradicts=contradicts,
+    ))
+
+    return out
+
+
+def value_company_hypothetically(ticker: str,
+                                 user: UserAssumptions) -> HypotheticalReport:
+    """
+    Run the projection engine on assumptions the USER supplied.
+
+    Nothing about the three drivers is derived, defaulted or suggested here.
+    The remaining inputs - the discount rate, tax, the reinvestment ratios -
+    come from the company's own figures exactly as they do for the speculative
+    estimate, because they are not what the user is being asked to assume.
+
+    Raises HypotheticalRefused when the company is not one this applies to, or
+    when the assumptions are not yet a hypothetical about a profit.
+    """
+    validate(user)
+
+    # Eligibility is judged by the speculative path itself, so this can never
+    # become a way around a refusal the speculative engine did not make.
+    try:
+        speculative = value_company_speculatively(ticker)
+    except SpeculativeNotApplicable as e:
+        raise HypotheticalRefused(
+            f"{str(e).rstrip()} A hypothetical is offered only where a speculative estimate "
+            "was, and was then refused for the shape of the company's trajectory.",
+            reasons=e.reasons) from e
+
+    name = speculative.company_name
+    if speculative.suitable:
+        raise HypotheticalRefused(
+            f"A speculative estimate is already produced for {name.rstrip('.')} from its own "
+            "figures, so there is no need to build one by hand. Adjust that estimate's "
+            "assumptions instead.")
+
+    fin = fetch_financials(ticker)
+    blocks = _hypothetical_blocks(speculative.derived, name, fin.years_available)
+    if blocks:
+        raise HypotheticalRefused(
+            f"No hypothetical is built for {name.rstrip('.')}, even on assumptions you supply "
+            "yourself.",
+            reasons=blocks)
+
+    base, _ = base_year_from(fin)
+    derived = derive_speculative_assumptions(fin, base, overrides={
+        "speculative_revenue_growth": user.revenue_growth,
+        "target_operating_margin": user.target_operating_margin,
+        "years_to_profitability": user.years_to_target,
+    })
+    result = run_speculative(derived.inputs, derived.assumptions)
+
+    # What this path would take, in the same terms the speculative estimate
+    # uses - the arithmetic does not care who chose the numbers.
+    warnings: list[str] = []
+    short = name.rstrip(".")
+    burn = result.cumulative_cash_burn
+    if burn > derived.inputs.cash:
+        warnings.append(
+            f"On your assumptions {short} burns ${burn / 1e3:,.1f}bn of cash before turning "
+            f"profitable, against ${derived.inputs.cash / 1e3:,.1f}bn of cash and investments "
+            "today. The rest would have to be raised, most likely by issuing shares that "
+            "dilute existing holders.")
+    elif burn > 0:
+        warnings.append(
+            f"On your assumptions {short} burns ${burn / 1e3:,.1f}bn of cash before turning "
+            f"profitable, covered by today's ${derived.inputs.cash / 1e3:,.1f}bn only if "
+            "nothing goes worse than you have assumed.")
+
+    share = result.share_from_after_profitability
+    if share is not None and share >= 1:
+        warnings.append(
+            "Every dollar of this figure comes from after your assumed turn to profit. The "
+            "years before it subtract value, so the figure is a statement about a future you "
+            "have described, and nothing else.")
+    elif share is not None and share > HIGH_TV_SHARE:
+        warnings.append(
+            f"{share:.0%} of this figure comes from after your assumed turn to profit, so it "
+            "rests almost entirely on a future you have described.")
+
+    gross = derived.diagnostics["gross_margin"]
+    if gross is not None and gross < user.target_operating_margin:
+        warnings.append(
+            f"{short}'s gross margin was {gross:.0%} - below the "
+            f"{user.target_operating_margin:.0%} operating margin you have assumed. Operating "
+            "profit comes out of gross profit, so this needs the product economics to change, "
+            "not just costs to be cut.")
+
+    if result.value_per_share <= 0:
+        warnings.append(
+            "Even on your own assumptions, the losses on the way and the debt outweigh the "
+            "profitable business at the end, so the figure is negative.")
+
+    return HypotheticalReport(
+        ticker=fin.ticker,
+        company_name=name,
+        sector=fin.sector,
+        industry=fin.industry,
+        exchange=fin.exchange,
+        fiscal_year=derived.diagnostics["fiscal_year"],
+        user=user,
+        derived=derived,
+        result=result,
+        why_standard_refused=speculative.why_standard_refused,
+        why_speculative_refused=speculative.suitability.reasons,
+        reality=_reality_contrast(user, derived, name),
+        warnings=warnings,
+    )
+
+
+def hypothetical_disclaimer(report: HypotheticalReport) -> str:
+    """
+    The strongest disclaimer in the app.
+
+    Stronger than the speculative one, and differently so: that figure rests on
+    assumptions the model derived from the company's own trajectory. This one
+    rests on assumptions the user supplied, for a company whose actual figures
+    point the other way. The text says both, names the numbers, and never once
+    calls the output an estimate of value.
+    """
+    u = report.user
+    d = report.derived.diagnostics
+    short = report.company_name.rstrip(".")
+    cagr, latest = d["revenue_cagr"], d["latest_revenue_growth"]
+    actual_growth = cagr if cagr is not None else latest
+    margin = d["operating_margin"]
+
+    contradiction = ""
+    if actual_growth is not None and u.revenue_growth > actual_growth:
+        direction = "falling" if actual_growth < 0 else "growing"
+        contradiction = (
+            f" {short}'s revenue is actually {direction} {abs(actual_growth):.1%} a year, so "
+            "this figure assumes a reversal the company's own figures do not show.")
+    margin_clause = f" from {margin:.1%} today" if margin is not None else ""
+
+    return (
+        f"THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT {short.upper()} IS "
+        f"WORTH. It is arithmetic on assumptions you typed in. {short} loses money and was "
+        "refused a standard valuation; it was then refused a speculative estimate as well, "
+        "because its own figures show no path to profitability to project. Nothing here is "
+        f"derived from the company's data: you have assumed revenue grows {u.revenue_growth:+.1%} "
+        f"a year and that the operating margin reaches {u.target_operating_margin:.0%}"
+        f"{margin_clause} within {_count(u.years_to_target, 'year')}, and the figure below is "
+        f"what those assumptions imply.{contradiction} Change any one of them and it moves by "
+        "multiples or changes sign. Treat it as a way of seeing what your own beliefs would "
+        "have to be worth, not as information about the company, and never as a reason to buy "
+        "or sell."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Relative valuation - a market-based second opinion, beside an intrinsic value
 #
 # Never a replacement. It is produced only alongside a DCF or DDM valuation that
@@ -1099,8 +1627,8 @@ def value_company_relatively(ticker: str, peers: list[str] | None = None,
         candidates = [(t, "chosen by you", "in the peer list you supplied", None) for t in explicit]
     else:
         mode = "automatic"
-        rule = (f"Companies that people on Yahoo Finance often look at alongside {intrinsic.ticker} "
-                f"and that are in the same industry ({industry or 'unknown'}), up to "
+        rule = (f"Companies commonly watched alongside {intrinsic.ticker} that are "
+                f"in the same industry ({industry or 'unknown'}), up to "
                 f"{MAX_AUTO_PEERS}. Left out: other share classes, companies whose results and "
                 "share price are in different currencies, out-of-date figures, and companies more "
                 "than ten times larger or smaller.")
@@ -1136,8 +1664,8 @@ def value_company_relatively(ticker: str, peers: list[str] | None = None,
             else:
                 candidates.append((
                     candidate, "selected",
-                    f"in the same industry ({industry}), and among the companies Yahoo Finance "
-                    f"users also watch alongside {intrinsic.ticker}",
+                    f"in the same industry ({industry}), and among the companies "
+                    f"commonly watched alongside {intrinsic.ticker}",
                     candidate_industry))
 
         for extra in added:
@@ -1167,7 +1695,7 @@ def value_company_relatively(ticker: str, peers: list[str] | None = None,
         try:
             figures = fetch_market_figures(candidate)
         except TickerNotFoundError:
-            excluded.append(ExcludedPeer(candidate, None, "not found on Yahoo Finance"))
+            excluded.append(ExcludedPeer(candidate, None, "not found with the market data provider"))
             continue
         except (RateLimitedError, DataUnavailableError) as e:
             unavailable.append(e)

@@ -306,7 +306,15 @@ class AssumptionSliders extends StatelessWidget {
     this.subtitle =
         'Derived from the filings. Drag to explore — the valuation '
         'updates as you go.',
+    this.noteFor,
   });
+
+  /// An optional line to draw under a given assumption's row.
+  ///
+  /// The hypothetical screen puts the company's real figure here, beside the
+  /// assumption it contradicts. Null everywhere else, where the assumptions
+  /// came from the filings and have nothing to contradict.
+  final Widget? Function(String name)? noteFor;
 
   /// The line under the heading. Overridden where "valuation" would be the
   /// wrong word - the speculative screen above all.
@@ -407,32 +415,35 @@ class AssumptionSliders extends StatelessWidget {
           style: context.text.bodySmall?.copyWith(color: colors.textSecondary),
         ),
         const SizedBox(height: AppSpacing.xl),
-        ...specs.map(
-          (spec) => _SliderRow(
-            spec: spec,
-            value: current[spec.name] ?? derived[spec.name] ?? spec.min,
-            derivedValue: derived[spec.name],
-            source: sources[spec.name] ?? '',
-            modified: _isModified(spec.name),
-            // Sliders stay live during a background confirmation: blocking
-            // them would make the panel feel stuck for a network round trip
-            // the user never asked for.
-            enabled: true,
-            onChanged: (v) => onChanged(spec.name, spec.snap(v)),
-            onChangeEnd: onChangeEnd,
-            // A typed value takes exactly the path a drag does: the same
-            // change, then the same end-of-gesture confirmation.
-            onExactValue: (v) {
-              onChanged(spec.name, v);
-              onChangeEnd();
-            },
-            validate: (text) => parseExactValue(
+        ...specs.expand(
+          (spec) => [
+            _SliderRow(
               spec: spec,
-              text: text,
-              current: current,
-              specs: specs,
+              value: current[spec.name] ?? derived[spec.name] ?? spec.min,
+              derivedValue: derived[spec.name],
+              source: sources[spec.name] ?? '',
+              modified: _isModified(spec.name),
+              // Sliders stay live during a background confirmation: blocking
+              // them would make the panel feel stuck for a network round trip
+              // the user never asked for.
+              enabled: true,
+              onChanged: (v) => onChanged(spec.name, spec.snap(v)),
+              onChangeEnd: onChangeEnd,
+              // A typed value takes exactly the path a drag does: the same
+              // change, then the same end-of-gesture confirmation.
+              onExactValue: (v) {
+                onChanged(spec.name, v);
+                onChangeEnd();
+              },
+              validate: (text) => parseExactValue(
+                spec: spec,
+                text: text,
+                current: current,
+                specs: specs,
+              ),
             ),
-          ),
+            ?noteFor?.call(spec.name),
+          ],
         ),
         if (blocked) ...[
           const SizedBox(height: AppSpacing.sm),

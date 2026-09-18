@@ -185,6 +185,12 @@ class ValuationSuccess extends ValuationResult {
   /// answer, not an aside.
   final List<String> warnings;
 
+  /// Doubts about whether the method fits this company at all - not caveats
+  /// about an assumption. Robinhood is the case: valued with a DCF, but part of
+  /// its revenue comes from lending the data does not show. Shown pinned beside
+  /// the figure rather than among [warnings], and never repeated in them.
+  final List<String> methodFitWarnings;
+
   /// How the figure moves across the two key assumptions; null when the
   /// backend sent no grid worth drawing.
   final SensitivityGrid? sensitivity;
@@ -203,6 +209,7 @@ class ValuationSuccess extends ValuationResult {
     this.dividendBasis,
     this.whyNotDcf = '',
     this.warnings = const [],
+    this.methodFitWarnings = const [],
     this.sensitivity,
   });
 
@@ -274,6 +281,10 @@ class ValuationSuccess extends ValuationResult {
       warnings: (json['warnings'] as List<dynamic>? ?? const [])
           .map((w) => w.toString())
           .toList(),
+      methodFitWarnings:
+          (json['method_fit_warnings'] as List<dynamic>? ?? const [])
+              .map((w) => w.toString())
+              .toList(),
       sensitivity: method == ValuationMethod.ddm
           ? SensitivityGrid.fromDdm(
               json['sensitivity'] as Map<String, dynamic>?,
@@ -931,12 +942,199 @@ class SpeculativeSuccess extends SpeculativeOutcome {
 class SpeculativeRefused extends SpeculativeOutcome {
   final String message;
   final List<String> reasons;
-  const SpeculativeRefused(this.message, this.reasons);
+
+  /// True when the backend will accept a hypothetical built from the user's
+  /// own assumptions for this company. Never an endorsement of one: it says
+  /// only that the refusal above can be argued with.
+  final bool hypotheticalAvailable;
+
+  /// The neutral values that screen starts from - no growth, no profit. They
+  /// come from the backend so the app cannot quietly pick friendlier ones.
+  final HypotheticalInputs? placeholders;
+
+  const SpeculativeRefused(
+    this.message,
+    this.reasons, {
+    this.hypotheticalAvailable = false,
+    this.placeholders,
+  });
 }
 
 class SpeculativeFailure extends SpeculativeOutcome {
   final String message;
   const SpeculativeFailure(this.message);
+}
+
+/// The three drivers of a hypothetical, as the user set them.
+///
+/// There is no default constructor value anywhere in this class: every figure
+/// on that screen is the user's, and a forgotten default would quietly become
+/// a suggestion.
+class HypotheticalInputs {
+  final double revenueGrowth;
+  final double targetOperatingMargin;
+  final int yearsToTarget;
+
+  const HypotheticalInputs({
+    required this.revenueGrowth,
+    required this.targetOperatingMargin,
+    required this.yearsToTarget,
+  });
+
+  HypotheticalInputs copyWith({
+    double? revenueGrowth,
+    double? targetOperatingMargin,
+    int? yearsToTarget,
+  }) => HypotheticalInputs(
+    revenueGrowth: revenueGrowth ?? this.revenueGrowth,
+    targetOperatingMargin: targetOperatingMargin ?? this.targetOperatingMargin,
+    yearsToTarget: yearsToTarget ?? this.yearsToTarget,
+  );
+
+  /// True while this is still the neutral starting point rather than anything
+  /// the user has claimed.
+  bool get hasNoProfit => targetOperatingMargin <= 0;
+}
+
+/// One assumed figure beside the company's actual one.
+///
+/// The backend writes the sentence; the app never composes its own, so the
+/// comparison shown can never drift from the figures it describes.
+class RealityContrast {
+  final String name;
+  final String label;
+  final double assumed;
+  final double? actual;
+  final String statement;
+
+  /// True when the assumption is kinder to the company than what happened.
+  final bool contradicts;
+
+  const RealityContrast({
+    required this.name,
+    required this.label,
+    required this.assumed,
+    required this.actual,
+    required this.statement,
+    required this.contradicts,
+  });
+
+  factory RealityContrast.fromJson(Map<String, dynamic> json) =>
+      RealityContrast(
+        name: json['name'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        assumed: (json['assumed'] as num?)?.toDouble() ?? 0,
+        actual: (json['actual'] as num?)?.toDouble(),
+        statement: json['statement'] as String? ?? '',
+        contradicts: json['contradicts'] as bool? ?? false,
+      );
+}
+
+/// Arithmetic on the user's own assumptions. Not a valuation, and named so
+/// that no part of the app can accidentally treat it as one.
+class Hypothetical {
+  final String ticker;
+  final String companyName;
+  final String headline;
+
+  /// The strongest disclaimer the backend produces. Shown in full, above the
+  /// figure, never collapsed.
+  final String disclaimer;
+
+  /// What the user's assumptions imply. Never called a value or an estimate.
+  final double valuePerShare;
+
+  /// Context only. No upside or downside is computed against it, here or
+  /// anywhere else.
+  final double currentPrice;
+
+  final HypotheticalInputs inputs;
+  final List<RealityContrast> reality;
+  final List<String> whyStandardRefused;
+  final List<String> whySpeculativeRefused;
+  final List<String> warnings;
+  final SensitivityGrid? sensitivity;
+
+  const Hypothetical({
+    required this.ticker,
+    required this.companyName,
+    required this.headline,
+    required this.disclaimer,
+    required this.valuePerShare,
+    required this.currentPrice,
+    required this.inputs,
+    required this.reality,
+    required this.whyStandardRefused,
+    required this.whySpeculativeRefused,
+    required this.warnings,
+    this.sensitivity,
+  });
+
+  bool get isNegative => valuePerShare < 0;
+
+  factory Hypothetical.fromJson(Map<String, dynamic> json) {
+    final company = json['company'] as Map<String, dynamic>? ?? const {};
+    final assumed =
+        json['your_assumptions'] as Map<String, dynamic>? ?? const {};
+    List<String> strings(String key) =>
+        (json[key] as List<dynamic>? ?? const [])
+            .map((s) => s.toString())
+            .toList();
+
+    return Hypothetical(
+      ticker: company['ticker'] as String? ?? '',
+      companyName: company['company_name'] as String? ?? '',
+      headline:
+          json['disclaimer_headline'] as String? ??
+          'A HYPOTHETICAL YOU BUILT - NOT A VALUATION',
+      disclaimer: json['disclaimer'] as String? ?? '',
+      valuePerShare: (json['hypothetical_value_per_share'] as num).toDouble(),
+      currentPrice: (json['current_price'] as num?)?.toDouble() ?? 0,
+      inputs: HypotheticalInputs(
+        revenueGrowth: (assumed['revenue_growth'] as num?)?.toDouble() ?? 0,
+        targetOperatingMargin:
+            (assumed['target_operating_margin'] as num?)?.toDouble() ?? 0,
+        yearsToTarget: (assumed['years_to_target'] as num?)?.round() ?? 0,
+      ),
+      reality: (json['reality'] as List<dynamic>? ?? const [])
+          .map((r) => RealityContrast.fromJson(r as Map<String, dynamic>))
+          .toList(),
+      whyStandardRefused: strings('why_standard_valuation_refused'),
+      whySpeculativeRefused: strings('why_speculative_estimate_refused'),
+      warnings: strings('warnings'),
+      sensitivity: SensitivityGrid.fromSpeculative(
+        json['sensitivity'] as Map<String, dynamic>?,
+      ),
+    );
+  }
+}
+
+sealed class HypotheticalOutcome {
+  const HypotheticalOutcome();
+}
+
+class HypotheticalBuilt extends HypotheticalOutcome {
+  final Hypothetical hypothetical;
+  const HypotheticalBuilt(this.hypothetical);
+}
+
+/// The assumptions do not yet describe a profit - the neutral starting point.
+/// Not an error: the user has simply not made a claim yet.
+class HypotheticalIncomplete extends HypotheticalOutcome {
+  final String message;
+  const HypotheticalIncomplete(this.message);
+}
+
+/// Not offered for this company at all, whatever is assumed.
+class HypotheticalRefused extends HypotheticalOutcome {
+  final String message;
+  final List<String> reasons;
+  const HypotheticalRefused(this.message, this.reasons);
+}
+
+class HypotheticalFailure extends HypotheticalOutcome {
+  final String message;
+  const HypotheticalFailure(this.message);
 }
 
 /// One company offered by search: what the dropdown shows and what a tap
@@ -1157,11 +1355,27 @@ class ValuationApi {
           );
         }
       case 422:
+        final placeholders =
+            body['hypothetical_placeholders'] as Map<String, dynamic>?;
         return SpeculativeRefused(
           message,
           (body['reasons'] as List<dynamic>? ?? const [])
               .map((r) => r.toString())
               .toList(),
+          hypotheticalAvailable:
+              body['hypothetical_available'] as bool? ?? false,
+          placeholders: placeholders == null
+              ? null
+              : HypotheticalInputs(
+                  revenueGrowth:
+                      (placeholders['revenue_growth'] as num?)?.toDouble() ?? 0,
+                  targetOperatingMargin:
+                      (placeholders['target_operating_margin'] as num?)
+                          ?.toDouble() ??
+                      0,
+                  yearsToTarget:
+                      (placeholders['years_to_target'] as num?)?.round() ?? 5,
+                ),
         );
       case 429:
         return const SpeculativeFailure(
@@ -1171,6 +1385,85 @@ class ValuationApi {
         return SpeculativeFailure('$kDataUnavailablePrefix\n\n$message');
       default:
         return SpeculativeFailure(message);
+    }
+  }
+
+  /// Arithmetic on assumptions the USER supplied, for a company even the
+  /// speculative estimate refuses.
+  ///
+  /// Every driver is sent explicitly; there is no request this can make that
+  /// leaves one to the backend to choose.
+  Future<HypotheticalOutcome> hypothetical(
+    String ticker,
+    HypotheticalInputs inputs,
+  ) async {
+    final cleaned = ticker.trim().toUpperCase();
+    http.Response response;
+    try {
+      response = await _client
+          .get(
+            Uri.parse(
+              '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}/hypothetical',
+            ).replace(
+              queryParameters: {
+                'revenue_growth': inputs.revenueGrowth.toString(),
+                'target_operating_margin': inputs.targetOperatingMargin
+                    .toString(),
+                'years_to_target': inputs.yearsToTarget.toString(),
+              },
+            ),
+          )
+          .timeout(_timeout);
+    } on TimeoutException {
+      return const HypotheticalFailure(
+        'The server did not respond in time. It may be waking up - try again.',
+      );
+    } catch (_) {
+      return const HypotheticalFailure(
+        'Could not reach the server. Check your connection and try again.',
+      );
+    }
+
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      debugPrint(
+        'unreadable hypothetical response: HTTP ${response.statusCode}',
+      );
+      return const HypotheticalFailure(
+        'The server sent a response the app couldn’t read. Please try again.',
+      );
+    }
+    final message = body['message'] as String? ?? 'Something went wrong.';
+
+    switch (response.statusCode) {
+      case 200:
+        try {
+          return HypotheticalBuilt(Hypothetical.fromJson(body));
+        } catch (e) {
+          debugPrint('could not parse hypothetical for $cleaned: $e');
+          return const HypotheticalFailure(
+            'The result couldn’t be read. Please try again.',
+          );
+        }
+      case 422:
+        final reasons = (body['reasons'] as List<dynamic>? ?? const [])
+            .map((r) => r.toString())
+            .toList();
+        // "No profit assumed yet" is the starting state of the screen, not a
+        // refusal of the company, and is shown as an invitation instead.
+        return body['code'] == 'hypothetical_incomplete'
+            ? HypotheticalIncomplete(message)
+            : HypotheticalRefused(message, reasons);
+      case 429:
+        return const HypotheticalFailure(
+          'Too many requests just now. Wait a moment and try again.',
+        );
+      case 502:
+        return HypotheticalFailure('$kDataUnavailablePrefix\n\n$message');
+      default:
+        return HypotheticalFailure(message);
     }
   }
 

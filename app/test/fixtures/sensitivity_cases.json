@@ -9,15 +9,15 @@
     },
     "suitable": true,
     "intrinsic_value_per_share": 1369.659950044828,
-    "current_price": 330.805,
-    "upside_downside": 3.140384667840051,
+    "current_price": 332.41,
+    "upside_downside": 3.120393339685412,
     "note": "$1,369.66 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 5.00%, an equity risk premium of 5.50%, and 4.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
     "base_year": {
       "revenue": 416161.0,
       "total_debt": 98657.0,
       "cash": 132420.0,
       "shares": 15004.697,
-      "current_price": 330.805,
+      "current_price": 332.41,
       "fiscal_year": "2025"
     },
     "valuation": {
@@ -75,7 +75,7 @@
         "name": "wacc",
         "value": 0.05,
         "source": "override",
-        "detail": "supplied by caller (would have been 0.1078 from derived)",
+        "detail": "supplied by caller (would have been 0.1076 from derived)",
         "is_percent": true
       },
       {
@@ -96,9 +96,9 @@
     "global_levers": [
       {
         "name": "risk_free_rate",
-        "value": 0.05,
+        "value": 0.050060000419616696,
         "source": "derived",
-        "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+        "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
         "is_percent": true
       },
       {
@@ -127,25 +127,25 @@
           0.024410963695874872
         ]
       ],
-      "risk_free_rate": 0.05,
+      "risk_free_rate": 0.050060000419616696,
       "equity_risk_premium": 0.055,
-      "beta": 1.0818714508083755,
-      "cost_of_equity": 0.10950292979446066,
+      "beta": 1.076800064261063,
+      "cost_of_equity": 0.10928400395397515,
       "cost_of_debt": 0.029219891967466587,
       "after_tax_cost_of_debt": 0.024658666148889334,
       "tax_rate": 0.15610002335586043,
-      "equity_value": 4827827404800.0,
+      "equity_value": 4851251544064.0,
       "debt_value": 98657000000.0,
-      "weight_equity": 0.9799741576561419,
-      "weight_debt": 0.020025842343858017,
-      "wacc": 0.10780385194691372
+      "weight_equity": 0.9800689246838084,
+      "weight_debt": 0.01993107531619162,
+      "wacc": 0.10759732997252383
     },
     "wacc_inputs": [
       {
         "name": "risk_free_rate",
-        "value": 0.05,
+        "value": 0.050060000419616696,
         "source": "derived",
-        "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+        "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
         "is_percent": true
       },
       {
@@ -157,9 +157,9 @@
       },
       {
         "name": "beta",
-        "value": 1.0818714508083755,
+        "value": 1.076800064261063,
         "source": "derived",
-        "detail": "computed from 59 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+        "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
         "is_percent": false
       },
       {
@@ -306,9 +306,9 @@
       "sector": "Consumer Cyclical",
       "exchange": "NasdaqGS"
     },
-    "speculative_value_per_share": -3.177228644597736,
-    "current_price": 15.655,
-    "estimate_vs_price": -1.2029529635642118,
+    "speculative_value_per_share": -3.163701980237584,
+    "current_price": 15.23,
+    "estimate_vs_price": -1.2077282981114632,
     "why_standard_valuation_refused": [
       "The company is loss-making: its day-to-day business lost $3.6bn in its 2025 financial year, and it made a loss in 4 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
     ],
@@ -356,8 +356,8 @@
         "operating_margin": -0.5379091640368789,
         "ebit": -3140.845006706908,
         "ufcf": -3372.8871213312163,
-        "discount_factor": 0.8908164357673017,
-        "pv_ufcf": -3004.6232836697086
+        "discount_factor": 0.8910973989644775,
+        "pv_ufcf": -3005.570940819031
       },
       {
         "period": 2,
@@ -365,8 +365,8 @@
         "operating_margin": -0.41032733122950316,
         "ebit": -2596.9201415022662,
         "ufcf": -2807.9273557523156,
-        "discount_factor": 0.7935539222331592,
-        "pv_ufcf": -2228.2417665030334
+        "discount_factor": 0.7940545744412572,
+        "pv_ufcf": -2229.6475615338695
       },
       {
         "period": 3,
@@ -374,8 +374,8 @@
         "operating_margin": -0.2827454984221274,
         "ebit": -1939.6100925534213,
         "ufcf": -2124.419079885515,
-        "discount_factor": 0.7069108765929055,
-        "pv_ufcf": -1501.7749540125633
+        "discount_factor": 0.7075799659204491,
+        "pv_ufcf": -1503.1963801461447
       },
       {
         "period": 4,
@@ -383,8 +383,8 @@
         "operating_margin": -0.1551636656147516,
         "ebit": -1153.7171639047408,
         "ufcf": -1306.4462374131745,
-        "discount_factor": 0.6297278274916309,
-        "pv_ufcf": -822.7055508208139
+        "discount_factor": 0.630522667191086,
+        "pv_ufcf": -823.7439661555135
       },
       {
         "period": 5,
@@ -392,8 +392,8 @@
         "operating_margin": -0.027581832807375806,
         "ebit": -222.29158945067527,
         "ufcf": -336.2565047881181,
-        "discount_factor": 0.560971898789581,
-        "pv_ufcf": -188.63044997133844
+        "discount_factor": 0.5618571087221215,
+        "pv_ufcf": -188.92810756925823
       },
       {
         "period": 6,
@@ -401,18 +401,18 @@
         "operating_margin": 0.09999999999999998,
         "ebit": 873.5554879249373,
         "ufcf": 622.4881489070156,
-        "discount_factor": 0.4997229874453501,
-        "pv_ufcf": 311.07163742113977
+        "discount_factor": 0.5006694081719841,
+        "pv_ufcf": 311.6607731073494
       }
     ],
     "valuation": {
-      "pv_path_sum": -7434.904367556319,
+      "pv_path_sum": -7439.426183116467,
       "cumulative_cash_burn": 9947.93629917034,
       "revenue_at_profitability": 8735.554879249376,
-      "value_at_profitability": 7373.507498424546,
-      "pv_value_at_profitability": 3684.711195063404,
-      "enterprise_value": -3750.193172492915,
-      "equity_value": -3768.193172492915,
+      "value_at_profitability": 7400.64316708142,
+      "pv_value_at_profitability": 3705.2756345546923,
+      "enterprise_value": -3734.1505485617745,
+      "equity_value": -3752.1505485617745,
       "share_from_after_profitability": null
     },
     "assumptions": [
@@ -467,9 +467,9 @@
       },
       {
         "name": "wacc",
-        "value": 0.12256572717885852,
+        "value": 0.12221178196914914,
         "source": "derived",
-        "detail": "CAPM: 5.00% + 1.67x5.50% = 14.16% equity; debt 6.56% (5.19% after tax); weights 78.8%E / 21.2%D",
+        "detail": "CAPM: 5.01% + 1.67x5.50% = 14.17% equity; debt 6.56% (5.19% after tax); weights 78.3%E / 21.7%D",
         "is_percent": true
       },
       {
@@ -490,9 +490,9 @@
     "wacc_inputs": [
       {
         "name": "risk_free_rate",
-        "value": 0.05,
+        "value": 0.050060000419616696,
         "source": "derived",
-        "detail": "US Treasury 10-year (^TNX) as of 2026-09-15",
+        "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
         "is_percent": true
       },
       {
@@ -504,9 +504,9 @@
       },
       {
         "name": "beta",
-        "value": 1.6653691773204014,
+        "value": 1.6657177537392516,
         "source": "derived",
-        "detail": "computed from 57 monthly returns vs ^GSPC (5y), matching Yahoo's convention",
+        "detail": "computed from 57 monthly returns vs ^GSPC (5y), the convention market data providers use",
         "is_percent": false
       },
       {
@@ -541,32 +541,32 @@
           null
         ],
         [
-          -2.6226102324088547,
-          -4.056610296576,
-          -5.459240583474259,
-          -6.831274471664915,
-          -8.173465003678814
+          -2.6168355430473196,
+          -4.051820879966326,
+          -5.455694065035311,
+          -6.829215271550472,
+          -8.173124863185484
         ],
         [
-          -0.39694969771738065,
-          -1.8016723658699207,
-          -3.177228644597736,
-          -4.524295662593055,
-          -5.846753350665166
+          -0.3820635443563543,
+          -1.7873390445341517,
+          -3.163701980237584,
+          -4.511817416700278,
+          -5.835560783311568
         ],
         [
-          1.8287108369740963,
-          0.4532655648361594,
-          -0.9064919861012697,
-          -2.243211853220961,
-          -3.54947440560353
+          1.8527084543346148,
+          0.4771427908980234,
+          -0.8830029681375093,
+          -2.220363603849377,
+          -3.5274944543690787
         ],
         [
-          4.054371371665572,
-          2.685899731424316,
-          1.3421646889601122,
-          0.03064029629671906,
-          -1.2521954605418977
+          4.087480453025583,
+          2.7192927104991167,
+          1.3755812184601879,
+          0.06384485317364583,
+          -1.2194281254265895
         ]
       ],
       "centre_row": 2,

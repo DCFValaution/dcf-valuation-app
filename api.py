@@ -76,10 +76,16 @@ from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       DDMReport, RelativeNotApplicable, RelativeReport,
                       SpeculativeNotApplicable, SpeculativeReport, ValuationReport,
                       honesty_note, relative_comparison, relative_note,
+                      hypothetical_available, hypothetical_disclaimer,
                       speculative_disclaimer, speculative_estimate_available,
                       value_company, value_company_relatively,
-                      value_company_speculatively)
+                      value_company_hypothetically, value_company_speculatively)
 from relative import MAX_PEERS
+from hypothetical import (HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
+                          NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
+                          REVENUE_GROWTH_BOUNDS, TARGET_MARGIN_BOUNDS,
+                          YEARS_TO_TARGET_BOUNDS, HypotheticalRefused,
+                          UserAssumptions)
 from speculative_assumptions import DISCOUNT_INPUT_NAMES, SPECULATIVE_ASSUMPTION_NAMES
 from ddm_assumptions import COST_OF_EQUITY_INPUT_NAMES, DDM_ASSUMPTION_NAMES
 from excel_export import filename_for, workbook_bytes
@@ -444,6 +450,13 @@ class ValuationResponse(BaseModel):
     sensitivity: SensitivityOut
     projection: list[ProjectionYearOut]
     warnings: list[str]
+    method_fit_warnings: list[str] = Field(
+        default_factory=list,
+        description="Doubts about whether this valuation method fits the company at "
+                    "all - not caveats about an assumption. Display beside the figure, "
+                    "before anything else: a reader who sees only the number and its "
+                    "upside or downside must see these too. Never repeated in "
+                    "`warnings`.")
 
 
 class NotSuitableResponse(BaseModel):
@@ -686,6 +699,91 @@ class SpeculativeValuationResponse(BaseModel):
     warnings: list[str]
 
 
+class SpeculativeNotSuitableResponse(NotSuitableResponse):
+    """
+    A speculative refusal, which alone can carry the last opt-in.
+
+    A separate model so no other refusal grows a field: only this screen can
+    offer a hypothetical, because only here has a speculative estimate already
+    been refused.
+    """
+    hypothetical_available: bool = Field(
+        False,
+        description="True when a hypothetical built from the CALLER'S OWN assumptions can be "
+                    "asked for at /valuation/{ticker}/hypothetical. The company was refused a "
+                    "speculative estimate for the shape of its trajectory - shrinking revenue, "
+                    "say - which is a judgement the caller can replace with their own. Never "
+                    "an endorsement: what comes back is not a valuation and not derived from "
+                    "the company's data.")
+    hypothetical_placeholders: dict[str, float] | None = Field(
+        None,
+        description="Deliberately neutral starting values for that screen - no growth, no "
+                    "profit. Not a suggestion, and not derived from the company: they exist "
+                    "so nothing flattering is pre-filled on the caller's behalf.")
+
+
+class RealityContrastOut(BaseModel):
+    """One assumed driver beside what the company actually did."""
+    name: str
+    label: str
+    assumed: float
+    actual: float | None = Field(
+        None, description="The company's own figure, null when it is not available")
+    statement: str = Field(
+        ..., description="Must be displayed beside the input it refers to. This is the "
+                         "contradiction made visible, and the reason the screen exists.")
+    contradicts: bool = Field(
+        ..., description="True when the assumption is more favourable than what happened")
+
+
+class HypotheticalAssumptionsOut(BaseModel):
+    """The three drivers, exactly as the caller supplied them."""
+    revenue_growth: float
+    target_operating_margin: float
+    years_to_target: int
+
+
+class HypotheticalResponse(BaseModel):
+    """
+    Arithmetic on the caller's own assumptions. Not a valuation of any kind.
+
+    Deliberately shares no field name with a valuation response: the figure is
+    hypothetical_value_per_share, there is no upside or downside against the
+    market price, and `method` is "hypothetical" so no client can mistake it
+    for a DCF, a DDM or even a speculative estimate.
+    """
+    method: Literal["hypothetical"] = Field(
+        "hypothetical", description="Arithmetic on the caller's assumptions")
+    is_valuation: Literal[False] = Field(False, description="Always false.")
+    derived_from_company_data: Literal[False] = Field(
+        False,
+        description="Always false. The three drivers came from the caller; only the discount "
+                    "rate, tax and reinvestment ratios come from the company's figures.")
+    disclaimer_headline: str
+    disclaimer: str = Field(
+        ..., description="The strongest disclaimer this API produces. Must be displayed in "
+                         "full, before the figure. Not optional, not collapsible.")
+    company: CompanyOut
+    hypothetical_value_per_share: float = Field(
+        ...,
+        description="What the caller's assumptions imply. Never call this an intrinsic value, "
+                    "a speculative estimate, or a valuation.")
+    current_price: float = Field(
+        ..., description="For context only. No upside or downside is computed against it, "
+                         "deliberately: a percentage would read as a signal.")
+    your_assumptions: HypotheticalAssumptionsOut
+    reality: list[RealityContrastOut]
+    why_standard_valuation_refused: list[str]
+    why_speculative_estimate_refused: list[str]
+    starting_point: SpeculativeStartOut
+    path: list[PathYearOut]
+    valuation: SpeculativeValuationOut
+    assumptions: list[AssumptionOut]
+    wacc_inputs: list[AssumptionOut]
+    sensitivity: SpeculativeSensitivityOut
+    warnings: list[str]
+
+
 class RelativeRequest(BaseModel):
     """A relative valuation with the peer group edited or replaced."""
     model_config = {"extra": "forbid"}
@@ -910,6 +1008,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
             for y in r.years
         ],
         warnings=report.suitability.warnings,
+        method_fit_warnings=report.suitability.method_fit,
     )
 
 
@@ -1448,8 +1547,17 @@ def _respond_speculative(report: SpeculativeReport) -> Any:
     if not report.suitable:
         # Both refusals are given: why the standard valuation declined, and
         # why even a speculative path to profitability could not stand in.
-        body = NotSuitableResponse(
+        body = SpeculativeNotSuitableResponse(
             method="speculative",
+            hypothetical_available=hypothetical_available(report),
+            hypothetical_placeholders=(
+                {
+                    "revenue_growth": NEUTRAL_REVENUE_GROWTH,
+                    "target_operating_margin": NEUTRAL_TARGET_MARGIN,
+                    "years_to_target": float(NEUTRAL_YEARS_TO_TARGET),
+                }
+                if hypothetical_available(report) else None
+            ),
             company=_company_out(report),
             message=(
                 f"No speculative estimate is produced for {report.company_name.rstrip('.')}. "
@@ -1631,6 +1739,120 @@ RELATIVE_RESPONSES: dict = {
     429: {"model": ErrorResponse, "description": "The data source is throttling; peers could not be fetched"},
     502: {"model": ErrorResponse, "description": "Upstream data provider failure"},
 }
+
+
+def _serialise_hypothetical(report: Any) -> HypotheticalResponse:
+    r, d = report.result, report.derived.diagnostics
+    inputs = report.derived.inputs
+    centre = len(r.sensitivity_margins) // 2
+
+    return HypotheticalResponse(
+        disclaimer_headline=HYPOTHETICAL_HEADLINE,
+        disclaimer=hypothetical_disclaimer(report),
+        company=_company_out(report),
+        hypothetical_value_per_share=r.value_per_share,
+        current_price=r.current_price,
+        your_assumptions=HypotheticalAssumptionsOut(
+            revenue_growth=report.user.revenue_growth,
+            target_operating_margin=report.user.target_operating_margin,
+            years_to_target=report.user.years_to_target,
+        ),
+        reality=[RealityContrastOut(name=c.name, label=c.label, assumed=c.assumed,
+                                    actual=c.actual, statement=c.statement,
+                                    contradicts=c.contradicts)
+                 for c in report.reality],
+        why_standard_valuation_refused=report.why_standard_refused,
+        why_speculative_estimate_refused=report.why_speculative_refused,
+        starting_point=SpeculativeStartOut(
+            fiscal_year=d["fiscal_year"],
+            revenue=inputs.revenue,
+            operating_margin=d["operating_margin"],
+            gross_margin=d["gross_margin"],
+            latest_revenue_growth=d["latest_revenue_growth"],
+            revenue_cagr=d["revenue_cagr"],
+            cash=inputs.cash,
+            total_debt=inputs.total_debt,
+            shares=inputs.shares,
+            history=[RevenueHistoryOut(fiscal_year=year, revenue=revenue / 1e6,
+                                       operating_margin=om, gross_margin=gm)
+                     for year, revenue, om, gm in d["revenue_history"]],
+        ),
+        path=[PathYearOut(period=y.period, revenue=y.revenue,
+                          operating_margin=y.operating_margin, ebit=y.ebit, ufcf=y.ufcf,
+                          discount_factor=y.discount_factor, pv_ufcf=y.pv_ufcf)
+              for y in r.path],
+        valuation=SpeculativeValuationOut(
+            pv_path_sum=r.pv_path_sum,
+            cumulative_cash_burn=r.cumulative_cash_burn,
+            revenue_at_profitability=r.revenue_at_profitability,
+            value_at_profitability=r.value_at_profitability,
+            pv_value_at_profitability=r.pv_value_at_profitability,
+            enterprise_value=r.enterprise_value,
+            equity_value=r.equity_value,
+            share_from_after_profitability=r.share_from_after_profitability,
+        ),
+        assumptions=_assumption_list(report.derived.provenance),
+        wacc_inputs=_assumption_list(report.derived.wacc_inputs),
+        sensitivity=SpeculativeSensitivityOut(
+            target_operating_margins=r.sensitivity_margins,
+            years_to_profitability=r.sensitivity_years,
+            grid=r.sensitivity,
+            centre_row=centre,
+            centre_col=centre,
+        ),
+        warnings=report.warnings,
+    )
+
+
+@app.get(
+    "/valuation/{ticker}/hypothetical",
+    tags=["speculative (opt-in)"],
+    summary="OPT-IN: arithmetic on the CALLER'S OWN assumptions for a company even a "
+            "speculative estimate refuses. NOT a valuation.",
+    response_model=HypotheticalResponse,
+    responses={
+        404: {"model": ErrorResponse,
+              "description": "Ticker unknown, malformed, or without statements"},
+        422: {"model": ErrorResponse,
+              "description": "code 'hypothetical_not_applicable' (the company is not one this "
+                             "is offered for), 'hypothetical_incomplete' (no profit assumed "
+                             "yet), or 'hypothetical_out_of_bounds'"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
+        502: {"model": ErrorResponse, "description": "Upstream data provider unavailable"},
+    },
+)
+def get_hypothetical(
+    ticker: Annotated[str, Path(min_length=1, max_length=12, examples=["INTC"])],
+    revenue_growth: Annotated[float, Query(
+        ge=REVENUE_GROWTH_BOUNDS[0], le=REVENUE_GROWTH_BOUNDS[1],
+        description="Assumed annual revenue growth, as a fraction. REQUIRED: nothing is "
+                    "defaulted, because the assumption must be the caller's own.")],
+    target_operating_margin: Annotated[float, Query(
+        ge=TARGET_MARGIN_BOUNDS[0], le=TARGET_MARGIN_BOUNDS[1],
+        description="Assumed operating margin once mature, as a fraction. REQUIRED.")],
+    years_to_target: Annotated[int, Query(
+        ge=YEARS_TO_TARGET_BOUNDS[0], le=YEARS_TO_TARGET_BOUNDS[1],
+        description="Years to reach that margin. REQUIRED.")],
+) -> Any:
+    """
+    The last opt-in, for a company whose own figures support no projection.
+
+    Every driver here is supplied by the caller and none is derived, so the
+    response is arithmetic on their beliefs rather than a reading of the
+    company. It carries the company's actual figures beside each assumption so
+    the contradiction is visible, and the strongest disclaimer in the API.
+    """
+    try:
+        report = _run_valuation(
+            ticker, {},
+            valuer=lambda t, overrides: value_company_hypothetically(
+                t, UserAssumptions(revenue_growth=revenue_growth,
+                                   target_operating_margin=target_operating_margin,
+                                   years_to_target=years_to_target)))
+    except HypotheticalRefused as e:
+        raise ApiError(HTTP_422_NOT_SUITABLE, e.code, str(e),
+                       method="hypothetical", reasons=e.reasons) from e
+    return _serialise_hypothetical(report)
 
 
 @app.get(

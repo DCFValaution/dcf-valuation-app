@@ -53,6 +53,10 @@ def make_fin(ticker="TEST", name="Test Co", sector="Technology",
             "totalInvestments": revenue * 0.10,
             "shortTermDebt": 0.0,
             "longTermDebt": 1_000e6,
+            # Every real balance sheet carries this; the financial classifier
+            # needs it to check whether a company lends, and refuses rather
+            # than guesses when it is missing.
+            "totalAssets": revenue * 1.20,
         })
         cashflow.append({
             "fiscalYear": str(2025 - i),
@@ -82,13 +86,13 @@ def fake_fetch_financials(ticker: str, years: int = 5) -> CompanyFinancials:
         return make_fin(LOSSMAKING, "Lossmaking Inc.", operating_margin=-0.60)
     if ticker == THROTTLED:
         raise RateLimitedError(
-            "Yahoo Finance is rate-limiting requests right now. "
+            "The market data provider is rate-limiting requests right now. "
             "Wait a moment and try again."
         )
     if ticker == BROKEN:
-        raise DataUnavailableError("Yahoo Finance did not return a usable response.")
+        raise DataUnavailableError("The market data provider did not return a usable response.")
     raise TickerNotFoundError(
-        f"No security found for '{ticker}' on Yahoo Finance.\n"
+        f"No security found for '{ticker}' with the market data provider.\n"
         "  Check the spelling. Delisted companies are not covered."
     )
 
@@ -354,7 +358,7 @@ def test_our_rate_limit_is_distinguishable_from_yahoos(client, monkeypatch):
     asking too fast", Yahoo's means "the data source is throttling everyone".
     """
     def throttled(ticker, years=5):
-        raise RateLimitedError("Yahoo is rate-limiting requests right now.")
+        raise RateLimitedError("The market data provider is rate-limiting requests right now.")
 
     monkeypatch.setattr(analysis, "fetch_financials", throttled)
 

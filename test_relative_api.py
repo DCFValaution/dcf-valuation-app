@@ -134,7 +134,10 @@ def test_the_standard_valuation_is_unchanged_and_never_fetches_peers(client, mon
     _explode_relative_fetchers(monkeypatch)
     body = client.get(f"/valuation/{PROFITABLE}").json()
     assert body["method"] == "dcf"
-    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {"method"}
+    # method_fit_warnings is the one field added since: doubts about whether
+    # the method fits at all. An ordinary company has none.
+    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {"method", "method_fit_warnings"}
+    assert body["method_fit_warnings"] == []
 
 
 def test_the_ddm_valuation_never_fetches_peers(client, monkeypatch):
@@ -421,7 +424,7 @@ def test_an_unknown_supplied_peer_is_excluded_not_fatal(client):
                                                  "peers": ["P1", "P2", "P3", "NOSUCH"]})
     assert r.status_code == 200
     excluded = block(r.json())["peer_selection"]["excluded"]
-    assert {"ticker": "NOSUCH", "name": None, "reason": "not found on Yahoo Finance"} in excluded
+    assert {"ticker": "NOSUCH", "name": None, "reason": "not found with the market data provider"} in excluded
 
 
 def test_a_malformed_peer_is_a_400(client):

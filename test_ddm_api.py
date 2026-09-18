@@ -131,7 +131,7 @@ def fake_financials(ticker: str, years: int = 5) -> CompanyFinancials:
 
 def fake_dividends(ticker: str) -> list[tuple[int, float]]:
     if ticker == DIVIDENDS_THROTTLED:
-        raise RateLimitedError("Yahoo Finance is rate-limiting requests right now.")
+        raise RateLimitedError("The market data provider is rate-limiting requests right now.")
     if ticker not in DIVIDENDS:
         raise AssertionError(f"dividends were fetched for {ticker}, which is not a financial")
     return DIVIDENDS[ticker]
@@ -173,7 +173,10 @@ def test_a_financial_is_valued_with_the_ddm_instead_of_refused(client):
 def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
     body = client.get(f"/valuation/{PROFITABLE}").json()
     assert body["method"] == "dcf"
-    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {"method"}
+    # method_fit_warnings is the one field added since: doubts about whether
+    # the method fits at all. An ordinary company has none.
+    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {"method", "method_fit_warnings"}
+    assert body["method_fit_warnings"] == []
 
 
 def test_a_lossmaking_non_financial_is_still_refused_not_rerouted(client):
@@ -399,10 +402,33 @@ def test_a_financial_with_no_industry_is_unclassified_not_guessed():
     assert analysis.classify_financial(financial(None)).kind == "unclassified"
 
 
-def test_a_financial_with_no_interest_data_is_unclassified_not_guessed():
+def test_a_financial_with_no_interest_data_is_read_from_its_balance_sheet():
+    """
+    The case that used to refuse Robinhood and T. Rowe Price.
+
+    A missing interest-expense line is not evidence of a loan book. When
+    nothing else says the company lends - no loans, no interest income, no
+    premiums - it is a fee business, and the valuation carries a warning
+    saying the conclusion rests on absent lines.
+    """
     fin = financial("Credit Services")
     for row in fin.income:
         row["interestExpense"] = None
+
+    classification = analysis.classify_financial(fin)
+
+    assert classification.kind == "fee_based"
+    assert classification.admitted_on_absence is True
+
+
+def test_a_financial_with_no_balance_sheet_is_unclassified_not_guessed():
+    """Without a balance sheet there is nothing to check for lending."""
+    fin = financial("Credit Services")
+    for row in fin.income:
+        row["interestExpense"] = None
+    for row in fin.balance:
+        row["totalAssets"] = None
+
     assert analysis.classify_financial(fin).kind == "unclassified"
 
 
@@ -454,7 +480,7 @@ def test_a_lender_that_is_not_a_bank_is_refused_not_given_a_ddm(client):
     body = r.json()
     assert body["code"] == "not_suitable"
     assert body["method"] == "dcf"
-    reason = next(r for r in body["reasons"] if "interest expense is 35% of its revenue" in r)
+    reason = next(r for r in body["reasons"] if "interest expense of 35% of revenue" in r)
     # The honest reasons: why not a DCF, why not a DDM, and what would be right.
     assert "no economic meaning" in reason
     assert "A dividend discount model is not substituted either" in reason

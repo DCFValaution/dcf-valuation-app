@@ -60,23 +60,118 @@
     @media (prefers-color-scheme: dark) {
       html, body { background-color: #0B0E13; }
     }
-    /* The brand mark, centred while the engine loads, then removed. */
+    /*
+      The branded splash, shown until Flutter paints its first frame. On a
+      phone the app's engine and code are about 10 MB, and the first frame can
+      take several seconds on a cold load; a still logo for that long reads as
+      a frozen app, so it carries a spinner and says what is happening.
+    */
     #boot {
       position: fixed;
       inset: 0;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 20px;
+      /* Never catches a tap meant for the app, however the layers stack. */
+      pointer-events: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    #boot img { width: 96px; height: 96px; }
+    #boot img { width: 88px; height: 88px; border-radius: 20px; }
+    #boot .spinner {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 3px solid rgba(58, 91, 217, 0.18);
+      border-top-color: #3A5BD9;
+      animation: boot-spin 0.9s linear infinite;
+    }
+    #boot .label { font-size: 14px; color: #5B6478; letter-spacing: 0.01em; }
+    @media (prefers-color-scheme: dark) {
+      #boot .spinner { border-color: rgba(142, 163, 255, 0.18); border-top-color: #8EA3FF; }
+      #boot .label { color: #98A2B3; }
+    }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+
+    /* Opt-in timeline for diagnosing startup on a real phone: add ?diag=1. */
+    #diag {
+      position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 2147483647;
+      max-height: 40vh; overflow: auto; padding: 8px 10px; border-radius: 10px;
+      background: rgba(0, 0, 0, 0.82); color: #9FE870;
+      font: 11px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
-  <div id="boot"><img src="icons/Icon-192.png" alt="Intrinsic"></div>
+  <div id="boot" role="progressbar" aria-label="Loading Intrinsic">
+    <img src="icons/Icon-192.png" alt="">
+    <div class="spinner"></div>
+    <div class="label">Loading Intrinsic…</div>
+  </div>
+  <script>
+    // Opt-in startup timeline, drawn on screen so it can be read on a phone
+    // with no desktop attached. Inert unless the URL carries ?diag=1. Records
+    // when the first frame lands, every stall of the page's main thread, every
+    // tap the page receives, and when the server wake-up ping goes out and
+    // comes back - the four things a frozen-looking start could be.
+    (function () {
+      if (!/[?&]diag=1/.test(location.search)) return;
+      var t0 = performance.now();
+      var lines = [];
+      var box = null;
+      function ms() { return Math.round(performance.now() - t0); }
+      function log(text) {
+        lines.push(ms() + 'ms  ' + text);
+        if (!box) {
+          box = document.createElement('div');
+          box.id = 'diag';
+          document.body.appendChild(box);
+        }
+        box.textContent = lines.slice(-40).join(String.fromCharCode(10));
+      }
+      window.addEventListener('flutter-first-frame', function () { log('first frame'); });
+      ['pointerdown', 'touchstart'].forEach(function (type) {
+        window.addEventListener(type, function () { log(type); }, true);
+      });
+      var last = performance.now();
+      setInterval(function () {
+        var now = performance.now();
+        if (now - last > 250) log('main thread stalled ' + Math.round(now - last) + 'ms');
+        last = now;
+      }, 50);
+      var realFetch = window.fetch;
+      if (realFetch) {
+        window.fetch = function (input) {
+          var url = String(input && input.url || input);
+          var watch = /\/health|\/search|\/valuation/.test(url);
+          if (watch) log('-> ' + url.replace(/^https?:\/\/[^/]+/, ''));
+          return realFetch.apply(this, arguments).then(function (r) {
+            if (watch) log('<- ' + r.status + ' ' + url.replace(/^https?:\/\/[^/]+/, ''));
+            return r;
+          }, function (e) {
+            if (watch) log('x  ' + url.replace(/^https?:\/\/[^/]+/, ''));
+            throw e;
+          });
+        };
+      }
+      var realOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        var u = String(url);
+        if (/\/health|\/search|\/valuation/.test(u)) {
+          var path = u.replace(/^https?:\/\/[^/]+/, '');
+          log('-> ' + path);
+          this.addEventListener('loadend', function () { log('<- ' + this.status + ' ' + path); });
+        }
+        return realOpen.apply(this, arguments);
+      };
+      log('page started');
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
   <script>
-    // The loader removes nothing itself; the placeholder goes when Flutter
-    // has painted its first frame.
+    // The splash goes when Flutter has painted its first frame.
     window.addEventListener('flutter-first-frame', function () {
       var boot = document.getElementById('boot');
       if (boot) boot.remove();

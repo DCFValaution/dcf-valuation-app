@@ -220,7 +220,7 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
         # Either quoted by Yahoo or computed from price history when the
         # quote endpoint was unavailable; the profile records which, so the
         # report can say rather than imply.
-        source = fin.profile.get("betaSource") or "profile.beta (Yahoo)"
+        source = fin.profile.get("betaSource") or "quoted by the market data provider"
         beta = record_input("beta", raw_beta, "derived", source)
     else:
         reason = (fin.profile.get("betaSource")

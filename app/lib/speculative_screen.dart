@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 
 import 'assumption_sliders.dart';
 import 'formatting.dart';
+import 'hypothetical_screen.dart';
 import 'sensitivity_table.dart';
 import 'theme.dart';
 import 'ui.dart';
@@ -250,9 +251,31 @@ class _SpeculativeScreenState extends State<SpeculativeScreen> {
           NoteList(title: 'Keep in mind', notes: estimate.warnings),
         ],
       ],
-      SpeculativeRefused(:final message, :final reasons) => [
-        _RefusedPanel(message: message, reasons: reasons),
-      ],
+      SpeculativeRefused(
+        :final message,
+        :final reasons,
+        :final hypotheticalAvailable,
+        :final placeholders,
+      ) =>
+        [
+          _RefusedPanel(message: message, reasons: reasons),
+          // The refusal above stays the answer. This is a further, quieter
+          // step past it - offered only where the backend will take it, and
+          // never pre-computed.
+          if (hypotheticalAvailable && placeholders != null)
+            _HypotheticalOptIn(
+              onOpen: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => HypotheticalScreen(
+                    api: widget.api,
+                    ticker: widget.ticker,
+                    companyName: widget.companyName,
+                    placeholders: placeholders,
+                  ),
+                ),
+              ),
+            ),
+        ],
       SpeculativeFailure(:final message) => [
         Callout(text: message, tone: Tone.caution),
         const SizedBox(height: AppSpacing.md),
@@ -417,6 +440,57 @@ class _EstimateFigure extends StatelessWidget {
 
 /// When even a path to profitability does not apply under the assumptions
 /// chosen: say so in place of the figure, and leave the sliders to move back.
+/// The last opt-in, under the refusal it does not replace.
+///
+/// Deliberately the quietest thing on the screen: secondary text, a text
+/// button rather than a filled one, and a sentence saying what it is before
+/// anything is tapped. What it leads to is arithmetic on the user's own
+/// assumptions, so it is framed as their claim to make, not an offer of a
+/// better answer.
+class _HypotheticalOptIn extends StatelessWidget {
+  const _HypotheticalOptIn({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: AppSpacing.xxl),
+        Divider(color: colors.hairline, height: 1),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          'The refusal above is the app’s answer, and it stands. If you '
+          'disagree, you can supply the assumptions yourself and see what '
+          'they would imply — the company’s own figures will be shown '
+          'beside each one. It is not a valuation, and nothing about it is '
+          'derived from the data.',
+          style: context.text.bodySmall?.copyWith(color: colors.textSecondary),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('hypothetical-opt-in'),
+            onPressed: onOpen,
+            icon: const Icon(Icons.draw_outlined, size: 18),
+            label: const Text(
+              'Build a hypothetical anyway (you set the assumptions)',
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: colors.textSecondary,
+              padding: EdgeInsets.zero,
+              alignment: Alignment.centerLeft,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RefusedPanel extends StatelessWidget {
   const _RefusedPanel({required this.message, required this.reasons});
 
