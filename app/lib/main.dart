@@ -127,6 +127,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
   ValuationResult? _result;
   bool _loading = false;
 
+  /// Which valuation request is the current one. A request that finishes
+  /// after a newer one started is stale, and its answer is dropped.
+  int _valueSeq = 0;
+
   /// True once a request has been running long enough that a cold start is
   /// the likely explanation, so the spinner can say so.
   ///
@@ -320,7 +324,6 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// company they were derived from.
   Future<void> _submit() async {
     final ticker = _controller.text.trim().toUpperCase();
-    if (_loading) return;
 
     // The field takes company names now, so "BANK OF AMERICA" can reach this
     // button. Sent as a ticker it would come back "not found" - accurate, and
@@ -365,10 +368,15 @@ class _ValuationScreenState extends State<ValuationScreen> {
     });
     _confirmTimer?.cancel();
     _confirmSeq++;
+    // A request already running is not cancellable, but its answer can be
+    // discarded: the company the user asked for last is the one they get.
+    final seq = ++_valueSeq;
     _beginWaitingFeedback();
 
     final result = await _api.value(ticker);
-    if (!mounted) return;
+    // Superseded by a later submission - leave that one's waiting state and
+    // its eventual answer alone.
+    if (!mounted || seq != _valueSeq) return;
 
     _endWaitingFeedback();
     setState(() {
@@ -434,7 +442,6 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
   /// A company was picked from the dropdown: fill in its ticker and value it.
   void _selectSearchResult(CompanySearchResult result) {
-    if (_loading) return;
     _controller.value = TextEditingValue(
       text: result.ticker,
       selection: TextSelection.collapsed(offset: result.ticker.length),
@@ -670,7 +677,12 @@ class _ValuationScreenState extends State<ValuationScreen> {
                       textCapitalization: TextCapitalization.characters,
                       textInputAction: TextInputAction.go,
                       autocorrect: false,
-                      enabled: !_loading,
+                      // Never disabled. A valuation can take a minute and a
+                      // half against a sleeping free-tier instance, and a
+                      // field that refuses focus and the keyboard for that
+                      // long is indistinguishable from a frozen app - which
+                      // is exactly how it read on an iPhone, where the rest
+                      // of the screen went on answering taps.
                       style: context.text.titleMedium?.copyWith(
                         letterSpacing: 0.6,
                         fontFeatures: const [],
@@ -716,7 +728,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
                     child: SizedBox(
                       height: 54,
                       child: FilledButton(
-                        onPressed: _loading ? null : _submit,
+                        onPressed: _submit,
                         child: const Text('Value'),
                       ),
                     ),
@@ -736,7 +748,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
                     top: 0,
                     child: ListenableBuilder(
                       listenable: _search,
-                      builder: (context, _) => (_search.isOpen && !_loading)
+                      builder: (context, _) => _search.isOpen
                           // Taps on the dropdown belong to the field, so
                           // choosing a result is not read as tapping away.
                           ? TextFieldTapRegion(

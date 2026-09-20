@@ -159,4 +159,96 @@ void main() {
 
     await drain(tester);
   });
+
+  // The case the iPhone was actually hitting. A valuation against a sleeping
+  // instance waits up to 90 seconds, and for all of it the search bar used to
+  // be disabled: no focus, no keyboard, no typing. The rest of the screen -
+  // the info button among it - went on answering taps, so the app looked
+  // alive and the search bar looked broken.
+  group('while a valuation is waiting on a sleeping server', () {
+    Future<void> startValuation(WidgetTester tester) async {
+      await tester.enterText(find.byType(TextField), 'AAPL');
+      await tester.tap(find.widgetWithText(FilledButton, 'Value'));
+      await tester.pump();
+      // Well past the point where the wait looks like a freeze.
+      await tester.pump(const Duration(seconds: 30));
+    }
+
+    testWidgets('the field still accepts focus and typing', (tester) async {
+      final server = SleepingBackend();
+      await tester.pumpWidget(DcfApp(api: server.api()));
+      await tester.pump();
+      await startValuation(tester);
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.enabled, isNot(false));
+
+      await tester.tap(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), 'MSFT');
+      await tester.pump();
+      expect(find.text('MSFT'), findsWidgets);
+
+      await drain(tester);
+    });
+
+    testWidgets('Value stays pressable, and the later company wins', (
+      tester,
+    ) async {
+      final server = SleepingBackend();
+      await tester.pumpWidget(DcfApp(api: server.api()));
+      await tester.pump();
+      await startValuation(tester);
+
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Value'),
+      );
+      expect(button.onPressed, isNotNull);
+
+      await tester.enterText(find.byType(TextField), 'MSFT');
+      await tester.tap(find.widgetWithText(FilledButton, 'Value'));
+      await tester.pump();
+
+      expect(server.paths, contains('/valuation/MSFT'));
+
+      await drain(tester);
+    });
+
+    testWidgets('typing still brings up suggestions', (tester) async {
+      final server = SleepingBackend();
+      await tester.pumpWidget(DcfApp(api: server.api()));
+      await tester.pump();
+      await startValuation(tester);
+
+      await tester.enterText(find.byType(TextField), 'app');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      expect(find.text('Apple Inc.'), findsOneWidget);
+
+      await drain(tester);
+    });
+
+    testWidgets('a company picked from the list is valued, not ignored', (
+      tester,
+    ) async {
+      final server = SleepingBackend();
+      await tester.pumpWidget(DcfApp(api: server.api()));
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'MSFT');
+      await tester.tap(find.widgetWithText(FilledButton, 'Value'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 30));
+
+      await tester.enterText(find.byType(TextField), 'app');
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+      await tester.tap(find.text('Apple Inc.'));
+      await tester.pump();
+
+      expect(server.paths, contains('/valuation/AAPL'));
+
+      await drain(tester);
+    });
+  });
 }
