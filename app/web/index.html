@@ -62,7 +62,27 @@
     html, body {
       margin: 0;
       padding: 0;
+      /*
+        The height the app is laid out for must be the height that is
+        actually visible. On iOS Safari those are not the same thing at
+        startup: with viewport-fit=cover, 100% resolves to the LARGE
+        viewport - the height the page gets once the address bar has
+        collapsed - while what the user can actually see on load is the
+        small viewport, shorter by the address bar. The app is then laid
+        out for a taller box than the one on screen, and a touch, which
+        arrives in visible-viewport coordinates, is read against the taller
+        layout: it lands below the finger. Safari collapses its address bar
+        on the first interaction, fires a resize, and everything snaps into
+        place - which is exactly why only the first touch is wrong.
+
+        100dvh is the dynamic viewport height: whatever is visible right
+        now, tracked as the browser's own chrome comes and goes. It does
+        not shrink for the software keyboard on iOS, so Flutter's own
+        keyboard inset handling is left alone. The 100% above it is the
+        fallback for anything too old to know dvh.
+      */
       height: 100%;
+      height: 100dvh;
       overflow: hidden;
       background-color: #F5F7FA;
       overscroll-behavior: none;
@@ -262,6 +282,14 @@
       window.addEventListener('flutter-first-frame', function () {
         firstFrameAt = performance.now();
         quietSince = null;
+        // If the browser changed the visible height while the app was
+        // starting - an iPhone collapsing its address bar, a rotation - the
+        // framework may have taken its metrics from the older size. Nudging
+        // it once, before anyone can tap, makes the first touch land where
+        // it was aimed rather than after a correcting tap.
+        requestAnimationFrame(function () {
+          window.dispatchEvent(new Event('resize'));
+        });
       });
     })();
   </script>
