@@ -21,22 +21,39 @@
   -->
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <!-- The browser UI's colour when the page is shown with browser chrome. -->
-  <meta name="theme-color" content="#3A5BD9">
+  <!--
+    The colour of the browser's own surfaces around the page: the toolbar in
+    a Safari tab, and the status bar band in the home-screen app now that the
+    page no longer paints under it. It follows the app's own background
+    rather than its accent, so the band reads as part of the app instead of a
+    coloured strip above it - and it has to be given per colour scheme,
+    because a single value cannot suit both.
+  -->
+  <meta name="theme-color" content="#F5F7FA" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B0E13" media="(prefers-color-scheme: dark)">
+  <!-- For anything that ignores the media attribute and takes the first. -->
+  <meta name="theme-color" content="#F5F7FA">
 
   <!--
     Home-screen behaviour. iOS Safari ignores the web manifest's "display"
     field, so apple-mobile-web-app-capable is what actually removes the
     browser's address bar and toolbar after "Add to Home Screen".
-    black-translucent puts the page behind the status bar, matching the app's
-    own background rather than a black band. It is also why the home-screen
-    app needs the viewport reconciliation further down: it is the one thing
-    that moves the usable viewport out from under the system UI, and iOS
-    does not always report the settled height before the first frame.
+    The status bar style was black-translucent, which put the page behind the
+    status bar. That is what made the home-screen app's usable viewport
+    something other than the box iOS first reported, and a first tap landed
+    low because the layout and the touches were measured against different
+    heights. Pinning the viewport did not cure it on a real iPhone, so the
+    page no longer draws under the status bar at all: "default" keeps the
+    content below it, which leaves nothing for the two measurements to
+    disagree about.
+
+    The cost is the edge-to-edge look at the top. The band is coloured by
+    the theme-color above, per colour scheme, so it matches the app's own
+    background rather than appearing as a strip of something else.
   -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Intrinsic">
   <!-- iOS uses this one, and applies its own rounded mask to it. -->
   <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
@@ -314,6 +331,11 @@
     // to actually change. Pinning the host to visualViewport's height does
     // change it, which makes the framework re-read its metrics - and doing it
     // again over the first second covers iOS settling late.
+    //
+    // This did not, on its own, cure the offset on a real iPhone - the
+    // status bar style above is what addresses the cause. It is kept because
+    // it is still the right thing to do: it is what makes the framework
+    // re-read its metrics if iOS settles the height late, which it can.
     //
     // Scoped to standalone by an early return, so the Safari tab keeps
     // exactly the behaviour that now works and cannot be regressed by this.
