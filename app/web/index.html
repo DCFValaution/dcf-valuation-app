@@ -40,6 +40,16 @@
 
   <link rel="icon" type="image/png" href="favicon.png"/>
 
+  <!--
+    The engine's two big downloads come from other origins: CanvasKit from
+    www.gstatic.com and the Roboto font from fonts.gstatic.com. Opening those
+    connections now, while index.html is still parsing, takes the DNS lookup
+    and TLS handshake off the critical path - on a phone's cellular link that
+    is a few hundred milliseconds each, paid before the first frame.
+  -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
   <title>Intrinsic</title>
   <link rel="manifest" href="manifest.json">
 
@@ -61,22 +71,37 @@
       html, body { background-color: #0B0E13; }
     }
     /*
-      The branded splash, shown until Flutter paints its first frame. On a
-      phone the app's engine and code are about 10 MB, and the first frame can
-      take several seconds on a cold load; a still logo for that long reads as
-      a frozen app, so it carries a spinner and says what is happening.
+      The branded splash, shown until the app can actually respond - not just
+      until its first frame is painted. On an iPhone the first frame lands a
+      few seconds in, and the main thread then stalls for another second or
+      two while the framework finishes warming up; an interface that is drawn
+      but not yet answering reads as frozen, so the splash stays over it until
+      the main thread has gone quiet. The spinner is a compositor animation,
+      so it keeps turning even while the main thread is busy.
+
+      It sits above the app and receives taps, so a tap during loading is
+      acknowledged ("Almost ready") rather than landing on an interface the
+      user cannot see, or on nothing at all.
     */
     #boot {
       position: fixed;
       inset: 0;
+      z-index: 10;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 20px;
-      /* Never catches a tap meant for the app, however the layers stack. */
-      pointer-events: none;
+      background-color: #F5F7FA;
+      transition: opacity 160ms ease-out;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #boot.leaving { opacity: 0; pointer-events: none; }
+    @media (prefers-color-scheme: dark) {
+      #boot { background-color: #0B0E13; }
     }
     #boot img { width: 88px; height: 88px; border-radius: 20px; }
     #boot .spinner {
@@ -88,9 +113,11 @@
       animation: boot-spin 0.9s linear infinite;
     }
     #boot .label { font-size: 14px; color: #5B6478; letter-spacing: 0.01em; }
+    #boot .label.acknowledged { color: #3A5BD9; font-weight: 600; }
     @media (prefers-color-scheme: dark) {
       #boot .spinner { border-color: rgba(142, 163, 255, 0.18); border-top-color: #8EA3FF; }
       #boot .label { color: #98A2B3; }
+      #boot .label.acknowledged { color: #8EA3FF; }
     }
     @keyframes boot-spin { to { transform: rotate(360deg); } }
 
@@ -131,9 +158,32 @@
         }
         box.textContent = lines.slice(-40).join(String.fromCharCode(10));
       }
-      window.addEventListener('flutter-first-frame', function () { log('first frame'); });
+      window.addEventListener('flutter-first-frame', function () {
+        log('first frame');
+        // Which renderer and binary actually loaded, from what was fetched.
+        var names = performance.getEntriesByType('resource').map(function (r) {
+          return r.name.split('?')[0].split('/').pop();
+        });
+        var renderer = names.indexOf('canvaskit.wasm') >= 0 ? 'canvaskit'
+          : names.some(function (n) { return /^skwasm/.test(n); }) ? 'skwasm' : '?';
+        var binary = names.indexOf('main.dart.wasm') >= 0 ? 'wasm'
+          : names.indexOf('main.dart.js') >= 0 ? 'js' : '?';
+        log('renderer ' + renderer + ' + ' + binary);
+      });
+      window.addEventListener('intrinsic-ready', function (e) {
+        log('splash removed (' + e.detail + ') - app responding');
+      });
+      window.addEventListener('intrinsic-tap-during-load', function () {
+        log('tap during load - acknowledged on the splash');
+      });
+      // event.timeStamp is when the phone created the touch; the handler runs
+      // when the page gets to it. The gap is how long the tap sat in a queue
+      // behind a busy main thread - the direct measure of "unresponsive".
       ['pointerdown', 'touchstart'].forEach(function (type) {
-        window.addEventListener(type, function () { log(type); }, true);
+        window.addEventListener(type, function (e) {
+          var queued = Math.max(0, Math.round(performance.now() - e.timeStamp));
+          log(type + (queued > 30 ? ' (queued ' + queued + 'ms)' : ''));
+        }, true);
       });
       var last = performance.now();
       setInterval(function () {
@@ -169,13 +219,52 @@
       log('page started');
     })();
   </script>
-  <script src="flutter_bootstrap.js" async></script>
   <script>
-    // The splash goes when Flutter has painted its first frame.
-    window.addEventListener('flutter-first-frame', function () {
+    // When the splash leaves: after the first frame AND once the main thread
+    // has stayed free of stalls for QUIET_MS - the point at which a tap is
+    // actually answered. Capped at MAX_WAIT_MS after the first frame, so a
+    // phone that keeps stuttering still gets its app rather than a spinner.
+    (function () {
+      var QUIET_MS = 300, STALL_MS = 100, MAX_WAIT_MS = 4000;
       var boot = document.getElementById('boot');
-      if (boot) boot.remove();
-    });
+      var label = boot && boot.querySelector('.label');
+      var firstFrameAt = null, quietSince = null, last = performance.now();
+
+      // A tap on the splash is not lost silently: it is answered.
+      if (boot) {
+        boot.addEventListener('pointerdown', function () {
+          if (!label) return;
+          label.textContent = firstFrameAt === null
+            ? 'Still loading \u2014 one moment'
+            : 'Almost ready \u2014 one moment';
+          label.classList.add('acknowledged');
+          window.dispatchEvent(new CustomEvent('intrinsic-tap-during-load'));
+        });
+      }
+
+      function leave(reason) {
+        if (!boot || boot.classList.contains('leaving')) return;
+        boot.classList.add('leaving');
+        window.dispatchEvent(new CustomEvent('intrinsic-ready', {detail: reason}));
+        setTimeout(function () { boot.remove(); }, 200);
+      }
+
+      var sampler = setInterval(function () {
+        var now = performance.now(), gap = now - last;
+        last = now;
+        if (firstFrameAt === null) return;
+        if (gap > STALL_MS) { quietSince = null; return; }
+        if (quietSince === null) quietSince = now;
+        if (now - quietSince >= QUIET_MS) { clearInterval(sampler); leave('settled'); }
+        else if (now - firstFrameAt >= MAX_WAIT_MS) { clearInterval(sampler); leave('cap'); }
+      }, 25);
+
+      window.addEventListener('flutter-first-frame', function () {
+        firstFrameAt = performance.now();
+        quietSince = null;
+      });
+    })();
   </script>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

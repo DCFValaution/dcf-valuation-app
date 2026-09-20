@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'assumption_sliders.dart';
 import 'dcf_engine.dart';
+import 'excel_delivery.dart';
 import 'formatting.dart';
 import 'relative_controller.dart';
 import 'relative_view.dart';
@@ -551,33 +549,32 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
     switch (result) {
       case ExcelSuccess(:final bytes, :final filename):
-        try {
-          // The app's own documents directory needs no storage permission,
-          // and the share sheet can read from it via the plugin's provider.
-          final dir = await getApplicationDocumentsDirectory();
-          final file = File('${dir.path}/$filename');
-          await file.writeAsBytes(bytes, flush: true);
-          if (!mounted) return;
-
-          setState(() => _exporting = false);
-          _showMessage('Saved $filename (${(bytes.length / 1024).round()} KB)');
-
-          await SharePlus.instance.share(
-            ShareParams(
-              files: [XFile(file.path, mimeType: _xlsxMimeType)],
-              subject: '$_resultTicker DCF model',
-              text: 'DCF model for $_resultTicker',
-            ),
-          );
-        } catch (e) {
-          debugPrint('saving or sharing $filename failed: $e');
-          if (!mounted) return;
-          setState(() => _exporting = false);
-          _showMessage(
-            'The spreadsheet downloaded, but it couldn’t be saved or shared. '
-            'Please try again.',
-            isError: true,
-          );
+        // Where the bytes go from here depends on the platform: a file and a
+        // share sheet on a phone, a download or the Web Share sheet in a
+        // browser. The outcome distinguishes a real failure from a context
+        // that cannot save but can say where to do it instead.
+        final outcome = await deliverWorkbook(
+          bytes: bytes,
+          filename: filename,
+          ticker: _resultTicker,
+          mimeType: _xlsxMimeType,
+          announce: (text) {
+            if (!mounted) return;
+            setState(() => _exporting = false);
+            _showMessage(text);
+          },
+        );
+        if (!mounted) return;
+        setState(() => _exporting = false);
+        switch (outcome) {
+          case DeliveryDone(:final message):
+            if (message != null) _showMessage(message);
+          case DeliveryCancelled():
+            break;
+          case DeliveryInstruction(:final message):
+            _showMessage(message);
+          case DeliveryFailure(:final message):
+            _showMessage(message, isError: true);
         }
 
       case ExcelNotSuitable(:final message):
