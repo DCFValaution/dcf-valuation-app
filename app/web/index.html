@@ -29,7 +29,10 @@
     field, so apple-mobile-web-app-capable is what actually removes the
     browser's address bar and toolbar after "Add to Home Screen".
     black-translucent puts the page behind the status bar, matching the app's
-    own background rather than a black band.
+    own background rather than a black band. It is also why the home-screen
+    app needs the viewport reconciliation further down: it is the one thing
+    that moves the usable viewport out from under the system UI, and iOS
+    does not always report the settled height before the first frame.
   -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -290,6 +293,65 @@
         requestAnimationFrame(function () {
           window.dispatchEvent(new Event('resize'));
         });
+      });
+    })();
+  </script>
+  <script>
+    // The home-screen app only.
+    //
+    // A Safari tab was laid out for the wrong height because 100% resolved
+    // against the address-bar-collapsed viewport; 100dvh settled that. A
+    // home-screen app has no address bar, and the offset survived - because
+    // the cause there is different. With apple-mobile-web-app-status-bar-
+    // style=black-translucent the web view extends under the status bar, and
+    // iOS does not reliably report the settled height before the first frame:
+    // the app is laid out against one height while touches arrive against
+    // another, so the first tap lands low. The first interaction makes iOS
+    // settle, and everything is correct from then on.
+    //
+    // Dispatching a window resize is not enough on its own: the framework
+    // watches the size of its host element, not that event, so the box has
+    // to actually change. Pinning the host to visualViewport's height does
+    // change it, which makes the framework re-read its metrics - and doing it
+    // again over the first second covers iOS settling late.
+    //
+    // Scoped to standalone by an early return, so the Safari tab keeps
+    // exactly the behaviour that now works and cannot be regressed by this.
+    (function () {
+      var standalone = navigator.standalone === true ||
+        (window.matchMedia &&
+         window.matchMedia('(display-mode: standalone)').matches);
+      if (!standalone) return;
+
+      var vv = window.visualViewport;
+
+      // While the software keyboard is up, visualViewport reports the height
+      // above the keyboard. Pinning the host to that would shrink the app on
+      // top of the inset the framework already applies, and the two would
+      // fight over the same space. Editing is left alone.
+      function editing() {
+        var a = document.activeElement;
+        return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' ||
+                       a.isContentEditable);
+      }
+
+      function sync() {
+        if (editing()) return;
+        var h = vv ? vv.height : window.innerHeight;
+        if (!h) return;
+        var px = Math.round(h) + 'px';
+        if (document.documentElement.style.height === px) return;
+        document.documentElement.style.height = px;
+        document.body.style.height = px;
+      }
+
+      sync();
+      if (vv) vv.addEventListener('resize', sync);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(sync, 300);
+      });
+      window.addEventListener('flutter-first-frame', function () {
+        [0, 50, 150, 400, 900].forEach(function (d) { setTimeout(sync, d); });
       });
     })();
   </script>
