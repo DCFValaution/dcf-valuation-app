@@ -407,6 +407,51 @@ class _ValuationScreenState extends State<ValuationScreen> {
     });
   }
 
+  /// Whether anything is on screen that Back could return from.
+  ///
+  /// A valuation in flight counts: the wait is the result, and abandoning it
+  /// is exactly what someone who changed their mind wants Back to do.
+  bool get _hasResult =>
+      _result != null || _loading || _resultTicker.isNotEmpty;
+
+  /// Discard the current result and return to the empty home screen.
+  ///
+  /// The same state the next valuation would clear anyway, cleared now, plus
+  /// the ticker itself - the point of going home is a field ready for a new
+  /// search rather than the last company still sitting in it. A request still
+  /// in flight is superseded rather than cancelled, the way a second Value
+  /// press supersedes the first: its answer arrives to a screen that no
+  /// longer wants it, and is dropped.
+  void _goHome() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    _confirmTimer?.cancel();
+    _confirmSeq++;
+    _valueSeq++;
+    _endWaitingFeedback();
+    _search.dismiss(currentText: '');
+    _controller.clear();
+    setState(() {
+      _loading = false;
+      _result = null;
+      _resultTicker = '';
+      _derived = {};
+      _sources = {};
+      _slider = {};
+      _baselineValue = null;
+      _preview = null;
+      _fullAssumptions = {};
+      _equityRiskPremium = null;
+      _correctionNote = null;
+      _status = ValueStatus.confirmed;
+      _revaluing = false;
+      _exporting = false;
+      // Home is the intrinsic lens, whichever one the result was left on.
+      _lens = _Lens.intrinsic;
+      _relativeController?.dispose();
+      _relativeController = null;
+    });
+  }
+
   /// Switch lens. The relative view is fetched the first time it is opened
   /// for this company and kept, so switching back and forth costs nothing -
   /// it prices several companies, and should not be asked to twice.
@@ -635,135 +680,163 @@ class _ValuationScreenState extends State<ValuationScreen> {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: AppSpacing.xl,
-        title: Row(
-          children: [
-            const _BrandMark(size: 26),
-            const SizedBox(width: AppSpacing.md),
-            const Text('Intrinsic'),
+    // Android's back button and gesture, and the browser's back button, all
+    // arrive here as a pop of this route. With a result on screen that must
+    // return home rather than leave the app - on the web it would otherwise
+    // navigate away from the page entirely. With nothing on screen the pop is
+    // allowed through, so Back from the home screen still exits, or leaves the
+    // site, as it always did.
+    //
+    // A pushed sub-page - the speculative screen, the hypothetical - is a
+    // route above this one, so its own Back is handled by its own route and
+    // never reaches here. Those still return to the refusal underneath.
+    return PopScope(
+      canPop: !_hasResult,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goHome();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: _hasResult ? 0 : AppSpacing.xl,
+          // Styled as the sub-pages' back arrow, because it does the same
+          // thing: leaves what is on screen for what came before it. Absent on
+          // the home screen, where there is nothing to go back from - and an
+          // arrow that led nowhere would be a lie.
+          leading: _hasResult
+              ? IconButton(
+                  key: const Key('home-back'),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  tooltip: 'Back to search',
+                  onPressed: _goHome,
+                )
+              : null,
+          title: Row(
+            children: [
+              const _BrandMark(size: 26),
+              const SizedBox(width: AppSpacing.md),
+              const Text('Intrinsic'),
+            ],
+          ),
+          actions: [
+            // Always reachable, including before the first valuation - the
+            // disclaimer should not depend on having searched something.
+            IconButton(
+              icon: const Icon(Icons.info_outline_rounded),
+              tooltip: 'About and disclaimer',
+              onPressed: () => showDisclaimerSheet(context),
+            ),
+            const SizedBox(width: AppSpacing.sm),
           ],
         ),
-        actions: [
-          // Always reachable, including before the first valuation - the
-          // disclaimer should not depend on having searched something.
-          IconButton(
-            icon: const Icon(Icons.info_outline_rounded),
-            tooltip: 'About and disclaimer',
-            onPressed: () => showDisclaimerSheet(context),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.sm,
+                  AppSpacing.xl,
+                  AppSpacing.lg,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        textCapitalization: TextCapitalization.characters,
+                        textInputAction: TextInputAction.go,
+                        autocorrect: false,
+                        // Never disabled. A valuation can take a minute and a
+                        // half against a sleeping free-tier instance, and a
+                        // field that refuses focus and the keyboard for that
+                        // long is indistinguishable from a frozen app - which
+                        // is exactly how it read on an iPhone, where the rest
+                        // of the screen went on answering taps.
+                        style: context.text.titleMedium?.copyWith(
+                          letterSpacing: 0.6,
+                          fontFeatures: const [],
+                        ),
+                        inputFormatters: [
+                          UpperCaseFormatter(),
+                          // Company names as well as tickers: spaces, and the
+                          // punctuation in names like AT&T and Moody's.
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r"[A-Za-z0-9.\-&', ]"),
+                          ),
+                          LengthLimitingTextInputFormatter(50),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: 'Ticker or company name',
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 20,
+                            color: colors.textSecondary,
+                          ),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 44,
+                            minHeight: 24,
+                          ),
+                        ),
+                        // Fires for typing only, not for the ticker a selection
+                        // writes in - which is what keeps a pick from searching
+                        // for itself.
+                        onChanged: _search.onQueryChanged,
+                        onTapOutside: (_) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          _search.dismiss(currentText: _controller.text);
+                        },
+                        onSubmitted: (_) => _submit(),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    // Part of the search, not outside it: otherwise pressing
+                    // Value closes the dropdown before the press is handled, and
+                    // a company name submitted by mistake would be told to pick
+                    // from a list that had just disappeared.
+                    TextFieldTapRegion(
+                      child: SizedBox(
+                        height: 54,
+                        child: FilledButton(
+                          onPressed: _submit,
+                          child: const Text('Value'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                // The dropdown floats over the result rather than pushing it
+                // down, so opening it does not shift what is already on screen.
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: _buildResultArea()),
+                    Positioned(
+                      left: AppSpacing.xl,
+                      right: AppSpacing.xl,
+                      top: 0,
+                      child: ListenableBuilder(
+                        listenable: _search,
+                        builder: (context, _) => _search.isOpen
+                            // Taps on the dropdown belong to the field, so
+                            // choosing a result is not read as tapping away.
+                            ? TextFieldTapRegion(
+                                child: SearchDropdown(
+                                  controller: _search,
+                                  onSelected: _selectSearchResult,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: AppSpacing.sm),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
-                AppSpacing.sm,
-                AppSpacing.xl,
-                AppSpacing.lg,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      textCapitalization: TextCapitalization.characters,
-                      textInputAction: TextInputAction.go,
-                      autocorrect: false,
-                      // Never disabled. A valuation can take a minute and a
-                      // half against a sleeping free-tier instance, and a
-                      // field that refuses focus and the keyboard for that
-                      // long is indistinguishable from a frozen app - which
-                      // is exactly how it read on an iPhone, where the rest
-                      // of the screen went on answering taps.
-                      style: context.text.titleMedium?.copyWith(
-                        letterSpacing: 0.6,
-                        fontFeatures: const [],
-                      ),
-                      inputFormatters: [
-                        UpperCaseFormatter(),
-                        // Company names as well as tickers: spaces, and the
-                        // punctuation in names like AT&T and Moody's.
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r"[A-Za-z0-9.\-&', ]"),
-                        ),
-                        LengthLimitingTextInputFormatter(50),
-                      ],
-                      decoration: InputDecoration(
-                        hintText: 'Ticker or company name',
-                        prefixIcon: Icon(
-                          Icons.search_rounded,
-                          size: 20,
-                          color: colors.textSecondary,
-                        ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 44,
-                          minHeight: 24,
-                        ),
-                      ),
-                      // Fires for typing only, not for the ticker a selection
-                      // writes in - which is what keeps a pick from searching
-                      // for itself.
-                      onChanged: _search.onQueryChanged,
-                      onTapOutside: (_) {
-                        FocusManager.instance.primaryFocus?.unfocus();
-                        _search.dismiss(currentText: _controller.text);
-                      },
-                      onSubmitted: (_) => _submit(),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  // Part of the search, not outside it: otherwise pressing
-                  // Value closes the dropdown before the press is handled, and
-                  // a company name submitted by mistake would be told to pick
-                  // from a list that had just disappeared.
-                  TextFieldTapRegion(
-                    child: SizedBox(
-                      height: 54,
-                      child: FilledButton(
-                        onPressed: _submit,
-                        child: const Text('Value'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              // The dropdown floats over the result rather than pushing it
-              // down, so opening it does not shift what is already on screen.
-              child: Stack(
-                children: [
-                  Positioned.fill(child: _buildResultArea()),
-                  Positioned(
-                    left: AppSpacing.xl,
-                    right: AppSpacing.xl,
-                    top: 0,
-                    child: ListenableBuilder(
-                      listenable: _search,
-                      builder: (context, _) => _search.isOpen
-                          // Taps on the dropdown belong to the field, so
-                          // choosing a result is not read as tapping away.
-                          ? TextFieldTapRegion(
-                              child: SearchDropdown(
-                                controller: _search,
-                                onSelected: _selectSearchResult,
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );

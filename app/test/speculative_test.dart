@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -383,6 +384,34 @@ void main() {
         expect(find.textContaining('SPECULATIVE ESTIMATE'), findsNothing);
       });
     }
+
+    // The home screen holds the platform's back open so a result returns to
+    // the search rather than leaving the app. A pushed screen sits above it
+    // and must still answer its own back: from here the system back belongs
+    // to this screen, and goes to the refusal, not all the way home.
+    testWidgets('the platform back returns to the refusal, not home', (
+      tester,
+    ) async {
+      final backend = Backend();
+      await tester.pumpWidget(DcfApp(api: backend.api()));
+      await valueTicker(tester, 'RIVN');
+      await openSpeculative(tester);
+
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'flutter/navigation',
+        const JSONMethodCodec().encodeMethodCall(const MethodCall('popRoute')),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SpeculativeScreen), findsNothing);
+      expect(
+        find.text('A standard DCF isn’t the right tool here'),
+        findsOneWidget,
+      );
+      // Still on the company, not back at an empty search.
+      expect(find.text('Value any listed company'), findsNothing);
+    });
   });
 
   group('SpeculativeEstimate', () {
