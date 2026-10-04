@@ -1685,6 +1685,101 @@ class ValuationApi {
   /// The workbook is always built by the backend, never from the local preview
   /// engine: a spreadsheet outlives the screen that produced it, and it must
   /// carry the authoritative figures with their provenance and sources.
+  /// Fetch a workbook from *uri*, with the same handling every export needs.
+  ///
+  /// Written once rather than per method: the zip-magic check, the timeout
+  /// wording and the error mapping are the same whichever model built the
+  /// file, and four copies of them would drift apart.
+  Future<ExcelResult> _downloadWorkbook(Uri uri, String ticker) async {
+    http.Response response;
+    try {
+      response = await _client.get(uri).timeout(_excelTimeout);
+    } on TimeoutException {
+      return const ExcelFailure(
+        ValuationFailureKind.backendUnreachable,
+        'The server did not return the workbook within two minutes.\n\n'
+        'If the server had gone to sleep it may still be waking up; '
+        'try the export again.',
+      );
+    } on SocketException {
+      return const ExcelFailure(
+        ValuationFailureKind.backendUnreachable,
+        'Could not reach the server to build the workbook.\n\n'
+        'Check your internet connection and try again.',
+      );
+    } catch (e) {
+      debugPrint('workbook download for $ticker failed: $e');
+      return const ExcelFailure(
+        ValuationFailureKind.unexpected,
+        'Something went wrong while downloading the spreadsheet. Please try again.',
+      );
+    }
+    return _workbookFrom(response, ticker);
+  }
+
+  /// A speculative path-to-profitability workbook. NOT a valuation.
+  Future<ExcelResult> downloadSpeculativeExcel(String ticker) async {
+    final cleaned = ticker.trim().toUpperCase();
+    if (cleaned.isEmpty) {
+      return const ExcelFailure(
+        ValuationFailureKind.badRequest,
+        'Enter a ticker symbol first.',
+      );
+    }
+    return _downloadWorkbook(
+      Uri.parse(
+        '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}'
+        '/speculative/excel',
+      ),
+      cleaned,
+    );
+  }
+
+  /// A workbook for the hypothetical the user built. NOT a valuation.
+  Future<ExcelResult> downloadHypotheticalExcel(
+    String ticker, {
+    required double revenueGrowth,
+    required double targetOperatingMargin,
+    required int yearsToTarget,
+  }) async {
+    final cleaned = ticker.trim().toUpperCase();
+    if (cleaned.isEmpty) {
+      return const ExcelFailure(
+        ValuationFailureKind.badRequest,
+        'Enter a ticker symbol first.',
+      );
+    }
+    final uri =
+        Uri.parse(
+          '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}/hypothetical/excel',
+        ).replace(
+          queryParameters: {
+            'revenue_growth': revenueGrowth.toString(),
+            'target_operating_margin': targetOperatingMargin.toString(),
+            'years_to_target': yearsToTarget.toString(),
+          },
+        );
+    return _downloadWorkbook(uri, cleaned);
+  }
+
+  /// A peer-comparison workbook for the relative view.
+  Future<ExcelResult> downloadRelativeExcel(String ticker) async {
+    final cleaned = ticker.trim().toUpperCase();
+    if (cleaned.isEmpty) {
+      return const ExcelFailure(
+        ValuationFailureKind.badRequest,
+        'Enter a ticker symbol first.',
+      );
+    }
+    return _downloadWorkbook(
+      Uri.parse(
+        '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}'
+        '/relative/excel',
+      ),
+      cleaned,
+    );
+  }
+
   Future<ExcelResult> downloadExcel(
     String ticker, {
     Map<String, double> overrides = const {},
@@ -1737,6 +1832,14 @@ class ValuationApi {
       );
     }
 
+    return _workbookFrom(response, cleaned);
+  }
+
+  /// Turn an export response into an [ExcelResult].
+  ///
+  /// Shared by every workbook the app can ask for, so a refusal or a
+  /// rate limit reads the same whichever model was behind it.
+  ExcelResult _workbookFrom(http.Response response, String cleaned) {
     if (response.statusCode == 200) {
       // Guard against a JSON error body arriving with a 200 by checking the
       // zip magic number - a .xlsx is a zip, and writing anything else to a
@@ -1796,7 +1899,6 @@ class ValuationApi {
     };
   }
 
-  /// Prefer the filename the backend chose, falling back to the ticker.
   String _filenameFrom(http.Response response, String ticker) {
     final disposition = response.headers['content-disposition'];
     if (disposition != null) {

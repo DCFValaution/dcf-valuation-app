@@ -20,6 +20,7 @@ import api
 import assumptions as A
 import ddm_assumptions as D
 import excel_export as E
+from api import XLSX_MEDIA_TYPE
 from api import app
 from ddm import DDMAssumptions, DDMInputs, run_ddm
 from market_data import CompanyFinancials, RateLimitedError
@@ -326,13 +327,14 @@ def test_growth_at_or_above_cost_of_equity_is_a_refusal_not_a_crash(client):
 # Excel, schema, discovery
 # ---------------------------------------------------------------------------
 
-def test_excel_is_declined_for_a_ddm_valuation_rather_than_faked(client):
+def test_excel_for_a_ddm_valuation_is_the_dividend_models_own_workbook(client):
+    """Once it had no workbook and was declined. Now it has its own."""
     r = client.get(f"/valuation/{BANK}/excel")
-    assert r.status_code == 422
-    assert r.headers["content-type"].startswith("application/json")
-    body = r.json()
-    assert body["code"] == "excel_unavailable_for_method"
-    assert body["method"] == "ddm"
+    assert r.status_code == 200
+    assert r.headers["content-type"] == XLSX_MEDIA_TYPE
+    assert f'filename="{BANK}_DDM_Model.xlsx"' in r.headers["content-disposition"]
+    # A real workbook, not an error page that happens to carry the media type.
+    assert r.content[:2] == b"PK"
 
 
 def test_excel_for_a_financial_no_method_can_value_is_the_refusal(client):

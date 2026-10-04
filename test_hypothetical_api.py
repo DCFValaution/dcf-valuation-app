@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 
 import analysis
 import api
-from api import app
+from api import XLSX_MEDIA_TYPE, app
 from hypothetical import (NEUTRAL_REVENUE_GROWTH, NEUTRAL_TARGET_MARGIN,
                           NEUTRAL_YEARS_TO_TARGET, HypotheticalRefused,
                           UserAssumptions)
@@ -308,3 +308,42 @@ def test_the_report_never_calls_itself_a_valuation():
 
     assert report.method == "hypothetical"
     assert report.reality and all(c.statement for c in report.reality)
+
+
+# ---------------------------------------------------------------------------
+# The workbook endpoint
+# ---------------------------------------------------------------------------
+
+def _xlsx(client, ticker=SHRINKER, **overrides):
+    params = {**ASSUMED, **overrides}
+    return client.get(f"/valuation/{ticker}/hypothetical/excel", params=params)
+
+
+def test_the_hypothetical_workbook_is_served_as_a_spreadsheet(client):
+    r = _xlsx(client)
+    assert r.status_code == 200
+    assert r.headers["content-type"] == XLSX_MEDIA_TYPE
+    assert r.headers["content-disposition"] == \
+        f'attachment; filename="{SHRINKER}_Hypothetical.xlsx"'
+    assert r.content[:2] == b"PK"
+
+
+def test_the_filename_never_calls_it_a_valuation(client):
+    assert "valuation" not in _xlsx(client).headers["content-disposition"].lower()
+
+
+def test_assumptions_outside_the_permitted_range_produce_no_file(client):
+    r = _xlsx(client, revenue_growth=5)
+    assert r.status_code == 422
+    assert r.json()["code"] == "validation_error"
+    assert "spreadsheetml" not in r.headers["content-type"]
+
+
+def test_a_company_the_hypothetical_is_refused_for_produces_no_file(client):
+    """Where the hypothetical itself is declined, there is nothing to export."""
+    refused = ask(client, ticker=NOREV)
+    if refused.status_code == 200:
+        pytest.skip("this fixture is not refused the hypothetical")
+    r = _xlsx(client, ticker=NOREV)
+    assert r.status_code == refused.status_code
+    assert "spreadsheetml" not in r.headers["content-type"]

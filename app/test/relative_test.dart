@@ -36,6 +36,9 @@ String money(double v) => '${v < 0 ? '−' : ''}\$${v.abs().toStringAsFixed(2)}'
 class Backend {
   final List<http.Request> requests = [];
   int relativeStatus = 0; // 0: answer from the recordings
+  // The recordings answer instantly, which hides the ordering a device shows:
+  // the lens opens, this screen rebuilds, and the comparison lands afterwards.
+  Duration relativeDelay = Duration.zero;
 
   List<String> get paths => requests.map((r) => r.url.path).toList();
   int count(String path) => paths.where((p) => p == path).length;
@@ -64,6 +67,7 @@ class Backend {
             );
           }
           final name = _relativeCase[ticker]!;
+          if (relativeDelay > Duration.zero) await Future.delayed(relativeDelay);
           return http.Response(jsonEncode(body(name)), statusOf(name));
         }
         final name = 'valuation_$ticker';
@@ -402,6 +406,74 @@ void main() {
         );
       },
     );
+  });
+
+  group('the export button follows the figure', () {
+    // A decline arrives as a report too, so "a report came back" was the wrong
+    // test: it put an Export button under a view with no figure in it, which
+    // then asked the backend for a workbook it refuses to build.
+    testWidgets('JPM: a figure stood up, so the workbook is offered', (
+      tester,
+    ) async {
+      final backend = Backend();
+      await tester.pumpWidget(DcfApp(api: backend.api()));
+      await value(tester, 'JPM');
+      await openRelative(tester);
+
+      expect(find.byKey(const Key('relative-figure')), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Export to Excel'),
+          findsOneWidget);
+    });
+
+    testWidgets('it survives the comparison arriving on its own', (
+      tester,
+    ) async {
+      // The real sequence on a device: opening the lens rebuilds this screen
+      // while the request is still in flight, and the answer then notifies
+      // the view alone. A footer decided during that first build would be
+      // decided on no outcome at all, and never revisited - which is exactly
+      // how the button went missing on Android while appearing on the web,
+      // where an unrelated rebuild happened to put it back.
+      final backend = Backend()..relativeDelay = const Duration(seconds: 1);
+      await tester.pumpWidget(DcfApp(api: backend.api()));
+      await value(tester, 'JPM');
+
+      await tester.tap(find.text('Relative (market)'));
+      await tester.pump(); // the lens switches; the request is in flight
+      expect(find.byKey(const Key('relative-figure')), findsNothing);
+
+      // Settle without touching this screen again.
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('relative-figure')), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Export to Excel'),
+          findsOneWidget);
+    });
+
+    testWidgets('AAPL: no figure, so no button to press', (tester) async {
+      final backend = Backend();
+      await tester.pumpWidget(DcfApp(api: backend.api()));
+      await value(tester, 'AAPL');
+      await openRelative(tester);
+
+      expect(find.byKey(const Key('relative-declined')), findsOneWidget);
+      expect(find.byKey(const Key('relative-figure')), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Export to Excel'),
+          findsNothing);
+    });
+
+    testWidgets('CRM: the figure is withheld, so the workbook is too', (
+      tester,
+    ) async {
+      final backend = Backend();
+      await tester.pumpWidget(DcfApp(api: backend.api()));
+      await value(tester, 'CRM');
+      await openRelative(tester);
+
+      expect(find.byKey(const Key('relative-declined')), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Export to Excel'),
+          findsNothing);
+    });
   });
 
   group('declines are answers, not errors', () {

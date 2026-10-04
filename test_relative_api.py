@@ -19,7 +19,7 @@ import analysis
 import api
 import assumptions as A
 import ddm_assumptions as D
-from api import app
+from api import XLSX_MEDIA_TYPE, app
 from market_data import MarketFigures, RateLimitedError, TickerNotFoundError
 from test_api import LOSSMAKING, PROFITABLE, fake_fetch_financials, make_fin
 from test_ddm_api import DCF_FIELDS_BEFORE_THE_DDM, make_bank
@@ -438,3 +438,32 @@ def test_the_peer_list_is_kept_modest(client):
                                                  "peers": [f"P{i}" for i in range(9)]})
     assert r.status_code == 422
     assert r.json()["code"] == "validation_error"
+
+
+# ---------------------------------------------------------------------------
+# The workbook endpoint
+#
+# A refusal here used to reach for the generic not-suitable body, which asks a
+# report for its derived assumptions. A relative report has none, so declining
+# crashed with a 500 instead of explaining itself. These tests cover the
+# refusal as well as the file, because the refusal was the broken half.
+# ---------------------------------------------------------------------------
+
+def test_the_relative_workbook_is_served_as_a_spreadsheet(client):
+    r = client.get(f"/valuation/{BANKX}/relative/excel")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == XLSX_MEDIA_TYPE
+    assert r.headers["content-disposition"] == \
+        f'attachment; filename="{BANKX}_Relative.xlsx"'
+    assert r.content[:2] == b"PK"
+
+
+def test_declining_the_workbook_explains_itself_rather_than_erroring(client):
+    """FEW has too few peers to compare, so there is no table to export."""
+    r = client.get(f"/valuation/{FEW}/relative/excel")
+    assert r.status_code == 422
+    body = r.json()
+    assert body["method"] == "relative"
+    assert body["reasons"]
+    # A refusal, not a spreadsheet with the figure left blank.
+    assert "spreadsheetml" not in r.headers["content-type"]

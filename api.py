@@ -88,6 +88,13 @@ from hypothetical import (HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
                           UserAssumptions)
 from speculative_assumptions import DISCOUNT_INPUT_NAMES, SPECULATIVE_ASSUMPTION_NAMES
 from ddm_assumptions import COST_OF_EQUITY_INPUT_NAMES, DDM_ASSUMPTION_NAMES
+from ddm_excel_export import ddm_filename_for, ddm_workbook_bytes
+from relative_excel_export import (relative_filename_for,
+                                   relative_workbook_bytes)
+from speculative_excel_export import (hypothetical_filename_for,
+                                      hypothetical_workbook_bytes,
+                                      speculative_filename_for,
+                                      speculative_workbook_bytes)
 from excel_export import filename_for, workbook_bytes
 from market_data import (DataUnavailableError, MarketDataError, RateLimitedError,
                          TickerNotFoundError, UnsupportedListingError,
@@ -1383,6 +1390,18 @@ EXCEL_RESPONSES: dict = {
 }
 
 
+def _xlsx(payload: bytes, filename: str) -> Response:
+    """Send *payload* as a downloadable workbook."""
+    return Response(
+        content=payload,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="' + filename + '"',
+            "Content-Length": str(len(payload)),
+        },
+    )
+
+
 def _excel_response(report: ValuationReport) -> Any:
     """Serialise *report* as a downloadable workbook, or the refusal response.
 
@@ -1396,20 +1415,17 @@ def _excel_response(report: ValuationReport) -> Any:
                             content=_not_suitable_body(report))
 
     if isinstance(report, DDMReport):
-        # Valued, but not with a DCF - and the workbook is a DCF model. Handing
-        # back a DCF spreadsheet for a bank would contradict the valuation the
-        # API has just produced for it.
-        return JSONResponse(
-            status_code=HTTP_422_NOT_SUITABLE,
-            content={
-                "code": "excel_unavailable_for_method",
-                "method": report.method,
-                "message": (
-                    f"The Excel export builds discounted cash flow models, and "
-                    f"{report.company_name} was valued with a dividend "
-                    "discount model instead. A workbook for that model is not "
-                    "available yet."
-                ),
+        # Valued on its dividends, so it gets the dividend model's own
+        # workbook rather than a DCF one. The two are built by separate
+        # modules: they share conventions, not a row of layout.
+        ddm_payload = ddm_workbook_bytes(report)
+        return Response(
+            content=ddm_payload,
+            media_type=XLSX_MEDIA_TYPE,
+            headers={
+                "Content-Disposition":
+                    'attachment; filename="' + ddm_filename_for(report) + '"',
+                "Content-Length": str(len(ddm_payload)),
             },
         )
 
@@ -1853,6 +1869,103 @@ def get_hypothetical(
         raise ApiError(HTTP_422_NOT_SUITABLE, e.code, str(e),
                        method="hypothetical", reasons=e.reasons) from e
     return _serialise_hypothetical(report)
+
+
+@app.get(
+    "/valuation/{ticker}/speculative/excel",
+    tags=["speculative (opt-in)"],
+    summary="OPT-IN: the speculative estimate as a workbook. NOT a valuation.",
+    responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
+                                                              "format": "binary"}}},
+                     "description": "An .xlsx path-to-profitability projection"}},
+)
+def get_speculative_excel(
+    ticker: str = Path(..., min_length=1, max_length=12, examples=["RIVN"]),
+) -> Any:
+    """
+    The speculative estimate as a spreadsheet.
+
+    The file carries the refusal with it: a banner across the top saying it is
+    not a valuation, the figure labelled a speculative estimate rather than
+    intrinsic value, no upside against the market price, and the disclaimer
+    written out in full. A download outlives the screen that explained it.
+    """
+    report = _run_valuation(ticker, {}, valuer=value_company_speculatively)
+    if report.result is None:
+        # Declined exactly as the screen declines, with both refusals given:
+        # the generic body would describe a valuation that was never attempted.
+        return _respond_speculative(report)
+    return _xlsx(speculative_workbook_bytes(report), speculative_filename_for(report))
+
+
+@app.get(
+    "/valuation/{ticker}/hypothetical/excel",
+    tags=["speculative (opt-in)"],
+    summary="OPT-IN: the user-built hypothetical as a workbook. NOT a valuation.",
+    responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
+                                                              "format": "binary"}}},
+                     "description": "An .xlsx projection on the caller's own assumptions"}},
+)
+def get_hypothetical_excel(
+    ticker: Annotated[str, Path(min_length=1, max_length=12, examples=["INTC"])],
+    revenue_growth: Annotated[float, Query(
+        ge=REVENUE_GROWTH_BOUNDS[0], le=REVENUE_GROWTH_BOUNDS[1],
+        description="Assumed annual revenue growth, as a fraction. REQUIRED.")],
+    target_operating_margin: Annotated[float, Query(
+        ge=TARGET_MARGIN_BOUNDS[0], le=TARGET_MARGIN_BOUNDS[1],
+        description="Assumed operating margin once mature, as a fraction. REQUIRED.")],
+    years_to_target: Annotated[int, Query(
+        ge=YEARS_TO_TARGET_BOUNDS[0], le=YEARS_TO_TARGET_BOUNDS[1],
+        description="Years to reach that margin. REQUIRED.")],
+) -> Any:
+    """
+    The user-built hypothetical as a spreadsheet.
+
+    Carries the strongest framing of any file this API produces: the banner
+    says the assumptions came from the caller, and the sheet sets each one
+    beside what the company actually reports, marking the ones its own
+    filings contradict.
+    """
+    try:
+        report = _run_valuation(
+            ticker, {},
+            valuer=lambda t, overrides: value_company_hypothetically(
+                t, UserAssumptions(revenue_growth=revenue_growth,
+                                   target_operating_margin=target_operating_margin,
+                                   years_to_target=years_to_target)))
+    except HypotheticalRefused as e:
+        raise ApiError(HTTP_422_NOT_SUITABLE, e.code, str(e),
+                       method="hypothetical", reasons=e.reasons) from e
+    return _xlsx(hypothetical_workbook_bytes(report),
+                 hypothetical_filename_for(report))
+
+
+@app.get(
+    "/valuation/{ticker}/relative/excel",
+    tags=["relative (market-based)"],
+    summary="The relative peer comparison as a workbook",
+    responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
+                                                              "format": "binary"}}},
+                     "description": "An .xlsx peer-multiples comparison"}},
+)
+def get_relative_excel(
+    ticker: str = Path(..., min_length=1, max_length=12, examples=["JPM"]),
+) -> Any:
+    """
+    The relative view as a spreadsheet: a comparison table, not a model.
+
+    Declines where the screen declines. A relative view that could not be
+    computed has no figure to export, and a sheet laid out like a valuation
+    with the number missing invites the reader to supply one.
+    """
+    report = _run_valuation(ticker, {},
+                            valuer=lambda t, overrides=None: value_company_relatively(t))
+    if report.result is None:
+        # The relative view has its own refusal shape, which names the peers it
+        # did find and why the rest were excluded. The generic one assumes a
+        # report with derived assumptions, which a relative report has not got.
+        return _respond_relative(report)
+    return _xlsx(relative_workbook_bytes(report), relative_filename_for(report))
 
 
 @app.get(

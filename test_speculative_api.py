@@ -22,7 +22,7 @@ import analysis
 import api
 import assumptions as A
 import speculative_assumptions as S
-from api import app
+from api import XLSX_MEDIA_TYPE, app
 from market_data import base_year_from
 from test_api import PROFITABLE, fake_fetch_financials, make_fin
 from test_ddm_api import financial, make_bank
@@ -382,3 +382,41 @@ def test_a_low_discount_rate_is_floored_for_a_company_never_profitable(client):
     assert wacc["value"] == pytest.approx(S.MIN_SPECULATIVE_WACC)
     assert wacc["source"] == "derived (clamped)"
     assert "floor" in wacc["detail"]
+
+
+# ---------------------------------------------------------------------------
+# The workbook endpoints
+#
+# The file outlives the screen, so the refusal has to survive the trip too: a
+# company that cannot carry even a speculative path must get the same two-part
+# refusal here as it gets on screen, not a spreadsheet and not a crash.
+# ---------------------------------------------------------------------------
+
+def test_the_speculative_workbook_is_served_as_a_spreadsheet(client):
+    r = client.get(f"/valuation/{GROWER}/speculative/excel")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == XLSX_MEDIA_TYPE
+    assert r.headers["content-disposition"] == \
+        f'attachment; filename="{GROWER}_Speculative.xlsx"'
+    assert r.content[:2] == b"PK"
+
+
+def test_the_filename_never_calls_it_a_valuation(client):
+    r = client.get(f"/valuation/{GROWER}/speculative/excel")
+    assert "valuation" not in r.headers["content-disposition"].lower()
+
+
+@pytest.mark.parametrize("ticker", [NOREV, SHRINKER, UNDERWATER])
+def test_declining_the_speculative_workbook_gives_the_screens_refusal(client, ticker):
+    r = client.get(f"/valuation/{ticker}/speculative/excel")
+    assert r.status_code == 422
+    body = r.json()
+    assert body["method"] == "speculative"
+    assert body["reasons"]
+    assert "spreadsheetml" not in r.headers["content-type"]
+
+
+def test_a_company_a_valuation_applies_to_gets_no_speculative_workbook(client):
+    r = client.get("/valuation/GOOD/speculative/excel")
+    assert r.status_code == 422
+    assert r.json()["code"] == "speculative_not_applicable"

@@ -44,6 +44,7 @@ class RelativeView extends StatelessWidget {
     required this.controller,
     required this.peerSearch,
     this.intrinsicAdjusted = false,
+    this.footer,
   });
 
   /// The relative answer and the peer group being edited.
@@ -58,6 +59,12 @@ class RelativeView extends StatelessWidget {
   /// says so rather than letting the two be confused.
   final bool intrinsicAdjusted;
 
+  /// Shown at the end of a successful comparison - the export button, in
+  /// practice. Passed in rather than built here so this view stays a
+  /// presentation of the report, and takes its sizing from its own Column
+  /// rather than from a wrapper the caller's layout cannot support.
+  final Widget? footer;
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -70,6 +77,7 @@ class RelativeView extends StatelessWidget {
             report: report,
             controller: controller,
             intrinsicAdjusted: intrinsicAdjusted,
+            footer: footer,
             onAddPeer: () => showAddPeerSheet(
               context: context,
               controller: controller,
@@ -112,12 +120,14 @@ class _Report extends StatelessWidget {
     required this.controller,
     required this.intrinsicAdjusted,
     required this.onAddPeer,
+    this.footer,
   });
 
   final RelativeReport report;
   final RelativeController controller;
   final bool intrinsicAdjusted;
   final VoidCallback onAddPeer;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +245,12 @@ class _Report extends StatelessWidget {
             controller: controller,
             onAddPeer: onAddPeer,
           ),
+        ],
+        // A declined comparison has no figure on screen and none to put in
+        // a file either, so the workbook is not offered for one.
+        if (footer != null && report.hasFigure) ...[
+          const SizedBox(height: AppGap.section),
+          footer!,
         ],
       ],
     );

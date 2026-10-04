@@ -31,6 +31,7 @@ import 'assumption_sliders.dart';
 import 'sensitivity_table.dart';
 import 'theme.dart';
 import 'ui.dart';
+import 'export_button.dart';
 import 'valuation_api.dart';
 
 /// The three drivers, and only these three.
@@ -96,6 +97,7 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
   late HypotheticalInputs _inputs = widget.placeholders;
   HypotheticalOutcome? _outcome;
   bool _busy = false;
+  bool _exporting = false;
   Timer? _debounce;
   int _seq = 0;
 
@@ -111,6 +113,37 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
   void dispose() {
     _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _export() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    await runExport(
+      fetch: () => widget.api.downloadHypotheticalExcel(
+        widget.ticker,
+        revenueGrowth: _inputs.revenueGrowth,
+        targetOperatingMargin: _inputs.targetOperatingMargin,
+        yearsToTarget: _inputs.yearsToTarget,
+      ),
+      ticker: widget.ticker,
+      showMessage: _showMessage,
+      onDone: () {
+        if (mounted) setState(() => _exporting = false);
+      },
+    );
+  }
+
+  void _showMessage(String text, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor: isError ? const Color(0xFFB3261E) : null,
+          duration: Duration(seconds: isError ? 8 : 4),
+        ),
+      );
   }
 
   Map<String, double> get _sliderValues => {
@@ -235,6 +268,18 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
                 noteFor: _noteFor,
                 statusLine: _StatusLine(busy: _busy, outcome: _outcome),
               ),
+
+              if (_outcome is HypotheticalBuilt) ...[
+                const SizedBox(height: AppGap.section),
+                ExportButton(
+                  busy: _exporting,
+                  caption:
+                      'A spreadsheet of this hypothetical. The file states on '
+                      'its face that you supplied the assumptions and that '
+                      'the company’s own figures contradict them.',
+                  onPressed: _export,
+                ),
+              ],
 
               const SizedBox(height: AppGap.section),
               Center(

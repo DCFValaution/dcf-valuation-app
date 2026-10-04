@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'assumption_sliders.dart';
 import 'dcf_engine.dart';
-import 'excel_delivery.dart';
+import 'export_button.dart';
 import 'formatting.dart';
 import 'relative_controller.dart';
 import 'relative_view.dart';
@@ -16,9 +16,6 @@ import 'speculative_screen.dart';
 import 'theme.dart';
 import 'ticker_search.dart';
 import 'valuation_api.dart';
-
-const String _xlsxMimeType =
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /// Which analysis of a valued company is on screen.
 enum _Lens { intrinsic, relative }
@@ -591,52 +588,30 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// preview, since the backend rebuilds the model from those same inputs.
   Future<void> _exportExcel() async {
     if (_exporting || _resultTicker.isEmpty) return;
-
     setState(() => _exporting = true);
-    final result = await _api.downloadExcel(
-      _resultTicker,
-      overrides: _activeOverrides,
+    await runExport(
+      fetch: () =>
+          _api.downloadExcel(_resultTicker, overrides: _activeOverrides),
+      ticker: _resultTicker,
+      showMessage: _showMessage,
+      onDone: () {
+        if (mounted) setState(() => _exporting = false);
+      },
     );
-    if (!mounted) return;
+  }
 
-    switch (result) {
-      case ExcelSuccess(:final bytes, :final filename):
-        // Where the bytes go from here depends on the platform: a file and a
-        // share sheet on a phone, a download or the Web Share sheet in a
-        // browser. The outcome distinguishes a real failure from a context
-        // that cannot save but can say where to do it instead.
-        final outcome = await deliverWorkbook(
-          bytes: bytes,
-          filename: filename,
-          ticker: _resultTicker,
-          mimeType: _xlsxMimeType,
-          announce: (text) {
-            if (!mounted) return;
-            setState(() => _exporting = false);
-            _showMessage(text);
-          },
-        );
-        if (!mounted) return;
-        setState(() => _exporting = false);
-        switch (outcome) {
-          case DeliveryDone(:final message):
-            if (message != null) _showMessage(message);
-          case DeliveryCancelled():
-            break;
-          case DeliveryInstruction(:final message):
-            _showMessage(message);
-          case DeliveryFailure(:final message):
-            _showMessage(message, isError: true);
-        }
-
-      case ExcelNotSuitable(:final message):
-        setState(() => _exporting = false);
-        _showMessage(message, isError: true);
-
-      case ExcelFailure(:final message):
-        setState(() => _exporting = false);
-        _showMessage(message, isError: true);
-    }
+  /// The relative view's own workbook: a peer comparison, not a model.
+  Future<void> _exportRelative() async {
+    if (_exporting || _resultTicker.isEmpty) return;
+    setState(() => _exporting = true);
+    await runExport(
+      fetch: () => _api.downloadRelativeExcel(_resultTicker),
+      ticker: _resultTicker,
+      showMessage: _showMessage,
+      onDone: () {
+        if (mounted) setState(() => _exporting = false);
+      },
+    );
   }
 
   void _showMessage(String text, {bool isError = false}) {
@@ -909,6 +884,18 @@ class _ValuationScreenState extends State<ValuationScreen> {
                 controller: _relativeController!,
                 peerSearch: _peerSearch,
                 intrinsicAdjusted: _activeOverrides.isNotEmpty,
+                // Passed unconditionally: the peer comparison arrives after
+                // this build, and notifies the view rather than this screen,
+                // so a decision made here would be made before there is an
+                // outcome to decide on - and never revisited. The view shows
+                // it only where a figure actually stood up.
+                footer: ExportButton(
+                  busy: _exporting,
+                  caption:
+                      'A spreadsheet of the peer comparison: every '
+                      'multiple, the medians, and who the peers are.',
+                  onPressed: _exportRelative,
+                ),
               )
             else ...[
               _SuccessCard(
@@ -924,20 +911,22 @@ class _ValuationScreenState extends State<ValuationScreen> {
                     : _baselineValue,
                 correctionNote: _correctionNote,
               ),
-              // The workbook builds a discounted cash flow model, so there is
-              // none to offer for a company valued on its dividends. Better no
-              // button than one whose only outcome is a refusal.
-              if (result.method == ValuationMethod.dcf) ...[
-                const SizedBox(height: AppSpacing.xl),
-                _ExportButton(
-                  busy: _exporting,
-                  // Terminal growth at or above WACC would make the backend
-                  // refuse; do not offer an export that cannot succeed.
-                  blocked: _growthExceedsDiscountRate,
-                  overrideCount: _activeOverrides.length,
-                  onPressed: _exportExcel,
-                ),
-              ],
+              // Both methods have a workbook of their own now: a discounted
+              // cash flow model, or the dividend model for the companies
+              // valued on their dividends. The backend decides which to build
+              // from the same report this screen is showing, so the button
+              // does not need to know which it will get.
+              const SizedBox(height: AppSpacing.xl),
+              ExportButton(
+                busy: _exporting,
+                // Terminal growth at or above the discount rate - WACC for a
+                // DCF, the cost of equity for a DDM - would make the backend
+                // refuse; do not offer an export that cannot succeed.
+                blocked: _growthExceedsDiscountRate,
+                blockedReason: 'Set terminal growth below the discount rate before exporting.',
+                overrideCount: _activeOverrides.length,
+                onPressed: _exportExcel,
+              ),
               if (_derived.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xxl),
                 AssumptionSliders(
@@ -1205,57 +1194,6 @@ class _TickerHint extends StatelessWidget {
 /// Shown only alongside a successful valuation: the not-suitable and error
 /// cards never render it, so there is no button offering to export something
 /// that does not exist.
-class _ExportButton extends StatelessWidget {
-  const _ExportButton({
-    required this.busy,
-    required this.blocked,
-    required this.overrideCount,
-    required this.onPressed,
-  });
-
-  final bool busy;
-  final bool blocked;
-  final int overrideCount;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final label = overrideCount == 0
-        ? 'Export to Excel'
-        : 'Export to Excel · $overrideCount adjusted';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: (busy || blocked) ? null : onPressed,
-            icon: busy
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.grid_on_rounded, size: 18),
-            label: Text(busy ? 'Building workbook…' : label),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          blocked
-              ? 'Set terminal growth below WACC before exporting.'
-              : 'A spreadsheet with working formulas, matching the '
-                    'assumptions below.',
-          style: context.text.labelSmall?.copyWith(
-            color: blocked ? colors.negative : colors.textSecondary,
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 /// Distinguishes a live local preview from a backend-confirmed figure.
 ///

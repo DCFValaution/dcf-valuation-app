@@ -28,6 +28,7 @@ import 'hypothetical_screen.dart';
 import 'sensitivity_table.dart';
 import 'theme.dart';
 import 'ui.dart';
+import 'export_button.dart';
 import 'valuation_api.dart';
 
 class SpeculativeScreen extends StatefulWidget {
@@ -57,6 +58,7 @@ class _SpeculativeScreenState extends State<SpeculativeScreen> {
   Map<String, double> _slider = {};
 
   _Status _status = _Status.confirmed;
+  bool _exporting = false;
   Timer? _confirmTimer;
   int _seq = 0;
 
@@ -204,6 +206,16 @@ class _SpeculativeScreenState extends State<SpeculativeScreen> {
                         statusLine: _StatusLine(status: _status),
                       ),
                     ],
+                    if (_outcome is SpeculativeSuccess) ...[
+                      const SizedBox(height: AppSpacing.xl),
+                      ExportButton(
+                        busy: _exporting,
+                        caption:
+                            'A spreadsheet of this projection. The file says '
+                            'on its face that it is not a valuation.',
+                        onPressed: _export,
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.xxl),
                     Center(
                       child: TextButton.icon(
@@ -217,6 +229,32 @@ class _SpeculativeScreenState extends State<SpeculativeScreen> {
               ),
       ),
     );
+  }
+
+  Future<void> _export() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    await runExport(
+      fetch: () => widget.api.downloadSpeculativeExcel(widget.ticker),
+      ticker: widget.ticker,
+      showMessage: _showMessage,
+      onDone: () {
+        if (mounted) setState(() => _exporting = false);
+      },
+    );
+  }
+
+  void _showMessage(String text, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor: isError ? const Color(0xFFB3261E) : null,
+          duration: Duration(seconds: isError ? 8 : 4),
+        ),
+      );
   }
 
   List<Widget> _body(BuildContext context) {
