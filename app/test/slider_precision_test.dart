@@ -70,15 +70,31 @@ void main() {
       for (final s in [
         spec(kDdmAdjustable, 'high_growth_years'),
         spec(kSpeculativeAdjustable, 'years_to_profitability'),
+        spec(kAdjustable, 'projection_years'),
       ]) {
         expect(s.step, 1, reason: s.name);
         expect(s.isWholeNumber, isTrue);
-        expect(s.divisions, 14, reason: 'one notch per year from 1 to 15');
+        // One notch per year, whatever the range happens to be.
+        expect(s.divisions, (s.max - s.min).round(), reason: s.name);
         for (final raw in [1.0, 4.4, 4.6, 7.5, 14.9]) {
           final snapped = s.snap(raw);
           expect(snapped, snapped.roundToDouble(), reason: '$raw -> $snapped');
         }
       }
+    });
+
+    test('the DCF projection length runs from five years to ten', () {
+      final s = spec(kAdjustable, 'projection_years');
+      // Five is the convention and the floor: the slider cannot shorten the
+      // model, only lengthen it.
+      expect(s.min, 5);
+      expect(s.max, 10);
+      expect(s.divisions, 5, reason: '5,6,7,8,9,10');
+      expect(s.snap(4), 5, reason: 'below the floor clamps to the default');
+      expect(s.snap(11), 10);
+      expect(s.snap(7.4), 7);
+      expect(s.format(5), '5 years');
+      expect(s.format(10), '10 years');
     });
 
     test('every notch of every slider is an exact step inside its range', () {
@@ -184,6 +200,15 @@ void main() {
       );
       expect(parse(kDdmAdjustable, 'high_growth_years', '12 years').value, 12);
       expect(parse(kDdmAdjustable, 'high_growth_years', '16').value, isNull);
+
+      // The projection length is typed the same way, and refuses the same
+      // things: fractions, and anything outside 5 to 10.
+      expect(parse(kAdjustable, 'projection_years', '8').value, 8);
+      expect(parse(kAdjustable, 'projection_years', '10 years').value, 10);
+      expect(parse(kAdjustable, 'projection_years', '4').value, isNull);
+      expect(parse(kAdjustable, 'projection_years', '11').value, isNull);
+      expect(parse(kAdjustable, 'projection_years', '7.5').error,
+          contains('whole number'));
     });
 
     test(
@@ -361,6 +386,53 @@ void main() {
         find.byType(AssumptionSliders),
       );
       expect(sliders.current['wacc'], 0.103, reason: 'snapped, no float noise');
+    });
+
+    testWidgets('DCF: the projection length is on screen, and a drag lengthens '
+        'the model and reaches the backend', (tester) async {
+      await tester.pumpWidget(DcfApp(api: backend()));
+      await value(tester, 'AAPL');
+
+      // It is rendered at all: the slider list is data-driven, so a spec that
+      // was added but never shown would otherwise pass every other test here.
+      expect(find.text('Projection length'), findsOneWidget);
+
+      final row = find
+          .ancestor(
+            of: find.byKey(const ValueKey('exact-projection_years')),
+            matching: find.byType(Column),
+          )
+          .first;
+      final slider = find.descendant(of: row, matching: find.byType(Slider));
+      await tester.ensureVisible(slider);
+      await tester.pumpAndSettle();
+
+      final before = tester
+          .widget<AssumptionSliders>(find.byType(AssumptionSliders))
+          .current['projection_years']!;
+      expect(before, 5, reason: 'five years is the default');
+
+      await tester.timedDrag(
+        slider,
+        const Offset(40, 0),
+        const Duration(milliseconds: 400),
+      );
+      await tester.pump();
+
+      final after = tester
+          .widget<AssumptionSliders>(find.byType(AssumptionSliders))
+          .current['projection_years']!;
+      expect(after, greaterThan(before), reason: 'the drag lengthened it');
+      expect(after, after.roundToDouble(), reason: 'whole years only: $after');
+      expect(after, lessThanOrEqualTo(10));
+
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(
+        lastOverrides('/valuation')?['projection_years'],
+        after,
+        reason: 'the horizon is confirmed with the backend like any other',
+      );
     });
 
     testWidgets('DCF: a real finger drag inside the scrolling screen moves the '

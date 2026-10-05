@@ -17,6 +17,7 @@ from io import BytesIO
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 import analysis
 import assumptions as A
@@ -297,3 +298,65 @@ def test_excel_endpoints_appear_in_the_openapi_schema(client):
     paths = client.get("/openapi.json").json()["paths"]
     assert "/valuation/{ticker}/excel" in paths
     assert XLSX_MEDIA_TYPE in paths["/valuation/{ticker}/excel"]["get"]["responses"]["200"]["content"]
+
+
+# ---------------------------------------------------------------------------
+# A projection whose length the user chose
+#
+# Five years is the default and the floor, but the horizon is a slider now, so
+# the workbook has to be built for the length the model actually ran rather
+# than for the convention. The shape moves with it: the grid grows a column a
+# year, the terminal value hangs off whichever year turned out to be last, and
+# the PV sum spans exactly the columns that exist.
+# ---------------------------------------------------------------------------
+
+HORIZONS = [5, 6, 7, 8, 9, 10]
+
+
+@pytest.fixture(params=HORIZONS)
+def horizon_case(request):
+    years = request.param
+    report = value_company(PROFITABLE, overrides={"projection_years": years})
+    wb = load_workbook(BytesIO(E.workbook_bytes(report)))
+    return years, report, wb["DCF Model"]
+
+
+def test_the_grid_has_one_column_per_projected_year(horizon_case):
+    years, report, sheet = horizon_case
+    assert len(report.result.years) == years
+    first, last = 3, 2 + years
+    for col in range(first, last + 1):
+        assert sheet.cell(row=E.R_PERIOD, column=col).value == col - 2
+    # And stops there: the column past the last year is empty, so a longer
+    # run's columns cannot be left behind by a shorter one.
+    assert sheet.cell(row=E.R_PERIOD, column=last + 1).value in (None, "")
+
+
+def test_every_projected_cell_is_live_at_any_length(horizon_case):
+    years, _report, sheet = horizon_case
+    rows = [E.R_REVENUE, E.R_EBIT, E.R_TAXES, E.R_NOPAT, E.R_DA_ADD,
+            E.R_CAPEX_LESS, E.R_NWC_LESS, E.R_UFCF, E.R_DISCOUNT, E.R_PV_UFCF]
+    for row in rows:
+        for col in range(3, 2 + years + 1):
+            assert formula(sheet, row, col).startswith("="), \
+                f"row {row}, column {col} is not a formula at {years} years"
+
+
+def test_the_terminal_value_hangs_off_the_final_projected_year(horizon_case):
+    years, _report, sheet = horizon_case
+    last = get_column_letter(2 + years)
+    text = formula(sheet, E.R_TV)
+    assert text.startswith(f"={last}{E.R_UFCF}*"), text
+    assert formula(sheet, E.R_PV_TV) == f"=$B${E.R_TV}*{last}{E.R_DISCOUNT}"
+
+
+def test_the_pv_sum_spans_exactly_the_columns_that_exist(horizon_case):
+    years, _report, sheet = horizon_case
+    last = get_column_letter(2 + years)
+    assert formula(sheet, E.R_PV_SUM) == \
+        f"=SUM(C{E.R_PV_UFCF}:{last}{E.R_PV_UFCF})"
+
+
+def test_the_length_is_written_into_the_assumptions(horizon_case):
+    years, _report, sheet = horizon_case
+    assert sheet.cell(row=E.R_YEARS, column=2).value == years

@@ -99,6 +99,21 @@ const List<AdjustableAssumption> kAdjustable = [
     max: 0.06,
     step: 0.001,
   ),
+  // Five years is the convention and the floor, not a view about this
+  // company. Lengthening it moves value out of the terminal value and into
+  // cash flows that have been forecast explicitly, which is the point of
+  // moving it: the share of the answer resting on a single perpetuity shrinks.
+  // Ten is the ceiling because a revenue growth rate held flat for longer than
+  // that is a weaker claim than the terminal value it replaces.
+  AdjustableAssumption(
+    name: 'projection_years',
+    label: 'Projection length',
+    help: 'Years forecast explicitly before the terminal value',
+    min: 5,
+    max: 10,
+    step: 1,
+    isPercent: false,
+  ),
 ];
 
 /// The dividend discount model's own levers.

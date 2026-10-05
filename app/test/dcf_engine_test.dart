@@ -93,6 +93,74 @@ void main() {
     });
   });
 
+
+  group('a horizon the user chose', () {
+    // The projection length is a slider between 5 and 10 years now, and the
+    // app previews it locally as the slider moves. The local engine therefore
+    // has to change shape with it, not just change a number.
+    const base = BaseYearData(
+      revenue: 416161,
+      totalDebt: 98657,
+      cash: 132420,
+      shares: 14773.3,
+      currentPrice: 296.42,
+    );
+    DcfAssumptions at(int years) => DcfAssumptions(
+          revenueGrowth: 0.06,
+          operatingMargin: 0.32,
+          taxRate: 0.16,
+          daPct: 0.028,
+          capexPct: 0.031,
+          nwcPct: 0.03,
+          wacc: 0.085,
+          terminalGrowth: 0.03,
+          projectionYears: years,
+        );
+
+    for (final years in const [5, 6, 7, 8, 9, 10]) {
+      test('$years years: the projection, discounting and bridge all follow',
+          () {
+        final r = runDcf(base, at(years));
+
+        expect(r.years.length, years);
+        expect(r.years.last.period, years);
+
+        for (final y in r.years) {
+          expectClose(y.revenue, 416161 * math.pow(1.06, y.period).toDouble());
+          expectClose(y.discountFactor, 1 / math.pow(1.085, y.period).toDouble());
+        }
+
+        // Gordon growth hangs off whichever year turned out to be last.
+        final last = r.years.last;
+        expectClose(r.terminalValue, last.ufcf * 1.03 / (0.085 - 0.03));
+        expectClose(r.pvTerminalValue, r.terminalValue * last.discountFactor);
+
+        expectClose(r.pvUfcfSum,
+            r.years.fold<double>(0, (sum, y) => sum + y.pvUfcf));
+        expectClose(r.enterpriseValue, r.pvUfcfSum + r.pvTerminalValue);
+        expectClose(r.equityValue, r.enterpriseValue + 132420 - 98657);
+        expectClose(r.intrinsicValuePerShare, r.equityValue / 14773.3);
+      });
+    }
+
+    test('the default is untouched by the horizon being adjustable', () {
+      expectClose(runDcf(base, at(5)).intrinsicValuePerShare, 160.99,
+          rel: 1e-4);
+    });
+
+    test('a longer horizon leans less on the terminal value', () {
+      final five = runDcf(base, at(5));
+      final ten = runDcf(base, at(10));
+      expect(ten.tvPctOfEv, lessThan(five.tvPctOfEv));
+    });
+
+    test('the slider carries the horizon through a copyWith override', () {
+      final moved = at(5).copyWith({'projection_years': 10});
+      expect(moved.projectionYears, 10);
+      expect(runDcf(base, moved).years.length, 10);
+    });
+  });
+
   group('input guards', () {
     const base = BaseYearData(
       revenue: 1000,
