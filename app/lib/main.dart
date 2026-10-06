@@ -605,7 +605,14 @@ class _ValuationScreenState extends State<ValuationScreen> {
     if (_exporting || _resultTicker.isEmpty) return;
     setState(() => _exporting = true);
     await runExport(
-      fetch: () => _api.downloadRelativeExcel(_resultTicker),
+      // The peers the figure on screen was actually computed from - the
+      // applied edits, not the ones still staged in the panel.
+      fetch: () => _api.downloadRelativeExcel(
+        _resultTicker,
+        addPeers: _relativeController?.applied.added ?? const [],
+        removePeers:
+            _relativeController?.applied.removed.toList() ?? const [],
+      ),
       ticker: _resultTicker,
       showMessage: _showMessage,
       onDone: () {

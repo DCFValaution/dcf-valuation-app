@@ -1764,10 +1764,23 @@ class ValuationApi {
   /// Written once rather than per method: the zip-magic check, the timeout
   /// wording and the error mapping are the same whichever model built the
   /// file, and four copies of them would drift apart.
-  Future<ExcelResult> _downloadWorkbook(Uri uri, String ticker) async {
+  Future<ExcelResult> _downloadWorkbook(
+    Uri uri,
+    String ticker, {
+    Map<String, dynamic>? body,
+  }) async {
     http.Response response;
     try {
-      response = await _client.get(uri).timeout(_excelTimeout);
+      // A body means the workbook depends on something the user changed, so
+      // it cannot be fetched by URL alone.
+      response = await (body == null
+              ? _client.get(uri)
+              : _client.post(
+                  uri,
+                  headers: const {'Content-Type': 'application/json'},
+                  body: jsonEncode(body),
+                ))
+          .timeout(_excelTimeout);
     } on TimeoutException {
       return const ExcelFailure(
         ValuationFailureKind.backendUnreachable,
@@ -1837,7 +1850,19 @@ class ValuationApi {
   }
 
   /// A peer-comparison workbook for the relative view.
-  Future<ExcelResult> downloadRelativeExcel(String ticker) async {
+  ///
+  /// The peer group is the one thing this screen lets the user change, and a
+  /// comparison is only as good as who it compares against - so the workbook
+  /// is built from the peers actually on screen. Asking by ticker alone sent
+  /// the backend back to the automatic selection, which for a company like
+  /// Seagate finds too few peers to compare: the export then refused while a
+  /// perfectly good figure, computed from peers the user had added, was sat
+  /// above the button.
+  Future<ExcelResult> downloadRelativeExcel(
+    String ticker, {
+    List<String> addPeers = const [],
+    List<String> removePeers = const [],
+  }) async {
     final cleaned = ticker.trim().toUpperCase();
     if (cleaned.isEmpty) {
       return const ExcelFailure(
@@ -1845,12 +1870,24 @@ class ValuationApi {
         'Enter a ticker symbol first.',
       );
     }
+    final edited = addPeers.isNotEmpty || removePeers.isNotEmpty;
+    if (!edited) {
+      return _downloadWorkbook(
+        Uri.parse(
+          '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}'
+          '/relative/excel',
+        ),
+        cleaned,
+      );
+    }
     return _downloadWorkbook(
-      Uri.parse(
-        '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}'
-        '/relative/excel',
-      ),
+      Uri.parse('$baseUrl/valuation/relative/excel'),
       cleaned,
+      body: {
+        'ticker': cleaned,
+        'add_peers': addPeers,
+        'remove_peers': removePeers,
+      },
     );
   }
 

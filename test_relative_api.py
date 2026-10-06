@@ -472,3 +472,52 @@ def test_declining_the_workbook_explains_itself_rather_than_erroring(client):
     assert body["reasons"]
     # A refusal, not a spreadsheet with the figure left blank.
     assert "spreadsheetml" not in r.headers["content-type"]
+
+
+# ---------------------------------------------------------------------------
+# The workbook follows the peer group on screen
+#
+# Seagate is the case this was found on: its automatic peer group turns up
+# only two comparable companies, which is below the minimum, so the view
+# refuses. Add two by hand and a real figure appears - but the workbook was
+# still asked for by ticker alone, so the backend went back to the automatic
+# group and refused, and the app showed that refusal over a perfectly good
+# comparison.
+# ---------------------------------------------------------------------------
+
+def test_the_workbook_can_be_asked_for_with_an_edited_peer_group(client):
+    r = client.post("/valuation/relative/excel",
+                    json={"ticker": PROFITABLE, "peers": ["P1", "P2", "P3"]})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == XLSX_MEDIA_TYPE
+    assert r.content[:2] == b"PK"
+
+
+def test_peers_added_by_hand_reach_the_workbook(client):
+    """FEW has too few peers of its own, which is exactly the shape that
+    exposed this: refused on the automatic group, produced once helped."""
+    refused = client.get(f"/valuation/{FEW}/relative/excel")
+    assert refused.status_code == 422, "the automatic group still cannot"
+
+    helped = client.post("/valuation/relative/excel",
+                         json={"ticker": FEW, "add_peers": ["P1", "P2", "P3"]})
+    assert helped.status_code == 200, "but the group on screen can"
+    assert helped.content[:2] == b"PK"
+
+
+def test_removing_peers_can_take_the_workbook_back_to_a_refusal(client):
+    """The other direction: an edit that drops below the minimum must refuse
+    rather than build a sheet from a comparison that no longer stands up."""
+    r = client.post("/valuation/relative/excel",
+                    json={"ticker": PROFITABLE, "peers": ["P1"]})
+    assert r.status_code == 422
+    assert "spreadsheetml" not in r.headers["content-type"]
+    assert r.json()["method"] == "relative"
+
+
+def test_the_plain_workbook_endpoint_is_unchanged(client):
+    """A company whose automatic peers work still exports by ticker alone."""
+    r = client.get(f"/valuation/{BANKX}/relative/excel")
+    assert r.status_code == 200
+    assert r.headers["content-disposition"] == \
+        f'attachment; filename="{BANKX}_Relative.xlsx"'

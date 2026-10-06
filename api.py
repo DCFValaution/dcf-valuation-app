@@ -2000,10 +2000,46 @@ def get_relative_excel(
     """
     report = _run_valuation(ticker, {},
                             valuer=lambda t, overrides=None: value_company_relatively(t))
+    return _relative_workbook_response(report)
+
+
+@app.post(
+    "/valuation/relative/excel",
+    tags=["relative (market-based)"],
+    summary="The relative comparison as a workbook, with the peer group edited",
+    responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
+                                                              "format": "binary"}}},
+                     "description": "An .xlsx peer-multiples comparison"}},
+)
+def post_relative_excel(request: RelativeRequest) -> Any:
+    """
+    The same workbook, built from the peer group the user is actually looking at.
+
+    A comparison is only as good as who it compares against, and the peer
+    group is the one thing the screen lets you change. Without this the
+    workbook was always built from the automatic selection, so a company whose
+    automatic peers are too few to compare - Seagate finds two - refused the
+    export even while a perfectly good figure, computed from peers the user
+    added, was on the screen it was exporting.
+    """
+    report = _run_valuation(
+        request.ticker, {},
+        valuer=lambda t, overrides=None: value_company_relatively(
+            t, peers=request.peers, add_peers=request.add_peers,
+            remove_peers=request.remove_peers))
+    return _relative_workbook_response(report)
+
+
+def _relative_workbook_response(report) -> Any:
+    """Shared by both: the workbook, or the view's own refusal.
+
+    A relative view that could not be computed has no figure to export, and a
+    sheet laid out like a valuation with the number missing invites the reader
+    to supply one. The relative refusal names the peers it did find and why
+    the rest were excluded; the generic one assumes a report with derived
+    assumptions, which a relative report has not got.
+    """
     if report.result is None:
-        # The relative view has its own refusal shape, which names the peers it
-        # did find and why the rest were excluded. The generic one assumes a
-        # report with derived assumptions, which a relative report has not got.
         return _respond_relative(report)
     return _xlsx(relative_workbook_bytes(report), relative_filename_for(report))
 
