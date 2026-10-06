@@ -432,6 +432,25 @@ class CompanyOut(BaseModel):
     exchange: str
 
 
+class CapitalReturnsOut(BaseModel):
+    """Return on invested capital, beside the cost of that capital.
+
+    A diagnostic, not an input: nothing here feeds the valuation, and it is
+    absent entirely wherever it would not mean anything.
+    """
+    roic: float = Field(..., description="Median return on invested capital over the ratio window")
+    wacc: float = Field(..., description="The cost of capital it is being compared with")
+    spread: float = Field(..., description="roic - wacc, as a fraction")
+    verdict: Literal["above", "about", "below"] = Field(
+        ...,
+        description="Whether the business earns above, about, or below its cost "
+                    "of capital. 'about' covers a spread within 2 percentage "
+                    "points either way, which book figures cannot resolve.",
+    )
+    reads_as: str = Field(..., description="The plain-language read, ready to display")
+    detail: str = Field(..., description="How the figure was arrived at")
+
+
 class ValuationResponse(BaseModel):
     method: Literal["dcf"] = Field(
         "dcf", description="Which method produced the value: discounted cash flow")
@@ -456,6 +475,11 @@ class ValuationResponse(BaseModel):
     )
     sensitivity: SensitivityOut
     projection: list[ProjectionYearOut]
+    capital_returns: CapitalReturnsOut | None = Field(
+        None,
+        description="Return on invested capital beside WACC, where it is "
+                    "meaningful. Absent for companies the DCF refuses.",
+    )
     warnings: list[str]
     method_fit_warnings: list[str] = Field(
         default_factory=list,
@@ -945,6 +969,21 @@ PERCENT_NAMES = {
 }
 
 
+def _capital_returns_out(cr) -> "CapitalReturnsOut | None":
+    """None stays None: a company without a meaningful return on capital gets
+    no field at all, rather than a zero a reader would take for a measurement."""
+    if cr is None:
+        return None
+    return CapitalReturnsOut(
+        roic=cr.roic,
+        wacc=cr.wacc,
+        spread=cr.spread,
+        verdict=cr.verdict,
+        reads_as=cr.sentence,
+        detail=cr.detail,
+    )
+
+
 def _assumption_list(store: dict) -> list[AssumptionOut]:
     return [
         AssumptionOut(name=name, value=prov.value, source=prov.source,
@@ -989,6 +1028,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
         ),
         assumptions=_assumption_list(report.derived.provenance),
         global_levers=_assumption_list(levers),
+        capital_returns=_capital_returns_out(report.capital_returns),
         wacc_build_up=report.derived.diagnostics.get("wacc_components", {}),
         wacc_inputs=_assumption_list(report.derived.wacc_inputs),
         sensitivity=SensitivityOut(

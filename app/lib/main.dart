@@ -1521,6 +1521,19 @@ class _SuccessCard extends StatelessWidget {
             ),
           ),
 
+        // Does the business earn more on its capital than that capital
+        // costs? Sits immediately under the note that names the WACC, so the
+        // comparison lands where the reader has just met the number it is
+        // being compared with.
+        //
+        // Drawn only when the backend sent one. It omits the figure wherever
+        // it would mislead - a bank on the dividend path, a loss-maker, any
+        // refusal - so there is no condition to re-litigate here.
+        if (result.capitalReturns != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          CapitalReturnsLine(returns: result.capitalReturns!),
+        ],
+
         // The table the note above points to. Drawn only when the backend
         // sent one worth drawing.
         if (result.sensitivity != null) ...[

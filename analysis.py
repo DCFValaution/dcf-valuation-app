@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from statistics import median
 
 from assumptions import DerivedAssumptions, derive_assumptions
+from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
                             growth_below_terminal_warning)
 from dcf import BaseYearData, DCFResult, run_dcf
@@ -298,6 +299,10 @@ class ValuationReport:
     derived: DerivedAssumptions
     meta: dict
     result: DCFResult | None  # None whenever suitability.suitable is False
+    # A read-only diagnostic beside the valuation, never an input to it.
+    # None wherever it would not mean anything - which, because the
+    # suitability guards run first, is every refusal.
+    capital_returns: CapitalReturns | None = None
 
     @property
     def suitable(self) -> bool:
@@ -619,6 +624,14 @@ def value_company(ticker: str,
 
     result = run_dcf(base, derived.assumptions) if suitability.suitable else None
 
+    # Only where a valuation actually stood up. A refused company has no
+    # return on capital worth reporting, and computing one would invite it
+    # onto a screen that is explaining why there is no figure.
+    capital_returns = (
+        roic_diagnostic(fin, derived.assumptions.tax_rate, derived.assumptions.wacc)
+        if suitability.suitable else None
+    )
+
     return ValuationReport(
         ticker=fin.ticker,
         company_name=fin.company_name,
@@ -630,6 +643,7 @@ def value_company(ticker: str,
         derived=derived,
         meta=meta,
         result=result,
+        capital_returns=capital_returns,
     )
 
 

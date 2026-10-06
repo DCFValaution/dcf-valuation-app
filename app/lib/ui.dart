@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 
 import 'formatting.dart';
 import 'theme.dart';
+import 'valuation_api.dart' show CapitalReturns, CapitalVerdict;
 
 /// The meaning a tinted surface carries.
 enum Tone { neutral, accent, caution, negative, positive }
@@ -391,6 +392,112 @@ class LabelledValue extends StatelessWidget {
           style: emphasis ? context.text.titleLarge : context.text.titleSmall,
         ),
       ],
+    );
+  }
+}
+
+String _asPercent(double fraction) =>
+    '${(fraction * 100).toStringAsFixed(1)}%';
+
+/// Return on invested capital, beside the cost of that capital.
+///
+/// The question this answers is not what the company is worth - the figure
+/// above it already attempts that - but whether the business is worth owning
+/// at all: does it earn more on the capital tied up in it than that capital
+/// costs? A company can be cheap and value-destroying, or dear and excellent,
+/// and the two readings disagreeing is information rather than a fault.
+///
+/// So the verdict leads and the numbers follow. Someone glancing reads one
+/// line; someone checking reads the two percentages under it.
+///
+/// Three verdicts, not two. A gap inside a couple of percentage points is one
+/// that figures drawn from a balance sheet cannot resolve, and a regulated
+/// utility sitting a point below its cost of capital is doing roughly what
+/// its regulator allows - not destroying value. "About" says that, where a
+/// forced above-or-below would say something stronger and probably wrong.
+class CapitalReturnsLine extends StatelessWidget {
+  const CapitalReturnsLine({super.key, required this.returns});
+
+  final CapitalReturns returns;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final (Color tone, IconData icon, String heading) = switch (returns.verdict) {
+      CapitalVerdict.above => (
+        colors.positive,
+        Icons.trending_up_rounded,
+        'Earns above its cost of capital',
+      ),
+      CapitalVerdict.below => (
+        colors.negative,
+        Icons.trending_down_rounded,
+        'Earns below its cost of capital',
+      ),
+      CapitalVerdict.about => (
+        colors.textSecondary,
+        Icons.trending_flat_rounded,
+        'Earns about its cost of capital',
+      ),
+    };
+
+    return Container(
+      key: const Key('capital-returns'),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: context.scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 17, color: tone),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  heading,
+                  key: const Key('capital-returns-verdict'),
+                  style: context.text.titleSmall?.copyWith(color: tone),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.only(left: 17 + AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The two figures, in the order the sentence reads them.
+                Text(
+                  'Return on invested capital '
+                  '${_asPercent(returns.roic)} '
+                  'vs cost of capital ${_asPercent(returns.wacc)}',
+                  key: const Key('capital-returns-figures'),
+                  style: context.text.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+                if (returns.readsAs.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    // The backend's own wording, shown as written.
+                    'This business ${returns.readsAs}. '
+                    'A historical measure of the business, not part of the '
+                    'valuation above.',
+                    style: context.text.bodySmall?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

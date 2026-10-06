@@ -176,7 +176,12 @@ def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
     assert body["method"] == "dcf"
     # method_fit_warnings is the one field added since: doubts about whether
     # the method fits at all. An ordinary company has none.
-    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {"method", "method_fit_warnings"}
+    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {
+        "method", "method_fit_warnings",
+        # Added later as a read-only diagnostic beside the valuation;
+        # it changes nothing the DCF computes.
+        "capital_returns",
+    }
     assert body["method_fit_warnings"] == []
 
 
@@ -556,3 +561,26 @@ def test_a_payments_network_gets_a_dcf_workbook(client):
     r = client.get(f"/valuation/{NETWORK}/excel")
     assert r.status_code == 200
     assert r.content[:2] == b"PK"
+
+
+def test_the_bank_gets_no_return_on_capital_beside_its_cost_of_capital(client):
+    """The diagnostic belongs to the DCF path alone.
+
+    A bank's balance sheet does not report current liabilities, so an
+    invested capital built from one would silently treat its deposits as
+    capital the shareholders put in - a few percent on trillions, which looks
+    like a figure and is not one.
+    """
+    body = client.get(f"/valuation/{BANK}").json()
+    assert body["method"] == "ddm"
+    assert "capital_returns" not in body
+
+
+def test_the_dcf_company_does_get_one(client):
+    """The other half of the same promise: absent on the DDM path, present on
+    the one it was built for."""
+    body = client.get(f"/valuation/{PROFITABLE}").json()
+    assert body["method"] == "dcf"
+    assert body["capital_returns"] is not None
+    assert body["capital_returns"]["verdict"] in ("above", "about", "below")
+    assert body["capital_returns"]["reads_as"]

@@ -135,6 +135,69 @@ class Assumption {
 }
 
 /// A company was valued.
+/// Whether a business earns more on its capital than that capital costs.
+///
+/// A diagnostic beside the valuation, never an input to it. The backend omits
+/// it wherever it would not mean anything - a bank on the dividend path, a
+/// loss-maker, any refusal - so its presence is the whole test of whether to
+/// show it. The app does not decide; it renders what arrived.
+enum CapitalVerdict { above, about, below }
+
+class CapitalReturns {
+  /// Median return on invested capital over the backend's ratio window.
+  final double roic;
+
+  /// The cost of that capital, as the valuation derived it.
+  final double wacc;
+
+  /// roic - wacc, as a fraction. Positive means the business out-earns its
+  /// capital.
+  final double spread;
+
+  final CapitalVerdict verdict;
+
+  /// The backend's plain-language read, shown as written. "about" is a real
+  /// answer rather than a hedge: a gap inside two percentage points is one
+  /// that book figures cannot resolve either way.
+  final String readsAs;
+
+  /// How the figure was arrived at, for the reader who wants the workings.
+  final String detail;
+
+  const CapitalReturns({
+    required this.roic,
+    required this.wacc,
+    required this.spread,
+    required this.verdict,
+    required this.readsAs,
+    required this.detail,
+  });
+
+  static CapitalReturns? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final verdict = switch (json['verdict'] as String?) {
+      'above' => CapitalVerdict.above,
+      'below' => CapitalVerdict.below,
+      'about' => CapitalVerdict.about,
+      // An unfamiliar verdict is not guessed at: a wrong direction here is
+      // worse than no line at all.
+      _ => null,
+    };
+    if (verdict == null) return null;
+    final roic = (json['roic'] as num?)?.toDouble();
+    final wacc = (json['wacc'] as num?)?.toDouble();
+    if (roic == null || wacc == null) return null;
+    return CapitalReturns(
+      roic: roic,
+      wacc: wacc,
+      spread: (json['spread'] as num?)?.toDouble() ?? (roic - wacc),
+      verdict: verdict,
+      readsAs: json['reads_as'] as String? ?? '',
+      detail: json['detail'] as String? ?? '',
+    );
+  }
+}
+
 class ValuationSuccess extends ValuationResult {
   final String ticker;
   final String companyName;
@@ -191,6 +254,11 @@ class ValuationSuccess extends ValuationResult {
   /// the figure rather than among [warnings], and never repeated in them.
   final List<String> methodFitWarnings;
 
+  /// Return on invested capital beside the cost of it, where the backend
+  /// judged the comparison meaningful. Null everywhere else, and the screen
+  /// shows nothing rather than a dash.
+  final CapitalReturns? capitalReturns;
+
   /// How the figure moves across the two key assumptions; null when the
   /// backend sent no grid worth drawing.
   final SensitivityGrid? sensitivity;
@@ -211,6 +279,7 @@ class ValuationSuccess extends ValuationResult {
     this.warnings = const [],
     this.methodFitWarnings = const [],
     this.sensitivity,
+    this.capitalReturns,
   });
 
   bool get isUndervalued => upsideDownside > 0;
@@ -292,6 +361,11 @@ class ValuationSuccess extends ValuationResult {
           : SensitivityGrid.fromDcf(
               json['sensitivity'] as Map<String, dynamic>?,
             ),
+      // Absent on every path but the DCF's, and absent there too for a
+      // company it refused. Nothing decides that here.
+      capitalReturns: CapitalReturns.fromJson(
+        json['capital_returns'] as Map<String, dynamic>?,
+      ),
     );
   }
 }

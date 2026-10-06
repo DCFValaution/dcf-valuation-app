@@ -136,7 +136,12 @@ def test_the_standard_valuation_is_unchanged_and_never_fetches_peers(client, mon
     assert body["method"] == "dcf"
     # method_fit_warnings is the one field added since: doubts about whether
     # the method fits at all. An ordinary company has none.
-    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {"method", "method_fit_warnings"}
+    assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {
+        "method", "method_fit_warnings",
+        # Added later as a read-only diagnostic beside the valuation;
+        # it changes nothing the DCF computes.
+        "capital_returns",
+    }
     assert body["method_fit_warnings"] == []
 
 

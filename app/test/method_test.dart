@@ -240,4 +240,28 @@ void main() {
       expect(kAdjustable.first.format(0.05), '5.00%');
     });
   });
+
+  group('the capital-returns line stays on the DCF screen', () {
+    // The backend decides where the figure is meaningful and omits it
+    // elsewhere. These check the app does not reintroduce it: a bank's
+    // balance sheet would make the number nonsense, and a refusal screen is
+    // explaining why there is no figure at all.
+
+    test('a bank on the dividend path carries none', () {
+      expect(caseFor('JPM').containsKey('capital_returns'), isFalse);
+      expect(parseSuccess('JPM').capitalReturns, isNull);
+    });
+
+    test('and the app asks for none when parsing one', () {
+      final jpm = parseSuccess('JPM');
+      expect(jpm.method, ValuationMethod.ddm);
+      expect(jpm.capitalReturns, isNull);
+    });
+
+    test('a refused company never becomes a success to hang one on', () {
+      // RIVN is recorded as a refusal; there is no ValuationSuccess for the
+      // line to be attached to in the first place.
+      expect(caseFor('RIVN').containsKey('capital_returns'), isFalse);
+    });
+  });
 }
