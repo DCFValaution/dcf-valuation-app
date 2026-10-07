@@ -231,3 +231,137 @@ def test_five_years_is_unchanged_by_the_horizon_being_adjustable():
     """The default must still produce exactly what it always produced."""
     assert _at(5).intrinsic_value_per_share == pytest.approx(
         run_dcf(AAPL_BASE, AAPL_ASSUMPTIONS).intrinsic_value_per_share, rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# The optional growth fade
+#
+# A flat rate to the final year and then a perpetuity at a much lower one puts
+# a cliff in the middle of the model: 18% in year five, 2.5% forever after.
+# The fade removes it by holding the starting rate and then gliding to the
+# terminal one, arriving exactly at the last projected year.
+#
+# It is opt-in, and the first test here is the one that matters most: with it
+# off, nothing about the model may move.
+# ---------------------------------------------------------------------------
+
+from dcf import FADE_EXPONENTIAL, FADE_LINEAR, growth_path  # noqa: E402
+
+
+def _faded(**kw):
+    fields = {f: getattr(AAPL_ASSUMPTIONS, f) for f in (
+        "revenue_growth", "operating_margin", "tax_rate", "da_pct",
+        "capex_pct", "nwc_pct", "wacc", "terminal_growth", "projection_years")}
+    fields.update(kw)
+    return Assumptions(**fields)
+
+
+def test_with_the_fade_off_every_year_grows_at_the_one_rate():
+    """The flat projection, unchanged and still the default."""
+    a = _faded()
+    assert a.fade_enabled is False
+    assert growth_path(a) == [a.revenue_growth] * a.projection_years
+
+
+def test_with_the_fade_off_the_whole_result_is_what_it_always_was():
+    """The regression that matters: turning a feature on by accident, or
+    changing the arithmetic while adding it, must fail here."""
+    plain = run_dcf(AAPL_BASE, AAPL_ASSUMPTIONS)
+    explicit_off = run_dcf(AAPL_BASE, _faded(fade_enabled=False))
+    for field in ("intrinsic_value_per_share", "pv_ufcf_sum", "terminal_value",
+                  "pv_terminal_value", "enterprise_value", "equity_value",
+                  "tv_pct_of_ev"):
+        assert repr(getattr(plain, field)) == repr(getattr(explicit_off, field)), field
+    assert [repr(y.revenue) for y in plain.years] == \
+           [repr(y.revenue) for y in explicit_off.years]
+
+
+@pytest.mark.parametrize("pattern", [FADE_LINEAR, FADE_EXPONENTIAL])
+def test_the_rate_holds_flat_and_then_glides(pattern):
+    a = _faded(revenue_growth=0.18, terminal_growth=0.025, projection_years=10,
+               fade_enabled=True, fade_start_year=3, fade_pattern=pattern)
+    path = growth_path(a)
+
+    assert len(path) == 10
+    assert path[:3] == [0.18, 0.18, 0.18], "held at the starting rate"
+    assert path[-1] == 0.025, "and arrives exactly at the terminal rate"
+    # Monotonically down in between, with no step back up.
+    glide = path[2:]
+    assert all(b <= a_ for a_, b in zip(glide, glide[1:]))
+
+
+def test_the_last_year_is_the_terminal_rate_to_the_bit():
+    """Not approximately: the perpetuity starts from this rate, and daylight
+    between them is a seam in the model."""
+    for pattern in (FADE_LINEAR, FADE_EXPONENTIAL):
+        for years in (5, 7, 10):
+            for start in (3, 1, years - 1):
+                a = _faded(revenue_growth=0.20, terminal_growth=0.025,
+                           projection_years=years, fade_enabled=True,
+                           fade_start_year=start, fade_pattern=pattern)
+                assert growth_path(a)[-1] == 0.025, (pattern, years, start)
+
+
+def test_exponential_falls_faster_at_first_than_linear():
+    """Which is the point of offering it: decay, rather than a managed glide."""
+    kw = dict(revenue_growth=0.18, terminal_growth=0.025, projection_years=10,
+              fade_enabled=True, fade_start_year=3)
+    lin = growth_path(_faded(fade_pattern=FADE_LINEAR, **kw))
+    exp = growth_path(_faded(fade_pattern=FADE_EXPONENTIAL, **kw))
+    assert exp[3] < lin[3]
+    assert exp[-1] == lin[-1] == 0.025
+
+
+def test_exponential_falls_back_to_linear_where_a_ratio_has_no_meaning():
+    """A constant factor needs both ends positive. Rather than invent one, the
+    straight line is used - and the result is still a real fade."""
+    a = _faded(revenue_growth=0.0, terminal_growth=0.025, projection_years=6,
+               fade_enabled=True, fade_start_year=2,
+               fade_pattern=FADE_EXPONENTIAL)
+    straight = _faded(revenue_growth=0.0, terminal_growth=0.025,
+                      projection_years=6, fade_enabled=True,
+                      fade_start_year=2, fade_pattern=FADE_LINEAR)
+    assert growth_path(a) == growth_path(straight)
+
+
+@pytest.mark.parametrize("start_year", [5, 6, 20])
+def test_a_fade_with_nowhere_to_run_is_simply_flat(start_year):
+    """Starting at or after the final year is not an error; it is the flat
+    projection asked for a different way."""
+    a = _faded(projection_years=5, fade_enabled=True, fade_start_year=start_year)
+    assert growth_path(a) == [a.revenue_growth] * 5
+    assert run_dcf(AAPL_BASE, a).intrinsic_value_per_share == pytest.approx(
+        run_dcf(AAPL_BASE, AAPL_ASSUMPTIONS).intrinsic_value_per_share)
+
+
+def test_a_starting_rate_below_terminal_rises_rather_than_failing():
+    """Apple's derived growth is below the terminal rate, so its 'fade' goes
+    up. Allowed, and still lands on the terminal rate."""
+    a = _faded(revenue_growth=0.01, terminal_growth=0.025, projection_years=6,
+               fade_enabled=True, fade_start_year=2)
+    path = growth_path(a)
+    assert path[0] == 0.01
+    assert path[-1] == 0.025
+    assert all(b >= x for x, b in zip(path, path[1:]))
+
+
+def test_the_projection_actually_uses_the_faded_rates():
+    a = _faded(revenue_growth=0.18, terminal_growth=0.025, projection_years=10,
+               fade_enabled=True, fade_start_year=3)
+    r = run_dcf(AAPL_BASE, a)
+    path = growth_path(a)
+    assert [y.revenue_growth for y in r.years] == path
+    previous = AAPL_BASE.revenue
+    for year, rate in zip(r.years, path):
+        assert year.revenue == pytest.approx(previous * (1 + rate), rel=1e-12)
+        previous = year.revenue
+
+
+def test_fading_lowers_the_value_of_a_fast_grower():
+    """The sanity check on the whole idea: growth that decays is worth less
+    than growth held flat to the cliff edge."""
+    kw = dict(revenue_growth=0.18, terminal_growth=0.025, projection_years=10)
+    flat = run_dcf(AAPL_BASE, _faded(**kw))
+    faded = run_dcf(AAPL_BASE, _faded(fade_enabled=True, fade_start_year=3, **kw))
+    assert faded.intrinsic_value_per_share < flat.intrinsic_value_per_share
+    assert faded.tv_pct_of_ev < flat.tv_pct_of_ev

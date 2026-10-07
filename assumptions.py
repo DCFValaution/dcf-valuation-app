@@ -51,7 +51,7 @@ provenance, so a clamped value is never silently passed off as observed.
 from dataclasses import dataclass, field
 from statistics import median
 
-from dcf import Assumptions
+from dcf import FADE_EXPONENTIAL, FADE_LINEAR, Assumptions
 from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
                          total_debt_of)
 
@@ -59,6 +59,12 @@ from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
 DEFAULT_WACC = 0.085             # only used when WACC derivation fails
 DEFAULT_TERMINAL_GROWTH = 0.025  # ~long-run nominal GDP growth
 DEFAULT_PROJECTION_YEARS = 5
+
+# The growth fade is opt-in and off by default, so a valuation nobody has
+# touched is the flat projection it has always been.
+DEFAULT_FADE_ENABLED = False
+DEFAULT_FADE_START_YEAR = 3
+DEFAULT_FADE_PATTERN = "linear"
 FALLBACK_TAX_RATE = 0.21         # US federal statutory, when no taxed year exists
 
 # --- WACC inputs ----------------------------------------------------------
@@ -479,6 +485,24 @@ def derive_assumptions(fin: CompanyFinancials,
     projection_years = record("projection_years", DEFAULT_PROJECTION_YEARS, "default",
                               "modelling convention")
 
+    # The fade: off unless asked for. Recorded like any other assumption so
+    # that when it is on, the screen can say so and say where it came from.
+    fade_enabled = record("fade_enabled", DEFAULT_FADE_ENABLED, "default",
+                          "off; growth is held flat across the forecast")
+    fade_start_year = record("fade_start_year", DEFAULT_FADE_START_YEAR, "default",
+                             "last year at the full starting rate before the glide")
+    # The shape of the glide is a choice between two named curves, not a
+    # quantity, so it is kept out of the numeric provenance channel - which
+    # exists to say where a *number* came from - and recorded as a
+    # diagnostic instead. An unfamiliar name falls back to the straight line
+    # rather than failing a valuation over a spelling.
+    supplied_pattern = str(overrides.get("fade_pattern", DEFAULT_FADE_PATTERN)).lower()
+    fade_pattern = (supplied_pattern if supplied_pattern in (FADE_LINEAR, FADE_EXPONENTIAL)
+                    else DEFAULT_FADE_PATTERN)
+    diagnostics["fade_pattern"] = fade_pattern
+    diagnostics["fade_pattern_source"] = (
+        "override" if "fade_pattern" in overrides else "default")
+
     assumptions = Assumptions(
         revenue_growth=revenue_growth,
         operating_margin=operating_margin,
@@ -489,9 +513,12 @@ def derive_assumptions(fin: CompanyFinancials,
         wacc=wacc,
         terminal_growth=terminal_growth,
         projection_years=int(projection_years),
+        fade_enabled=bool(fade_enabled),
+        fade_start_year=int(fade_start_year),
+        fade_pattern=str(fade_pattern),
     )
 
-    unknown = set(overrides) - set(provenance) - set(wacc_inputs)
+    unknown = set(overrides) - set(provenance) - set(wacc_inputs) - {"fade_pattern"}
     if unknown:
         known = sorted(set(provenance) | set(wacc_inputs))
         raise ValueError(

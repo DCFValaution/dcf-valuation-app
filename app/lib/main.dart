@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'advanced_panel.dart';
 import 'assumption_sliders.dart';
 import 'dcf_engine.dart';
 import 'export_button.dart';
@@ -306,6 +307,31 @@ class _ValuationScreenState extends State<ValuationScreen> {
   bool get _growthExceedsDiscountRate =>
       growthExceedsDiscountRate(_slider, _specs);
 
+  // The Advanced section. Collapsed and off on arrival: a user who never
+  // opens it sees exactly the screen that existed before it did.
+  bool _advancedOpen = false;
+  bool _fadeEnabled = false;
+  int _fadeStartYear = 3;
+  String _fadePattern = fadeLinear;
+
+  /// The growth rate the backend applied in each projected year.
+  ///
+  /// Read from the confirmed result rather than recomputed here, so what the
+  /// panel lists is what the valuation above it was actually built from.
+  List<double> get _growthPath => _success?.growthPath ?? const [];
+
+  /// The fade's own overrides, kept apart from the sliders' because one of
+  /// them names a shape rather than carrying a number.
+  Map<String, double> get _fadeOverrides => _fadeEnabled
+      ? {
+          'fade_enabled': 1,
+          'fade_start_year': _fadeStartYear.toDouble(),
+        }
+      : const {};
+
+  Map<String, String> get _fadeTextOverrides =>
+      _fadeEnabled ? {'fade_pattern': _fadePattern} : const {};
+
   Map<String, double> get _activeOverrides {
     final out = <String, double>{};
     for (final spec in _specs) {
@@ -314,6 +340,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
       if (derived == null || current == null) continue;
       if ((derived - current).abs() > 0.00005) out[spec.name] = current;
     }
+    out.addAll(_fadeOverrides);
     return out;
   }
 
@@ -534,6 +561,41 @@ class _ValuationScreenState extends State<ValuationScreen> {
   ///
   /// Debounced, because releasing and grabbing another slider in quick
   /// succession would otherwise fire a request per gesture.
+  /// The horizon the fade has to fit inside.
+  int get _projectionYears =>
+      (_slider['projection_years'] ?? _derived['projection_years'] ?? 5).round();
+
+  void _onFadeChanged(bool value) {
+    setState(() {
+      _fadeEnabled = value;
+      // Keep the start year inside the horizon whenever the fade is switched
+      // on, so a horizon shortened earlier cannot leave it stranded.
+      final maximum = _projectionYears > 1 ? _projectionYears - 1 : 1;
+      if (_fadeStartYear > maximum) _fadeStartYear = maximum;
+    });
+    _confirmNow();
+  }
+
+  void _onFadeStartYearChanged(int value) {
+    if (value == _fadeStartYear) return;
+    setState(() => _fadeStartYear = value);
+    _onSliderChangeEnd();
+  }
+
+  void _onFadePatternChanged(String value) {
+    if (value == _fadePattern) return;
+    setState(() => _fadePattern = value);
+    _confirmNow();
+  }
+
+  /// A change the local engine could preview, but which changes the shape of
+  /// the model rather than one number - so it is sent at once rather than
+  /// waiting out the drag timer.
+  void _confirmNow() {
+    _confirmTimer?.cancel();
+    _confirm();
+  }
+
   void _onSliderChangeEnd() {
     _confirmTimer?.cancel();
     _confirmTimer = Timer(const Duration(milliseconds: 350), _confirm);
@@ -551,7 +613,11 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
     setState(() => _status = ValueStatus.confirming);
 
-    final result = await _api.value(_resultTicker, overrides: overrides);
+    final result = await _api.value(
+      _resultTicker,
+      overrides: overrides,
+      textOverrides: _fadeTextOverrides,
+    );
     // A later drag has already superseded this request.
     if (!mounted || seq != _confirmSeq) return;
 
@@ -591,7 +657,11 @@ class _ValuationScreenState extends State<ValuationScreen> {
     setState(() => _exporting = true);
     await runExport(
       fetch: () =>
-          _api.downloadExcel(_resultTicker, overrides: _activeOverrides),
+          _api.downloadExcel(
+            _resultTicker,
+            overrides: _activeOverrides,
+            textOverrides: _fadeTextOverrides,
+          ),
       ticker: _resultTicker,
       showMessage: _showMessage,
       onDone: () {
@@ -934,6 +1004,26 @@ class _ValuationScreenState extends State<ValuationScreen> {
                 overrideCount: _activeOverrides.length,
                 onPressed: _exportExcel,
               ),
+              // Advanced overrides: the shape of the model rather than its
+              // numbers. The standard DCF only - the dividend, speculative,
+              // hypothetical and relative models each have their own horizon
+              // and no growth path to fade.
+              if (result.method == ValuationMethod.dcf) ...[
+                const SizedBox(height: AppSpacing.xxl),
+                AdvancedPanel(
+                  expanded: _advancedOpen,
+                  onExpandedChanged: (v) => setState(() => _advancedOpen = v),
+                  fadeEnabled: _fadeEnabled,
+                  onFadeChanged: _onFadeChanged,
+                  fadeStartYear: _fadeStartYear,
+                  onStartYearChanged: _onFadeStartYearChanged,
+                  fadePattern: _fadePattern,
+                  onPatternChanged: _onFadePatternChanged,
+                  projectionYears: _projectionYears,
+                  growthPath: _growthPath,
+                  busy: _revaluing,
+                ),
+              ],
               if (_derived.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xxl),
                 AssumptionSliders(

@@ -60,6 +60,16 @@ class DcfAssumptions {
   final double terminalGrowth;
   final int projectionYears;
 
+  /// Off by default: with the fade off this engine projects one rate held
+  /// across every year, exactly as it always has.
+  final bool fadeEnabled;
+
+  /// The last year that still grows at the full starting rate.
+  final int fadeStartYear;
+
+  /// 'linear' or 'exponential'.
+  final String fadePattern;
+
   const DcfAssumptions({
     required this.revenueGrowth,
     required this.operatingMargin,
@@ -70,6 +80,9 @@ class DcfAssumptions {
     required this.wacc,
     required this.terminalGrowth,
     this.projectionYears = 5,
+    this.fadeEnabled = false,
+    this.fadeStartYear = 1,
+    this.fadePattern = fadeLinear,
   });
 
   /// Build from the backend's flat name/value map, which is how the app holds
@@ -84,6 +97,8 @@ class DcfAssumptions {
         wacc: m['wacc'] ?? 0,
         terminalGrowth: m['terminal_growth'] ?? 0,
         projectionYears: (m['projection_years'] ?? 5).round(),
+        fadeEnabled: (m['fade_enabled'] ?? 0) != 0,
+        fadeStartYear: (m['fade_start_year'] ?? 1).round(),
       );
 
   DcfAssumptions copyWith(Map<String, double> overrides) =>
@@ -99,12 +114,64 @@ class DcfAssumptions {
         'wacc': wacc,
         'terminal_growth': terminalGrowth,
         'projection_years': projectionYears.toDouble(),
+        'fade_enabled': fadeEnabled ? 1 : 0,
+        'fade_start_year': fadeStartYear.toDouble(),
       };
+}
+
+const String fadeLinear = 'linear';
+const String fadeExponential = 'exponential';
+
+/// The growth rate used in each projected year, in order.
+///
+/// Mirrors `growth_path` in dcf.py exactly, because this engine previews what
+/// that one will confirm, and two curves that disagree would show the user a
+/// figure the backend then quietly corrects.
+///
+/// With the fade off it is the starting rate repeated. With it on, the rate
+/// holds through [DcfAssumptions.fadeStartYear] and then glides to the
+/// terminal rate, arriving exactly at the final projected year so the handoff
+/// to the perpetuity is seamless.
+List<double> growthPath(DcfAssumptions a) {
+  final n = a.projectionYears;
+  final start = a.revenueGrowth;
+  if (!a.fadeEnabled) return List<double>.filled(n, start);
+
+  final terminal = a.terminalGrowth;
+  // A fade starting at or after the final year has nowhere to run. Not an
+  // error: it is the flat projection, asked for a different way.
+  final hold = a.fadeStartYear < 1
+      ? 1
+      : (a.fadeStartYear > n ? n : a.fadeStartYear);
+  final steps = n - hold;
+  if (steps <= 0) return List<double>.filled(n, start);
+
+  // The exponential shape is a ratio, so it needs both ends positive to mean
+  // anything; where they are not there is no sensible constant factor, and
+  // the straight line is used rather than one being invented.
+  final exponential =
+      a.fadePattern == fadeExponential && start > 0 && terminal > 0;
+
+  final path = List<double>.filled(hold, start, growable: true);
+  for (var i = 1; i <= steps; i++) {
+    final progress = i / steps;
+    path.add(
+      exponential
+          ? start * math.pow(terminal / start, progress).toDouble()
+          : start + (terminal - start) * progress,
+    );
+  }
+  // The final year is the terminal rate exactly: the perpetuity begins from
+  // this rate, and a float's width between them is a seam.
+  path[path.length - 1] = terminal;
+  return path;
 }
 
 class ProjectionYear {
   final int period;
   final double revenue;
+  /// The rate this year actually grew at.
+  final double revenueGrowth;
   final double ebit;
   final double tax;
   final double nopat;
@@ -118,6 +185,7 @@ class ProjectionYear {
   const ProjectionYear({
     required this.period,
     required this.revenue,
+    required this.revenueGrowth,
     required this.ebit,
     required this.tax,
     required this.nopat,
@@ -182,11 +250,14 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
     throw const DcfInputError('Share count must be positive.');
   }
 
+  // One rate per projected year; all the same with the fade off.
+  final growthByYear = growthPath(a);
+
   final years = <ProjectionYear>[];
   var prevRevenue = base.revenue;
 
   for (var t = 1; t <= a.projectionYears; t++) {
-    final revenue = prevRevenue * (1 + a.revenueGrowth);
+    final revenue = prevRevenue * (1 + growthByYear[t - 1]);
     final ebit = revenue * a.operatingMargin;
     final tax = ebit * a.taxRate;
     final nopat = ebit - tax;
@@ -200,6 +271,7 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
     years.add(ProjectionYear(
       period: t,
       revenue: revenue,
+      revenueGrowth: growthByYear[t - 1],
       ebit: ebit,
       tax: tax,
       nopat: nopat,

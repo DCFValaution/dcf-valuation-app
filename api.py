@@ -106,6 +106,7 @@ from market_data import (DataUnavailableError, MarketDataError, RateLimitedError
 ASSUMPTION_OVERRIDES = (
     "revenue_growth", "operating_margin", "tax_rate", "da_pct", "capex_pct",
     "nwc_pct", "wacc", "terminal_growth", "projection_years",
+    "fade_enabled", "fade_start_year", "fade_pattern",
 )
 WACC_INPUT_OVERRIDES = ("risk_free_rate", "equity_risk_premium", "beta", "cost_of_debt")
 ALL_OVERRIDES = ASSUMPTION_OVERRIDES + WACC_INPUT_OVERRIDES
@@ -349,6 +350,12 @@ class Overrides(BaseModel):
     wacc: float | None = Field(None, description="Discount rate; overrides the CAPM build-up")
     terminal_growth: float | None = Field(None, description="Perpetual growth rate; must be below WACC")
     projection_years: int | None = Field(None, ge=1, le=20, description="Explicit forecast horizon")
+    fade_enabled: bool | None = Field(
+        None, description="Glide revenue growth down to the terminal rate instead of holding it flat")
+    fade_start_year: int | None = Field(
+        None, ge=1, le=20, description="Last year at the full starting rate before the glide begins")
+    fade_pattern: Literal["linear", "exponential"] | None = Field(
+        None, description="Equal percentage-point steps, or equal-proportion decay")
 
     risk_free_rate: float | None = Field(None, description="Overrides the live Treasury yield")
     equity_risk_premium: float | None = Field(None, description="Excess return demanded over risk-free")
@@ -397,6 +404,12 @@ class SensitivityOut(BaseModel):
 class ProjectionYearOut(BaseModel):
     period: int
     revenue: float
+    revenue_growth: float = Field(
+        ...,
+        description="The growth rate actually applied in this year. Equal in "
+                    "every year unless the growth fade is on, in which case "
+                    "this is the fade made visible.",
+    )
     ebit: float
     nopat: float
     da: float
@@ -1048,7 +1061,9 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
         ),
         projection=[
             ProjectionYearOut(
-                period=y.period, revenue=y.revenue, ebit=y.ebit, nopat=y.nopat,
+                period=y.period, revenue=y.revenue,
+                revenue_growth=y.revenue_growth,
+                ebit=y.ebit, nopat=y.nopat,
                 da=y.da, capex=y.capex, delta_nwc=y.delta_nwc, ufcf=y.ufcf,
                 discount_factor=y.discount_factor, pv_ufcf=y.pv_ufcf,
             )

@@ -161,6 +161,114 @@ void main() {
     });
   });
 
+  group('the optional growth fade', () {
+    // Mirrors test_dcf.py. The two engines have to agree not just on the
+    // figure but on the shape of the glide, because this one previews what
+    // that one confirms.
+    const base = BaseYearData(
+      revenue: 10000,
+      totalDebt: 2000,
+      cash: 1000,
+      shares: 1000,
+      currentPrice: 50,
+    );
+    DcfAssumptions at({
+      bool fade = false,
+      int startYear = 3,
+      String pattern = fadeLinear,
+      double growth = 0.18,
+      int years = 10,
+    }) =>
+        DcfAssumptions(
+          revenueGrowth: growth,
+          operatingMargin: 0.30,
+          taxRate: 0.21,
+          daPct: 0.05,
+          capexPct: 0.06,
+          nwcPct: 0.05,
+          wacc: 0.10,
+          terminalGrowth: 0.025,
+          projectionYears: years,
+          fadeEnabled: fade,
+          fadeStartYear: startYear,
+          fadePattern: pattern,
+        );
+
+    test('off by default, and then every year grows at the one rate', () {
+      expect(const DcfAssumptions(
+        revenueGrowth: 0.1, operatingMargin: 0.3, taxRate: 0.2, daPct: 0.05,
+        capexPct: 0.05, nwcPct: 0.05, wacc: 0.1, terminalGrowth: 0.025,
+      ).fadeEnabled, isFalse);
+      expect(growthPath(at()), List<double>.filled(10, 0.18));
+    });
+
+    test('with it off the whole result is untouched', () {
+      final plain = runDcf(base, at());
+      final off = runDcf(base, at(fade: false));
+      expect(off.intrinsicValuePerShare, plain.intrinsicValuePerShare);
+      expect(off.pvUfcfSum, plain.pvUfcfSum);
+      expect(off.terminalValue, plain.terminalValue);
+    });
+
+    for (final pattern in const [fadeLinear, fadeExponential]) {
+      test('$pattern: holds flat, then glides to the terminal rate', () {
+        final path = growthPath(at(fade: true, pattern: pattern));
+        expect(path.length, 10);
+        expect(path.take(3), everyElement(0.18));
+        expect(path.last, 0.025, reason: 'exactly, not approximately');
+        for (var i = 3; i < path.length; i++) {
+          expect(path[i], lessThanOrEqualTo(path[i - 1]));
+        }
+      });
+    }
+
+    test('exponential falls faster at first', () {
+      final lin = growthPath(at(fade: true, pattern: fadeLinear));
+      final exp = growthPath(at(fade: true, pattern: fadeExponential));
+      expect(exp[3], lessThan(lin[3]));
+      expect(exp.last, lin.last);
+    });
+
+    test('exponential falls back to the straight line where a ratio cannot '
+        'mean anything', () {
+      final exp = growthPath(
+          at(fade: true, growth: 0, pattern: fadeExponential, years: 6));
+      final lin =
+          growthPath(at(fade: true, growth: 0, pattern: fadeLinear, years: 6));
+      expect(exp, lin);
+    });
+
+    test('a fade with nowhere to run is simply flat', () {
+      for (final startYear in const [5, 6, 20]) {
+        expect(growthPath(at(fade: true, startYear: startYear, years: 5)),
+            List<double>.filled(5, 0.18));
+      }
+    });
+
+    test('a starting rate below terminal rises, and still lands on it', () {
+      final path = growthPath(at(fade: true, growth: 0.01, years: 6));
+      expect(path.first, 0.01);
+      expect(path.last, 0.025);
+    });
+
+    test('the projection uses the faded rates', () {
+      final a = at(fade: true);
+      final r = runDcf(base, a);
+      final path = growthPath(a);
+      expect(r.years.map((y) => y.revenueGrowth).toList(), path);
+      var previous = base.revenue;
+      for (var i = 0; i < path.length; i++) {
+        expectClose(r.years[i].revenue, previous * (1 + path[i]));
+        previous = r.years[i].revenue;
+      }
+    });
+
+    test('fading lowers the value of a fast grower', () {
+      expect(runDcf(base, at(fade: true)).intrinsicValuePerShare,
+          lessThan(runDcf(base, at()).intrinsicValuePerShare));
+    });
+  });
+
   group('input guards', () {
     const base = BaseYearData(
       revenue: 1000,

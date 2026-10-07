@@ -165,9 +165,13 @@ def _label(ws, row, text, *, bold=False, indent=0, color=BLACK, size=10, italic=
     return _style(cell, bold=bold, color=color, size=size, italic=italic)
 
 
-def _input(ws, row, value, fmt, *, note=None, source=None):
-    """A hardcoded, user-editable input: blue text on a highlighted fill."""
-    cell = ws.cell(row=row, column=2, value=value)
+def _input(ws, row, value, fmt, *, note=None, source=None, column=2):
+    """A hardcoded, user-editable input: blue text on a highlighted fill.
+
+    `column` exists for the faded growth row, where there is one input per
+    projected year rather than a single cell in column B.
+    """
+    cell = ws.cell(row=row, column=column, value=value)
     _style(cell, color=BLUE, fmt=fmt, fill=INPUT_FILL)
     if source:
         _style(ws.cell(row=row, column=3, value=source), color=GREY, size=9)
@@ -213,6 +217,7 @@ def build_workbook(report: ValuationReport) -> Workbook:
 
     a = report.derived.assumptions
     base = report.base
+    result = report.result
     layout = _Layout(years=a.projection_years)
     provenance = report.derived.provenance
     today = _dt.date.today().isoformat()
@@ -260,10 +265,21 @@ def build_workbook(report: ValuationReport) -> Workbook:
         (R_WACC, "WACC (discount rate)", "wacc", PERCENT_2DP),
         (R_TERMINAL, "Terminal growth rate (g)", "terminal_growth", PERCENT_2DP),
     ]
+    fading = bool(getattr(a, "fade_enabled", False)) and len(result.years) > 1
     for row, text, name, fmt in assumption_rows:
+        if fading and name == "revenue_growth":
+            # With a fade on, this cell is only where the glide starts, and
+            # the projection no longer reads it. Saying so here keeps the
+            # reader from editing it and wondering why nothing moved.
+            text = "Revenue growth rate (starting; faded below)"
         _label(ws, row, text)
         prov = provenance[name]
-        _input(ws, row, getattr(a, name), fmt, source=prov.source, note=prov.detail)
+        note = prov.detail
+        if fading and name == "revenue_growth":
+            note = (f"{prov.detail}; faded {a.fade_pattern} from year "
+                    f"{a.fade_start_year} to the terminal rate - see row "
+                    f"{R_GROWTH_PCT}")
+        _input(ws, row, getattr(a, name), fmt, source=prov.source, note=note)
 
     # Structural rather than editable: the projection grid is generated with a
     # fixed number of columns, so changing this cell in Excel would not add
@@ -316,7 +332,13 @@ def build_workbook(report: ValuationReport) -> Workbook:
     # Revenue: base links to the input cell, then compounds by the growth rate.
     _label(ws, R_REVENUE, "Revenue")
     _formula(ws, R_REVENUE, layout.base_col, f"=$B${R_REVENUE_IN}", CURRENCY)
-    _label(ws, R_GROWTH_PCT, "Revenue growth %", indent=1, italic=True, color=GREY)
+    if fading:
+        # Each year carries the rate it actually grew at, and revenue reads it.
+        # Editable, because a reader who wants to argue with the shape of the
+        # fade should be able to - that is what this workbook is for.
+        _label(ws, R_GROWTH_PCT, "Revenue growth applied (faded)", indent=1)
+    else:
+        _label(ws, R_GROWTH_PCT, "Revenue growth %", indent=1, italic=True, color=GREY)
     _label(ws, R_EBIT, "Operating income (EBIT)")
     _label(ws, R_TAXES, "Less: taxes on EBIT", indent=1)
     _label(ws, R_NOPAT, "NOPAT (EBIT after tax)")
@@ -339,12 +361,23 @@ def build_workbook(report: ValuationReport) -> Workbook:
              f"=SUM({B}{R_NOPAT}:{B}{R_NWC_LESS})", CURRENCY,
              bold=True, top_border=True)
 
-    for col in layout.projection_cols:
+    for year_index, col in enumerate(layout.projection_cols):
         c = layout.letter(col)
         prev = layout.letter(col - 1)
 
-        _formula(ws, R_REVENUE, col, f"={prev}{R_REVENUE}*(1+$B${R_GROWTH})", CURRENCY)
-        _formula(ws, R_GROWTH_PCT, col, f"={c}{R_REVENUE}/{prev}{R_REVENUE}-1", PERCENT_1DP)
+        if fading:
+            # The rate for this year is a value, not a reference to the single
+            # growth cell, and revenue compounds off it. Written first so the
+            # revenue formula below has something to point at.
+            _input(ws, R_GROWTH_PCT, result.years[year_index].revenue_growth,
+                   PERCENT_2DP, column=col)
+            _formula(ws, R_REVENUE, col,
+                     f"={prev}{R_REVENUE}*(1+{c}{R_GROWTH_PCT})", CURRENCY)
+        else:
+            _formula(ws, R_REVENUE, col,
+                     f"={prev}{R_REVENUE}*(1+$B${R_GROWTH})", CURRENCY)
+            _formula(ws, R_GROWTH_PCT, col,
+                     f"={c}{R_REVENUE}/{prev}{R_REVENUE}-1", PERCENT_1DP)
         _formula(ws, R_EBIT, col, f"={c}{R_REVENUE}*$B${R_MARGIN}", CURRENCY)
         _formula(ws, R_TAXES, col, f"=-{c}{R_EBIT}*$B${R_TAX}", CURRENCY)
         _formula(ws, R_NOPAT, col, f"={c}{R_EBIT}+{c}{R_TAXES}", CURRENCY)

@@ -360,3 +360,81 @@ def test_the_pv_sum_spans_exactly_the_columns_that_exist(horizon_case):
 def test_the_length_is_written_into_the_assumptions(horizon_case):
     years, _report, sheet = horizon_case
     assert sheet.cell(row=E.R_YEARS, column=2).value == years
+
+
+# ---------------------------------------------------------------------------
+# A faded growth path in the workbook
+#
+# With the fade off the file must be exactly what it always was - that is the
+# first test here and the one that matters. With it on, each projected year
+# has to compound off its own rate rather than a single shared cell, and the
+# sheet has to say a fade is in effect so a reader is not left wondering why
+# the growth assumption no longer drives anything.
+# ---------------------------------------------------------------------------
+
+FADE_ON = {"fade_enabled": 1, "fade_start_year": 2}
+
+
+@pytest.fixture
+def faded_sheet():
+    report = value_company(PROFITABLE, overrides=FADE_ON)
+    wb = load_workbook(BytesIO(E.workbook_bytes(report)))
+    return report, wb["DCF Model"]
+
+
+def test_with_the_fade_off_the_growth_row_is_what_it_always_was(sheet):
+    assert formula(sheet, E.R_REVENUE, 3) == f"=B{E.R_REVENUE}*(1+$B${E.R_GROWTH})"
+    assert formula(sheet, E.R_GROWTH_PCT, 3) == \
+        f"=C{E.R_REVENUE}/B{E.R_REVENUE}-1"
+    assert sheet.cell(row=E.R_GROWTH, column=1).value == "Revenue growth rate (per year)"
+
+
+def test_each_faded_year_compounds_off_its_own_rate(faded_sheet):
+    _report, sheet = faded_sheet
+    for col in range(3, 3 + 5):
+        letter = get_column_letter(col)
+        previous = get_column_letter(col - 1)
+        assert formula(sheet, E.R_REVENUE, col) == \
+            f"={previous}{E.R_REVENUE}*(1+{letter}{E.R_GROWTH_PCT})", letter
+
+
+def test_the_faded_rates_are_the_engines_own(faded_sheet):
+    report, sheet = faded_sheet
+    for offset, year in enumerate(report.result.years):
+        cell = sheet.cell(row=E.R_GROWTH_PCT, column=3 + offset)
+        assert cell.value == pytest.approx(year.revenue_growth, rel=1e-12)
+
+
+def test_the_last_faded_year_is_the_terminal_rate(faded_sheet):
+    report, sheet = faded_sheet
+    last = sheet.cell(row=E.R_GROWTH_PCT,
+                      column=2 + report.derived.assumptions.projection_years)
+    assert last.value == report.derived.assumptions.terminal_growth
+
+
+def test_the_sheet_says_a_fade_is_in_effect(faded_sheet):
+    report, sheet = faded_sheet
+    label = sheet.cell(row=E.R_GROWTH, column=1).value
+    assert "faded" in label.lower(), label
+    note = str(sheet.cell(row=E.R_GROWTH, column=4).value)
+    assert "faded linear from year 2" in note
+    assert sheet.cell(row=E.R_GROWTH_PCT, column=1).value.strip() == \
+        "Revenue growth applied (faded)"
+
+
+def test_the_faded_rates_are_editable_like_any_other_input(faded_sheet):
+    """A reader who disagrees with the shape of the fade should be able to
+    argue with it in the file, which is what the file is for."""
+    _report, sheet = faded_sheet
+    cell = sheet.cell(row=E.R_GROWTH_PCT, column=3)
+    assert "0000FF" in str(cell.font.color.rgb)
+
+
+def test_nothing_else_about_the_projection_moves(faded_sheet, sheet):
+    """Only revenue's own formula changes; every row built from revenue is
+    untouched, so a fade cannot quietly alter the rest of the model."""
+    _report, faded = faded_sheet
+    for row in (E.R_EBIT, E.R_TAXES, E.R_NOPAT, E.R_DA_ADD, E.R_CAPEX_LESS,
+                E.R_NWC_LESS, E.R_UFCF, E.R_DISCOUNT, E.R_PV_UFCF):
+        for col in range(3, 8):
+            assert formula(faded, row, col) == formula(sheet, row, col), (row, col)

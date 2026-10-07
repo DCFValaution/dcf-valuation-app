@@ -254,6 +254,13 @@ class ValuationSuccess extends ValuationResult {
   /// the figure rather than among [warnings], and never repeated in them.
   final List<String> methodFitWarnings;
 
+  /// The growth rate the backend applied in each projected year, in order.
+  ///
+  /// Every entry is the same unless the growth fade is on. Carried so the
+  /// Advanced panel can show what the fade actually did rather than the app
+  /// recomputing a path and hoping it matches.
+  final List<double> growthPath;
+
   /// Return on invested capital beside the cost of it, where the backend
   /// judged the comparison meaningful. Null everywhere else, and the screen
   /// shows nothing rather than a dash.
@@ -280,6 +287,7 @@ class ValuationSuccess extends ValuationResult {
     this.methodFitWarnings = const [],
     this.sensitivity,
     this.capitalReturns,
+    this.growthPath = const [],
   });
 
   bool get isUndervalued => upsideDownside > 0;
@@ -366,6 +374,11 @@ class ValuationSuccess extends ValuationResult {
       capitalReturns: CapitalReturns.fromJson(
         json['capital_returns'] as Map<String, dynamic>?,
       ),
+      growthPath: [
+        for (final y in (json['projection'] as List<dynamic>? ?? const []))
+          ((y as Map<String, dynamic>)['revenue_growth'] as num?)?.toDouble() ??
+              0.0,
+      ],
     );
   }
 }
@@ -1624,6 +1637,7 @@ class ValuationApi {
   Future<ValuationResult> value(
     String ticker, {
     Map<String, double> overrides = const {},
+    Map<String, String> textOverrides = const {},
   }) async {
     final cleaned = ticker.trim().toUpperCase();
     if (cleaned.isEmpty) {
@@ -1635,7 +1649,7 @@ class ValuationApi {
 
     http.Response response;
     try {
-      if (overrides.isEmpty) {
+      if (overrides.isEmpty && textOverrides.isEmpty) {
         final uri = Uri.parse(
           '$baseUrl/valuation/${Uri.encodeComponent(cleaned)}',
         );
@@ -1645,7 +1659,13 @@ class ValuationApi {
             .post(
               Uri.parse('$baseUrl/valuation'),
               headers: const {'Content-Type': 'application/json'},
-              body: jsonEncode({'ticker': cleaned, 'overrides': overrides}),
+              body: jsonEncode({
+                'ticker': cleaned,
+                // Most overrides are numbers. A couple - the shape of the
+                // growth fade - name a choice instead, and a map of doubles
+                // has nowhere to put a name.
+                'overrides': {...overrides, ...textOverrides},
+              }),
             )
             .timeout(_timeout);
       }
@@ -1894,6 +1914,7 @@ class ValuationApi {
   Future<ExcelResult> downloadExcel(
     String ticker, {
     Map<String, double> overrides = const {},
+    Map<String, String> textOverrides = const {},
   }) async {
     final cleaned = ticker.trim().toUpperCase();
     if (cleaned.isEmpty) {
@@ -1905,7 +1926,7 @@ class ValuationApi {
 
     http.Response response;
     try {
-      if (overrides.isEmpty) {
+      if (overrides.isEmpty && textOverrides.isEmpty) {
         response = await _client
             .get(
               Uri.parse(
@@ -1918,7 +1939,10 @@ class ValuationApi {
             .post(
               Uri.parse('$baseUrl/valuation/excel'),
               headers: const {'Content-Type': 'application/json'},
-              body: jsonEncode({'ticker': cleaned, 'overrides': overrides}),
+              body: jsonEncode({
+                'ticker': cleaned,
+                'overrides': {...overrides, ...textOverrides},
+              }),
             )
             .timeout(_excelTimeout);
       }

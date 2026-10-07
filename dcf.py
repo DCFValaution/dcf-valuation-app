@@ -25,11 +25,87 @@ class Assumptions:
     terminal_growth: float      # Gordon-growth perpetuity rate (g)
     projection_years: int = 5
 
+    # --- Optional growth fade -------------------------------------------
+    # Off by default, and when off the projection is exactly what it always
+    # was: one growth rate, held for every year.
+    #
+    # A flat rate up to the final year and then a perpetuity at a much lower
+    # one puts a cliff in the middle of the model - the company grows 18% in
+    # year five and 2.5% forever after. The fade removes the cliff by holding
+    # the starting rate for a while and then gliding to the terminal rate,
+    # arriving exactly at the last projected year so the handoff to the
+    # perpetuity is seamless.
+    fade_enabled: bool = False
+    # The last year that still grows at the full starting rate. The glide runs
+    # from here to the final projected year.
+    fade_start_year: int = 1
+    fade_pattern: str = "linear"   # "linear" | "exponential"
+
+
+FADE_LINEAR = "linear"
+FADE_EXPONENTIAL = "exponential"
+
+
+def growth_path(assumptions: Assumptions) -> List[float]:
+    """The growth rate used in each projected year, in order.
+
+    With the fade off this is the starting rate repeated, which is what the
+    model has always done. With it on, the rate holds through
+    `fade_start_year` and then glides to the terminal rate, reaching it
+    exactly at the final projected year.
+
+    Two shapes. Linear takes equal percentage-point steps. Exponential
+    multiplies by a constant factor each year, so the rate falls fast at
+    first and slowly later - usually the more realistic of the two for a
+    company whose growth is decaying rather than being managed down.
+
+    The exponential shape is a ratio, so it needs both ends positive and
+    non-zero to mean anything; where they are not, there is no sensible
+    constant factor and the linear shape is used instead rather than
+    inventing one.
+    """
+    n = assumptions.projection_years
+    start = assumptions.revenue_growth
+    if not assumptions.fade_enabled:
+        return [start] * n
+
+    terminal = assumptions.terminal_growth
+    # A fade that starts at or after the last year has nowhere to run, which
+    # is not an error: it is simply the flat projection asked for a different
+    # way.
+    hold = max(1, min(assumptions.fade_start_year, n))
+    steps = n - hold
+    if steps <= 0:
+        return [start] * n
+
+    exponential = (
+        assumptions.fade_pattern == FADE_EXPONENTIAL
+        and start > 0
+        and terminal > 0
+    )
+
+    path = [start] * hold
+    for i in range(1, steps + 1):
+        progress = i / steps
+        if exponential:
+            path.append(start * (terminal / start) ** progress)
+        else:
+            path.append(start + (terminal - start) * progress)
+    # The last year is the terminal rate exactly, whatever the arithmetic
+    # above left behind: the perpetuity that follows begins from this rate,
+    # and a float's width of daylight between them is a seam.
+    path[-1] = terminal
+    return path
+
 
 @dataclass
 class ProjectionYear:
     period: int
     revenue: float
+    # The rate this year actually grew at. Equal to the single assumption
+    # with the fade off; the point of recording it is that with the fade on
+    # it is not, and a reader must be able to see what was applied.
+    revenue_growth: float
     ebit: float
     tax: float
     nopat: float
@@ -79,11 +155,15 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
     wacc = assumptions.wacc
 
     # --- Revenue projection & UFCF build ---
+    # One rate per projected year. With the fade off every entry is the same
+    # starting rate, so this is the flat projection it has always been.
+    growth_by_year = growth_path(assumptions)
+
     years = []
     prev_revenue = base.revenue
 
     for t in range(1, n + 1):
-        revenue = prev_revenue * (1 + assumptions.revenue_growth)
+        revenue = prev_revenue * (1 + growth_by_year[t - 1])
         ebit = revenue * assumptions.operating_margin
         tax = ebit * assumptions.tax_rate
         nopat = ebit - tax
@@ -97,6 +177,7 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
         years.append(ProjectionYear(
             period=t,
             revenue=revenue,
+            revenue_growth=growth_by_year[t - 1],
             ebit=ebit,
             tax=tax,
             nopat=nopat,
