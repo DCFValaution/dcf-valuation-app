@@ -1927,6 +1927,23 @@ def honesty_note(report: "ValuationReport") -> str | None:
     # Company names routinely end in "Inc." - avoid "Apple Inc.." below.
     name = report.company_name.rstrip(".")
 
+    # A converted company has one more thing the figure rests on, and it is
+    # not an assumption the user can move: the exchange rate. Naming it here
+    # puts it alongside the WACC and the equity risk premium, which is where
+    # it belongs - the figure moves with it the same way.
+    fx_text = ""
+    fx = (report.meta or {}).get("fx")
+    if fx and fx.get("pair"):
+        fx_text = (
+            f" {name}'s figures are reported in "
+            f"{report.meta.get('reporting_currency')} and have been converted "
+            f"to {report.meta.get('currency')} at "
+            f"{fx['rate']:.6g} ({fx['pair']}, {fx['as_of']}), so the figure "
+            "moves with that rate as well. It is today's spot rate, and the "
+            "discount rate is built from a US risk-free rate, so this assumes "
+            "no sustained drift between the two currencies."
+        )
+
     return (
         f"${report.result.intrinsic_value_per_share:,.2f} is the output of these assumptions, "
         f"not a fact about {name}. It assumes a WACC of "
@@ -1934,6 +1951,7 @@ def honesty_note(report: "ValuationReport") -> str | None:
         f"{report.derived.assumptions.terminal_growth:.2%} growth in perpetuity; the equity "
         "risk premium in particular has no single correct value. Move any of them and the "
         "figure moves materially - the sensitivity table shows by how much."
+        + fx_text
     )
 
 

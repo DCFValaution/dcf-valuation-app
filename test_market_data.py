@@ -385,7 +385,7 @@ def test_blocked_quote_endpoint_still_produces_a_valuation(monkeypatch):
         "symbol": "AAPL", "companyName": "Apple Inc.", "sector": "Technology",
         "industry": None, "exchange": "NMS", "beta": None, "marketCap": None,
         "price": 315.34, "sharesOutstanding": None, "currency": "USD",
-        "financialCurrency": None, "quoteType": "EQUITY",
+        "financialCurrency": "USD", "quoteType": "EQUITY",
     })
 
     base, meta = M.fetch_with_meta("AAPL")
@@ -408,7 +408,7 @@ def _sectorless_profile(monkeypatch, ticker="TRV", name="The Travelers Companies
         "symbol": ticker, "companyName": name, "sector": None,
         "industry": None, "exchange": "NYSE", "beta": None, "marketCap": None,
         "price": 375.20, "sharesOutstanding": None, "currency": "USD",
-        "financialCurrency": None, "quoteType": "EQUITY",
+        "financialCurrency": "USD", "quoteType": "EQUITY",
     })
 
 
@@ -451,7 +451,7 @@ def test_a_missing_sector_is_not_cached(monkeypatch):
         "symbol": "TRV", "companyName": "The Travelers Companies, Inc.",
         "sector": "Financial Services", "industry": "Insurance - Property & Casualty",
         "exchange": "NYSE", "beta": None, "marketCap": None, "price": 375.20,
-        "sharesOutstanding": None, "currency": "USD", "financialCurrency": None,
+        "sharesOutstanding": None, "currency": "USD", "financialCurrency": "USD",
         "quoteType": "EQUITY",
     })
 
@@ -920,13 +920,21 @@ def test_matching_currencies_are_valued_normally(monkeypatch, apple):
     assert fin.profile["currency"] == fin.profile["financialCurrency"] == "USD"
 
 
-def test_unknown_currency_does_not_block_a_valuation(monkeypatch):
-    """A missing field must not refuse an otherwise valuable company."""
-    info = {k: v for k, v in AAPL_INFO.items() if k != "currency"}
+@pytest.mark.parametrize("missing", ["currency", "financialCurrency"])
+def test_an_unstated_currency_is_refused(monkeypatch, missing):
+    """A missing label is the one case that must not proceed.
+
+    It used to. While nothing converted that was merely unhelpful - the
+    statements were valued in whatever currency they happened to be in. Now
+    that conversion exists there is nothing to convert from or to, and
+    guessing is how a company gets valued 809% above its market.
+    """
+    info = {k: v for k, v in AAPL_INFO.items() if k != missing}
     install(monkeypatch, FakeTicker(
         info=info, income=frame(AAPL_INCOME), balance=frame(AAPL_BALANCE),
         cashflow=frame(AAPL_CASHFLOW)))
-    assert M.fetch_financials("X").years_available == 3
+    with pytest.raises(M.UnsupportedListingError, match="did not say which currency"):
+        M.fetch_financials("X")
 
 
 # ---------------------------------------------------------------------------
