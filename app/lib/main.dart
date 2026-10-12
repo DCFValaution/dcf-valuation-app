@@ -21,6 +21,11 @@ import 'valuation_api.dart';
 /// Which analysis of a valued company is on screen.
 enum _Lens { intrinsic, relative }
 
+/// The last year that holds the full starting rate when the fade is first
+/// switched on. Matches the backend's own default, so turning the fade on
+/// without touching the slider asks for the same shape the backend would.
+const int _defaultFadeStartYear = 3;
+
 /// Chooses between the intrinsic valuation and the relative view.
 ///
 /// The labels carry the distinction: "Intrinsic value" against "Relative
@@ -33,26 +38,59 @@ class _LensSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: SegmentedButton<_Lens>(
-        key: const Key('lens-switcher'),
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(
-            value: _Lens.intrinsic,
-            icon: Icon(Icons.functions_rounded, size: 18),
-            label: Text('Intrinsic value'),
+    // The labels are the part that has to survive: they name which question
+    // the figure answers, and a label broken across three lines is unreadable
+    // in exactly the place a reader most needs to know what they are looking
+    // at. On a compact phone two segments, two icons and this much text do
+    // not fit, so the icons give way first - they are decorative here, and
+    // the words carry the whole meaning.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final roomForIcons = constraints.maxWidth >= 420;
+        return SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<_Lens>(
+            key: const Key('lens-switcher'),
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              // The default horizontal padding is generous enough to force a
+              // wrap on its own at this width.
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              ),
+            ),
+            segments: [
+              // Deliberately not capped to one line. Capping would stop the
+              // wrap but clip the label instead, and a reader with large
+              // text turned on would get "Relative (mark". Wrapping is the
+              // safe failure; the icon and padding above are what buy the
+              // room to avoid it.
+              ButtonSegment(
+                value: _Lens.intrinsic,
+                icon: roomForIcons
+                    ? const Icon(Icons.functions_rounded, size: 18)
+                    : null,
+                label: const Text(
+                  'Intrinsic value',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              ButtonSegment(
+                value: _Lens.relative,
+                icon: roomForIcons
+                    ? const Icon(Icons.compare_arrows_rounded, size: 18)
+                    : null,
+                label: const Text(
+                  'Relative (market)',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+            selected: {lens},
+            onSelectionChanged: (s) => onChanged(s.first),
           ),
-          ButtonSegment(
-            value: _Lens.relative,
-            icon: Icon(Icons.compare_arrows_rounded, size: 18),
-            label: Text('Relative (market)'),
-          ),
-        ],
-        selected: {lens},
-        onSelectionChanged: (s) => onChanged(s.first),
-      ),
+        );
+      },
     );
   }
 }
@@ -311,8 +349,27 @@ class _ValuationScreenState extends State<ValuationScreen> {
   // opens it sees exactly the screen that existed before it did.
   bool _advancedOpen = false;
   bool _fadeEnabled = false;
-  int _fadeStartYear = 3;
+  int _fadeStartYear = _defaultFadeStartYear;
   String _fadePattern = fadeLinear;
+
+  /// Put the fade back to off.
+  ///
+  /// Called wherever a figure is produced without the fade's overrides. The
+  /// panel describes what built the number above it, so leaving the toggle on
+  /// over an unfaded figure would make the panel assert something the figure
+  /// does not support - and the growth path's own caption, which promises the
+  /// final year matches the terminal rate, would be false.
+  ///
+  /// Only the stored state needs clearing. The growth path is read from the
+  /// result itself, and the fade's overrides are derived from [_fadeEnabled],
+  /// so both follow from this.
+  ///
+  /// Must be called from inside a setState.
+  void _clearFade() {
+    _fadeEnabled = false;
+    _fadeStartYear = _defaultFadeStartYear;
+    _fadePattern = fadeLinear;
+  }
 
   /// The growth rate the backend applied in each projected year.
   ///
@@ -378,6 +435,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
       _derived = {};
       _sources = {};
       _slider = {};
+      // The fade is an override of the previous company's model, and this
+      // request does not carry it. Clearing it here keeps the panel honest:
+      // the next figure is the backend's own default, and the panel says so.
+      _clearFade();
       _baselineValue = null;
       _preview = null;
       _fullAssumptions = {};
@@ -461,6 +522,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
       _derived = {};
       _sources = {};
       _slider = {};
+      _clearFade();
       _baselineValue = null;
       _preview = null;
       _fullAssumptions = {};
@@ -712,6 +774,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
     setState(() {
       _slider = Map.of(_derived);
+      // Reset means the backend's own assumptions, and the fade is an
+      // override like any other - it is dropped from the request below, so
+      // it has to be dropped from the panel too.
+      _clearFade();
       _preview = null;
       _correctionNote = null;
       _revaluing = true;
@@ -763,10 +829,20 @@ class _ValuationScreenState extends State<ValuationScreen> {
                 )
               : null,
           title: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const _BrandMark(size: 26),
               const SizedBox(width: AppSpacing.md),
-              const Text('Intrinsic'),
+              // On the narrowest phones the back arrow, the brand mark and
+              // the info action together leave the title less room than the
+              // word needs.
+              const Flexible(
+                child: Text(
+                  'Intrinsic',
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                ),
+              ),
             ],
           ),
           actions: [
@@ -1362,11 +1438,16 @@ class _StatusLine extends StatelessWidget {
             else
               Icon(icon, size: 14, color: fg),
             const SizedBox(width: AppSpacing.sm),
-            Text(
-              text,
-              style: context.text.labelSmall?.copyWith(
-                color: fg,
-                fontWeight: FontWeight.w600,
+            // Wraps rather than running off the edge: the longest of these
+            // ("Figure not yet updated · release to recalculate") does not
+            // fit a compact phone on one line.
+            Flexible(
+              child: Text(
+                text,
+                style: context.text.labelSmall?.copyWith(
+                  color: fg,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -1537,10 +1618,16 @@ class _SuccessCard extends StatelessWidget {
                                 color: accent,
                               ),
                               const SizedBox(width: AppSpacing.xs),
-                              Text(
-                                _percent(upsideDownside),
-                                style: context.text.titleSmall?.copyWith(
-                                  color: accent,
+                              // A large percentage - a speculative figure
+                              // can run to four digits - must shrink the
+                              // badge rather than widen it past its half of
+                              // the row.
+                              Flexible(
+                                child: Text(
+                                  _percent(upsideDownside),
+                                  style: context.text.titleSmall?.copyWith(
+                                    color: accent,
+                                  ),
                                 ),
                               ),
                             ],

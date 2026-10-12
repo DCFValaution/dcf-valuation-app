@@ -113,7 +113,11 @@ class SectionHeader extends StatelessWidget {
                   Flexible(child: Text(title, style: context.text.titleMedium)),
                   if (badge != null) ...[
                     const SizedBox(width: AppSpacing.sm),
-                    badge!,
+                    // Flexible as well as the title: a badge naming the peer
+                    // group's provenance is long enough on its own to push
+                    // the header off a compact phone, and the title having
+                    // room to shrink does not help if the badge cannot.
+                    Flexible(child: badge!),
                   ],
                 ],
               ),
@@ -327,11 +331,18 @@ class Pill extends StatelessWidget {
             Icon(icon, size: 13, color: fg),
             const SizedBox(width: AppSpacing.xs + 1),
           ],
-          Text(
-            label,
-            style: context.text.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w700,
+          // Flexible, so a long label wraps inside the pill instead of
+          // pushing it past the edge of the screen. MainAxisSize.min keeps a
+          // short label's pill tight to its text, as before; this only takes
+          // effect once there is not enough room, which on a compact phone
+          // is what the method badge runs into.
+          Flexible(
+            child: Text(
+              label,
+              style: context.text.labelSmall?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
