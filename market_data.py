@@ -684,12 +684,18 @@ def fetch_reporting_currency(ticker: str) -> str | None:
                 "lang": "en-US",
                 "region": "US",
             },
-            timeout=_TIMEOUT,
+            timeout=20,
         )
         if response.status_code != 200:
             return None
         codes = set(_CURRENCY_CODE_RE.findall(response.text))
-    except Exception:
+    except Exception as exc:
+        # Narrow enough to keep a transport failure from failing a valuation,
+        # but logged: a bare swallow here once turned a typo in this function
+        # into "this company has no stated currency", which reads as a fact
+        # about the company rather than a fault in the code.
+        logging.getLogger(__name__).warning(
+            "reporting-currency lookup for %s failed: %s", ticker, exc)
         return None
 
     # More than one currency across the revenue rows means the series has been
