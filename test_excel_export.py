@@ -181,11 +181,16 @@ def test_terminal_value_is_a_gordon_growth_formula(sheet):
     assert f"($B${E.R_WACC}-$B${E.R_TERMINAL})" in text
 
 
-def test_equity_bridge_adds_cash_and_subtracts_debt(sheet):
+def test_equity_bridge_adds_cash_and_subtracts_debt_and_minority_interest(sheet):
     assert formula(sheet, E.R_PLUS_CASH) == f"=$B${E.R_CASH_IN}"
     assert formula(sheet, E.R_LESS_DEBT) == f"=-$B${E.R_DEBT_IN}"
-    assert formula(sheet, E.R_EQUITY) == \
+    # Minority interest leaves with the debt: enterprise value counts a
+    # partly-owned subsidiary's cash flows in full, and the outside
+    # shareholders' share of them is not the parent's to value.
+    assert formula(sheet, E.R_LESS_MINORITY) == f"=-$B${E.R_MINORITY_IN}"
+    assert formula(sheet, E.R_EQUITY) == (
         f"=$B${E.R_EV}+$B${E.R_PLUS_CASH}+$B${E.R_LESS_DEBT}"
+        f"+$B${E.R_LESS_MINORITY}")
 
 
 def test_intrinsic_value_is_a_formula_not_a_number(sheet):

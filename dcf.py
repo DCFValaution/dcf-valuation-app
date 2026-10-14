@@ -12,6 +12,20 @@ class BaseYearData:
     shares: float           # millions
     current_price: float    # $
 
+    # Minority (non-controlling) interest, $mm.
+    #
+    # Enterprise value is built from fully consolidated cash flows, which
+    # include all of a partly-owned subsidiary's revenue and margin, not the
+    # parent's share of it. The outside shareholders' claim on that has to
+    # come back out, or the per-share figure values cash flows the parent
+    # does not own. It is zero for most companies and worth ten percent of
+    # the figure for a holding company.
+    #
+    # Defaulted rather than required so that a caller constructing a base
+    # year by hand - the tests, the hypothetical screen - keeps working and
+    # gets the no-minority-interest case, which is the common one.
+    minority_interest: float = 0.0
+
 
 @dataclass
 class Assumptions:
@@ -199,7 +213,10 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
 
     # --- Enterprise & equity value ---
     enterprise_value = pv_ufcf_sum + pv_terminal_value
-    equity_value = enterprise_value + base.cash - base.total_debt
+    # Minority interest leaves with the debt: both are claims on the
+    # consolidated business that are not the parent shareholders'.
+    equity_value = (enterprise_value + base.cash - base.total_debt
+                    - base.minority_interest)
     intrinsic_value_per_share = equity_value / base.shares
 
     upside_downside = (intrinsic_value_per_share - base.current_price) / base.current_price
@@ -286,5 +303,9 @@ def _equity_value_per_share(base: BaseYearData, assumptions: Assumptions) -> flo
     tv = last_ufcf * (1 + g) / (wacc - g)
     pv_tv = tv * last_df
     ev = pv_sum + pv_tv
-    equity = ev + base.cash - base.total_debt
+    # The same bridge as above. It has to stay the same bridge: the centre
+    # cell of the sensitivity table is required to reproduce the headline
+    # exactly, so a subtraction missing here would show up as the table
+    # disagreeing with the figure it sits under.
+    equity = ev + base.cash - base.total_debt - base.minority_interest
     return equity / base.shares

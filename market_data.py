@@ -453,6 +453,22 @@ def _balance_row(frame, column: int) -> dict:
         # nothing else distinguishes an asset manager from an insurer wearing
         # its label.
         "totalAssets": _frame_value(frame, ("Total Assets",), column),
+        # The outside shareholders' claim on partly-owned subsidiaries.
+        #
+        # One exact label, deliberately, with no chain behind it. Yahoo
+        # publishes three other lines whose names contain these same words -
+        # "Total Equity Gross Minority Interest", "Total Liabilities Net
+        # Minority Interest", "Total Non Current Liabilities Net Minority
+        # Interest" - and every one of them means something else. _frame_value
+        # matches the index exactly rather than by substring, so a chain is
+        # not needed to stay clear of them; it is the fallbacks that would
+        # bring them within reach.
+        #
+        # None when the line is absent, which the caller reads as nil. That
+        # was checked rather than assumed: across thirty-two companies, every
+        # absent line belonged to a company whose equity confirmed it had no
+        # minority interest.
+        "minorityInterest": _frame_value(frame, ("Minority Interest",), column),
     }
 
 
@@ -573,6 +589,11 @@ _MONEY_FIELDS_BALANCE = (
     "shortTermDebt", "longTermDebt", "cashAndCashEquivalents",
     "shortTermInvestments", "totalInvestments", "totalCurrentAssets",
     "totalCurrentLiabilities", "commonStockEquity", "loans", "totalAssets",
+    # A balance-sheet amount like any other, and it has to travel with them:
+    # it is subtracted in the equity bridge alongside debt, so leaving it in
+    # the reporting currency would mix currencies in exactly the way the
+    # capital-structure weights used to.
+    "minorityInterest",
 )
 _MONEY_FIELDS_CASHFLOW = (
     "depreciationAndAmortization", "capitalExpenditure",
@@ -2051,12 +2072,29 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
 
     shares_mm, shares_source = _resolve_shares(fin, current_price)
 
+    # Absent is treated as nil, but the two are not the same claim and the
+    # provenance says which one was made. A reader looking at a holding
+    # company is entitled to know whether the model read a figure or assumed
+    # one. Deriving it from the equity lines when absent is deliberately not
+    # attempted: that calculation was the instrument used to check this one,
+    # and it is wrong by $34bn on ET, where the stockholders' equity line is
+    # reported as zero.
+    reported_minority = balance.get("minorityInterest")
+    if reported_minority is None:
+        minority_mm = 0.0
+        minority_source = ("no minority interest reported, treated as nil "
+                           "(inferred, not read)")
+    else:
+        minority_mm = float(reported_minority) / 1e6
+        minority_source = "balance sheet: Minority Interest"
+
     base = BaseYearData(
         revenue=revenue_mm,
         total_debt=total_debt_mm,
         cash=cash_mm,
         shares=shares_mm,
         current_price=current_price,
+        minority_interest=minority_mm,
     )
     meta = {
         "ticker": ticker,
@@ -2072,6 +2110,8 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
         "cash_source": "balance sheet: Cash And Cash Equivalents + "
                        "Other Short Term Investments + Investments And Advances",
         "shares_source": shares_source,
+        "minority_interest_source": minority_source,
+        "minority_interest_reported": reported_minority is not None,
         "price_source": "market data provider quote (live)",
         "currency": fin.trading_currency or None,
         "reporting_currency": fin.reporting_currency or None,

@@ -427,6 +427,12 @@ class BaseYearOut(BaseModel):
     shares: float
     current_price: float
     fiscal_year: str
+    # The on-device preview engine rebuilds the equity bridge to follow a
+    # slider drag, so it needs every term of it. Without this the preview
+    # would differ from the confirmed figure by the minority interest per
+    # share on every company that has any, and the screen would announce a
+    # correction after each drag.
+    minority_interest: float = 0.0
 
 
 class ValuationOut(BaseModel):
@@ -1030,6 +1036,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
             shares=report.base.shares,
             current_price=report.base.current_price,
             fiscal_year=report.fiscal_year,
+            minority_interest=report.base.minority_interest,
         ),
         valuation=ValuationOut(
             pv_ufcf_sum=r.pv_ufcf_sum,

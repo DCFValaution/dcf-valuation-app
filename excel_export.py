@@ -76,41 +76,43 @@ R_BASE_HEAD = 15
 R_REVENUE_IN = 16
 R_DEBT_IN = 17
 R_CASH_IN = 18
-R_SHARES_IN = 19
-R_PRICE_IN = 20
-R_PROJ_HEAD = 22
-R_COLUMN_HEADS = 23
-R_PERIOD = 24
-R_REVENUE = 25
-R_GROWTH_PCT = 26
-R_EBIT = 27
-R_TAXES = 28
-R_NOPAT = 29
-R_DA_ADD = 30
-R_CAPEX_LESS = 31
-R_NWC_LESS = 32
-R_UFCF = 33
-R_DISCOUNT = 34
-R_PV_UFCF = 35
-R_EV_HEAD = 37
-R_PV_SUM = 38
-R_TV = 39
-R_PV_TV = 40
-R_EV = 41
-R_PLUS_CASH = 42
-R_LESS_DEBT = 43
-R_EQUITY = 44
-R_SHARES = 45
-R_INTRINSIC = 46
-R_PRICE = 47
-R_UPSIDE = 48
-R_TV_PCT = 49
-R_SENS_HEAD = 51
-R_SENS_LEGEND = 52
-R_SENS_COLS = 53
-R_SENS_FIRST = 54
-R_SENS_LAST = 58
-R_NOTES_HEAD = 60
+R_MINORITY_IN = 19
+R_SHARES_IN = 20
+R_PRICE_IN = 21
+R_PROJ_HEAD = 23
+R_COLUMN_HEADS = 24
+R_PERIOD = 25
+R_REVENUE = 26
+R_GROWTH_PCT = 27
+R_EBIT = 28
+R_TAXES = 29
+R_NOPAT = 30
+R_DA_ADD = 31
+R_CAPEX_LESS = 32
+R_NWC_LESS = 33
+R_UFCF = 34
+R_DISCOUNT = 35
+R_PV_UFCF = 36
+R_EV_HEAD = 38
+R_PV_SUM = 39
+R_TV = 40
+R_PV_TV = 41
+R_EV = 42
+R_PLUS_CASH = 43
+R_LESS_DEBT = 44
+R_LESS_MINORITY = 45
+R_EQUITY = 46
+R_SHARES = 47
+R_INTRINSIC = 48
+R_PRICE = 49
+R_UPSIDE = 50
+R_TV_PCT = 51
+R_SENS_HEAD = 53
+R_SENS_LEGEND = 54
+R_SENS_COLS = 55
+R_SENS_FIRST = 56
+R_SENS_LAST = 60
+R_NOTES_HEAD = 62
 
 SENSITIVITY_OFFSETS = (-0.01, -0.005, 0.0, 0.005, 0.01)
 
@@ -302,6 +304,8 @@ def build_workbook(report: ValuationReport) -> Workbook:
          meta.get("debt_source", "")),
         (R_CASH_IN, "Cash & investments ($mm)", base.cash, CURRENCY,
          meta.get("cash_source", "")),
+        (R_MINORITY_IN, "Minority interest ($mm)", base.minority_interest,
+         CURRENCY, meta.get("minority_interest_source", "")),
         (R_SHARES_IN, "Shares outstanding - diluted (millions)", base.shares, SHARE_COUNT,
          meta.get("shares_source", "")),
         (R_PRICE_IN, "Current share price ($)", base.current_price, PER_SHARE,
@@ -406,8 +410,11 @@ def build_workbook(report: ValuationReport) -> Workbook:
         (R_EV, "Enterprise value", f"=$B${R_PV_SUM}+$B${R_PV_TV}", CURRENCY, True),
         (R_PLUS_CASH, "Plus: cash & investments", f"=$B${R_CASH_IN}", CURRENCY, False),
         (R_LESS_DEBT, "Less: total debt", f"=-$B${R_DEBT_IN}", CURRENCY, False),
+        (R_LESS_MINORITY, "Less: minority interest",
+         f"=-$B${R_MINORITY_IN}", CURRENCY, False),
         (R_EQUITY, "Equity value",
-         f"=$B${R_EV}+$B${R_PLUS_CASH}+$B${R_LESS_DEBT}", CURRENCY, True),
+         f"=$B${R_EV}+$B${R_PLUS_CASH}+$B${R_LESS_DEBT}+$B${R_LESS_MINORITY}",
+         CURRENCY, True),
         (R_SHARES, "Shares outstanding - diluted (millions)",
          f"=$B${R_SHARES_IN}", SHARE_COUNT, False),
         (R_INTRINSIC, "INTRINSIC VALUE PER SHARE",
@@ -466,7 +473,8 @@ def build_workbook(report: ValuationReport) -> Workbook:
                 f"1/(1+{w_ref})^${first}${R_PERIOD}:${last}${R_PERIOD})"
                 f"+${last}${R_UFCF}*(1+{g_ref})/({w_ref}-{g_ref})"
                 f"/(1+{w_ref})^${last}${R_PERIOD}"
-                f"+$B${R_CASH_IN}-$B${R_DEBT_IN})/$B${R_SHARES_IN})"
+                f"+$B${R_CASH_IN}-$B${R_DEBT_IN}-$B${R_MINORITY_IN})"
+                f"/$B${R_SHARES_IN})"
             )
             cell = _formula(ws, row, col, cell_formula, PER_SHARE)
             if offset == 0 and col_index == 2:
@@ -479,7 +487,10 @@ def build_workbook(report: ValuationReport) -> Workbook:
         "Unlevered FCF = NOPAT + D&A - capex - change in NWC.",
         "Terminal value uses Gordon growth: TV = FCF_final x (1+g) / (WACC - g), "
         "discounted at the final-year factor.",
-        "Equity value = enterprise value + cash & investments - total debt.",
+        "Equity value = enterprise value + cash & investments - total debt "
+        "- minority interest. Minority interest is the outside "
+        "shareholders' claim on partly-owned subsidiaries, whose cash "
+        "flows the enterprise value already counts in full.",
         "The highlighted centre cell of the sensitivity grid is the headline valuation.",
         "Blue figures are inputs; every black figure is a live formula.",
     ]

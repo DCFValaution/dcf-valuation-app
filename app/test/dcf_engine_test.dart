@@ -34,6 +34,8 @@ void expectClose(double actual, double expected, {double rel = 1e-9, String? rea
 }
 
 void main() {
+  minorityInterestTests();
+
   group('reference case: AAPL_DCF_Model.xlsx', () {
     // The spreadsheet's own inputs, identical to test_dcf.py.
     const base = BaseYearData(
@@ -422,6 +424,96 @@ void main() {
       expect(formatPercent2(0.1059), '10.59%');
       expect(formatPercent2(0.025), '2.50%');
       expect(formatPercent2(0), '0.00%');
+    });
+  });
+}
+
+// The equity bridge's newest term.
+//
+// Enterprise value counts a partly-owned subsidiary's cash flows in full, so
+// the outside shareholders' claim on them has to come back out. The preview
+// engine carries it because it rebuilds the bridge on every drag: without it
+// the figure on screen would differ from the backend's by the minority
+// interest per share, and the screen would announce a correction each time a
+// slider was released.
+void minorityInterestTests() {
+  group('minority interest leaves the equity bridge', () {
+    const plain = BaseYearData(
+      revenue: 100000,
+      totalDebt: 20000,
+      cash: 10000,
+      shares: 1000,
+      currentPrice: 50,
+    );
+    const withMinority = BaseYearData(
+      revenue: 100000,
+      totalDebt: 20000,
+      cash: 10000,
+      shares: 1000,
+      currentPrice: 50,
+      minorityInterest: 5000,
+    );
+    const assumptions = DcfAssumptions(
+      revenueGrowth: 0.05,
+      operatingMargin: 0.30,
+      taxRate: 0.20,
+      daPct: 0.03,
+      capexPct: 0.04,
+      nwcPct: 0.02,
+      wacc: 0.09,
+      terminalGrowth: 0.025,
+      projectionYears: 5,
+    );
+
+    test('it is subtracted from equity, not from enterprise value', () {
+      final a = runDcf(plain, assumptions);
+      final b = runDcf(withMinority, assumptions);
+      expectClose(b.enterpriseValue, a.enterpriseValue,
+          reason: 'it is an equity-bridge item, not an operating one');
+      expectClose(b.equityValue, a.equityValue - 5000);
+    });
+
+    test('it subtracts exactly like debt', () {
+      const asDebt = BaseYearData(
+        revenue: 100000,
+        totalDebt: 25000,
+        cash: 10000,
+        shares: 1000,
+        currentPrice: 50,
+      );
+      expectClose(runDcf(asDebt, assumptions).equityValue,
+          runDcf(withMinority, assumptions).equityValue);
+    });
+
+    test('absent defaults to nil and changes nothing', () {
+      expect(plain.minorityInterest, 0);
+      expectClose(runDcf(plain, assumptions).intrinsicValuePerShare,
+          runDcf(plain, assumptions).intrinsicValuePerShare);
+    });
+
+    test('a response without the field still parses, as nil', () {
+      final parsed = BaseYearData.fromJson(const {
+        'revenue': 100000,
+        'total_debt': 20000,
+        'cash': 10000,
+        'shares': 1000,
+        'current_price': 50,
+      });
+      expect(parsed.minorityInterest, 0);
+    });
+
+    test('the field is read when the backend sends it', () {
+      final parsed = BaseYearData.fromJson(const {
+        'revenue': 100000,
+        'total_debt': 20000,
+        'cash': 10000,
+        'shares': 1000,
+        'current_price': 50,
+        'minority_interest': 5000,
+      });
+      expect(parsed.minorityInterest, 5000);
+      expectClose(runDcf(parsed, assumptions).equityValue,
+          runDcf(withMinority, assumptions).equityValue);
     });
   });
 }

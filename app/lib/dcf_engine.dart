@@ -31,12 +31,20 @@ class BaseYearData {
   final double shares; // millions
   final double currentPrice;
 
+  /// The outside shareholders' claim on partly-owned subsidiaries, $mm.
+  ///
+  /// Part of the equity bridge, so the preview has to carry it or it would
+  /// disagree with the backend by this much per share on every drag. Zero
+  /// for most companies, and defaulted so an older response still parses.
+  final double minorityInterest;
+
   const BaseYearData({
     required this.revenue,
     required this.totalDebt,
     required this.cash,
     required this.shares,
     required this.currentPrice,
+    this.minorityInterest = 0,
   });
 
   factory BaseYearData.fromJson(Map<String, dynamic> json) => BaseYearData(
@@ -45,6 +53,8 @@ class BaseYearData {
         cash: (json['cash'] as num).toDouble(),
         shares: (json['shares'] as num).toDouble(),
         currentPrice: (json['current_price'] as num).toDouble(),
+        minorityInterest:
+            (json['minority_interest'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -293,7 +303,11 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
   final pvTerminalValue = terminalValue * years.last.discountFactor;
 
   final enterpriseValue = pvUfcfSum + pvTerminalValue;
-  final equityValue = enterpriseValue + base.cash - base.totalDebt;
+  // The same bridge the backend uses: minority interest leaves with the
+  // debt, because enterprise value counts a partly-owned subsidiary's cash
+  // flows in full.
+  final equityValue =
+      enterpriseValue + base.cash - base.totalDebt - base.minorityInterest;
   final intrinsicValuePerShare = equityValue / base.shares;
 
   final upsideDownside = base.currentPrice == 0

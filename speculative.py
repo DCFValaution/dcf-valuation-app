@@ -55,6 +55,11 @@ class SpeculativeInputs:
     shares: float               # millions
     current_price: float        # $
 
+    # The outside shareholders' claim on partly-owned subsidiaries, $mm.
+    # Same reasoning as the DCF: enterprise value is built from fully
+    # consolidated figures, so it has to come back out.
+    minority_interest: float = 0.0
+
 
 @dataclass
 class SpeculativeAssumptions:
@@ -165,7 +170,8 @@ def _simulate(inputs: SpeculativeInputs, a: SpeculativeAssumptions,
     )
     pv_after = after.enterprise_value / (1 + a.wacc) ** years
     enterprise_value = pv_sum + pv_after
-    equity_value = enterprise_value + inputs.cash - inputs.total_debt
+    equity_value = (enterprise_value + inputs.cash - inputs.total_debt
+                    - inputs.minority_interest)
     return path, pv_sum, previous, after, pv_after, enterprise_value, equity_value
 
 
