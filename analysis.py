@@ -1951,6 +1951,13 @@ def honesty_note(report: "ValuationReport") -> str | None:
         f"{report.derived.assumptions.terminal_growth:.2%} growth in perpetuity; the equity "
         "risk premium in particular has no single correct value. Move any of them and the "
         "figure moves materially - the sensitivity table shows by how much."
+        # Said without branching on whether the cap bound, so the Dart copy
+        # of this sentence can be produced from the same two numbers. It is
+        # true either way: when the cap binds, the figure tracks WACC, which
+        # is itself built on the same risk-free rate.
+        + " The growth in perpetuity defaults to the current risk-free rate, "
+        "held below the discount rate, and that is as high as it can be set: "
+        "it can be moved down but not up."
         + fx_text
     )
 

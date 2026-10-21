@@ -378,5 +378,9 @@ String buildHonestyNote({
       '${formatPercent2(terminalGrowth)} growth in perpetuity; the equity '
       'risk premium in particular has no single correct value. Move any of '
       'them and the figure moves materially - the sensitivity table shows by '
-      'how much.';
+      'how much.'
+      // Mirrors the backend sentence exactly; the parity test is the guard.
+      ' The growth in perpetuity defaults to the current risk-free rate, '
+      'held below the discount rate, and that is as high as it can be set: '
+      'it can be moved down but not up.';
 }

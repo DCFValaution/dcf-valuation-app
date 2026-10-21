@@ -230,9 +230,17 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
     # significant digits. Rounding the axis to 6dp shifted the centre cell by
     # ~$0.0002 - invisible on screen, but enough to break the invariant that
     # sensitivity[centre][centre] == intrinsic_value_per_share.
-    sensitivity_waccs = [round(wacc + i * SENSITIVITY_WACC_STEP, 10)
+    #
+    # The centre is the model's own figure untouched, not a rounded copy of
+    # it. Rounding is there to tidy the *offsets* - so 0.085 - 2*0.005 reads
+    # as 0.075 rather than 0.07500000000000001 - and the centre has no
+    # offset to tidy. Rounding it anyway was harmless while terminal growth
+    # was the constant 0.025, which survives a round trip to ten places;
+    # once it became a derived figure capped at WACC less a margin it no
+    # longer did, and the centre cell stopped reproducing the headline.
+    sensitivity_waccs = [wacc if i == 0 else round(wacc + i * SENSITIVITY_WACC_STEP, 10)
                          for i in SENSITIVITY_OFFSETS]
-    sensitivity_gs = [round(g + i * SENSITIVITY_GROWTH_STEP, 10)
+    sensitivity_gs = [g if i == 0 else round(g + i * SENSITIVITY_GROWTH_STEP, 10)
                       for i in SENSITIVITY_OFFSETS]
 
     sensitivity = []

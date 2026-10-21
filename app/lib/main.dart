@@ -335,10 +335,37 @@ class _ValuationScreenState extends State<ValuationScreen> {
   }
 
   /// Which levers apply, which depends on the model that produced the figure.
-  List<AdjustableAssumption> get _specs => _specsFor(_success?.method);
+  List<AdjustableAssumption> get _specs =>
+      _specsFor(_success?.method, _success?.assumptions);
 
-  static List<AdjustableAssumption> _specsFor(ValuationMethod? method) =>
-      method == ValuationMethod.ddm ? kDdmAdjustable : kAdjustable;
+  /// The levers for this method, with any company-specific bounds applied.
+  ///
+  /// Terminal growth's ceiling is the company's own risk-free rate held
+  /// below its own WACC, so the backend sends the range and the control
+  /// takes it. Everything else keeps the bounds that belong to the
+  /// quantity, and a response that sends none - an older backend - leaves
+  /// every slider exactly as it was.
+  static List<AdjustableAssumption> _specsFor(
+    ValuationMethod? method, [
+    List<Assumption>? assumptions,
+  ]) {
+    final base = method == ValuationMethod.ddm ? kDdmAdjustable : kAdjustable;
+    if (assumptions == null || assumptions.isEmpty) return base;
+
+    final bounds = {
+      for (final a in assumptions)
+        if (a.minValue != null || a.maxValue != null) a.name: a,
+    };
+    if (bounds.isEmpty) return base;
+
+    return [
+      for (final spec in base)
+        if (bounds[spec.name] case final a?)
+          spec.withBounds(min: a.minValue, max: a.maxValue)
+        else
+          spec,
+    ];
+  }
 
   /// Mirrors the slider panel's own check, so the export button and the
   /// warning agree about when the inputs are unusable.
@@ -475,7 +502,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
           for (final a in result.assumptions) a.name: a.value,
         };
         _equityRiskPremium = result.assumption('equity_risk_premium')?.value;
-        final specs = _specsFor(result.method);
+        final specs = _specsFor(result.method, result.assumptions);
         _derived = {
           for (final spec in specs)
             if (result.assumption(spec.name) != null)

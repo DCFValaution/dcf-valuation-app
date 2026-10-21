@@ -212,10 +212,28 @@ def test_the_disclaimer_is_unmistakable_and_names_its_assumptions(client):
 
 
 def test_the_disclaimer_is_stronger_than_the_standard_note(client):
+    """The speculative screen must not read like an ordinary valuation.
+
+    Measured on what the two say rather than on how long they are. A length
+    ratio was the original check and it was the wrong instrument: it broke
+    when the standard note gained a sentence explaining that terminal growth
+    tracks the risk-free rate, which makes the standard note longer without
+    making the speculative one any less emphatic.
+    """
     speculative = client.get(f"/valuation/{GROWER}/speculative").json()["disclaimer"]
     standard = client.get(f"/valuation/{PROFITABLE}").json()["note"]
+
+    # The refusal, and what it rests on, are said outright.
     assert "not a valuation" in speculative and "not a valuation" not in standard
-    assert len(speculative) > 2 * len(standard)
+    for phrase in ("must not be treated as one",
+                   "explicitly requested",
+                   "lose everything",
+                   "not investment advice"):
+        assert phrase in speculative, phrase
+        assert phrase not in standard, f"{phrase!r} belongs only to the speculative note"
+
+    # And it is still the substantially longer document of the two.
+    assert len(speculative) > len(standard)
 
 
 def test_every_speculative_assumption_is_labelled_with_its_source(client):

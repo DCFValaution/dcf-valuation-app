@@ -57,8 +57,40 @@ from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
 
 # --- Global defaults ------------------------------------------------------
 DEFAULT_WACC = 0.085             # only used when WACC derivation fails
-DEFAULT_TERMINAL_GROWTH = 0.025  # ~long-run nominal GDP growth
+DEFAULT_TERMINAL_GROWTH = 0.025  # ~long-run nominal GDP growth; the fallback
 DEFAULT_PROJECTION_YEARS = 5
+
+# How far below the discount rate the derived terminal growth is held.
+#
+# The Gordon perpetuity divides by (WACC - g), so the two converging sends
+# the terminal value towards infinity. A margin is therefore not a matter of
+# taste: without one, a low-WACC company whose risk-free rate sits close to
+# its cost of capital would produce an enormous figure from a rounding
+# distance.
+#
+# 1.5 points rather than something smaller because the sensitivity grid
+# moves g by up to a full point above the model's own figure. A margin of
+# one point or less would put the grid's top row at or past WACC, and a
+# table whose own cells are undefined is a poor way to show how sensitive a
+# figure is. At 1.5 the grid's highest growth still clears WACC by half a
+# point.
+TERMINAL_GROWTH_SAFETY_MARGIN = 0.015
+
+
+def derived_terminal_growth(risk_free_rate: float, wacc: float) -> float:
+    """Long-run growth that tracks the rate environment but stays usable.
+
+    Normally the risk-free rate: the long-run nominal growth a company is
+    assumed to settle into is taken to move with the rate environment rather
+    than sitting at a constant chosen years ago.
+
+    The cap is what makes that safe. For a company whose cost of capital is
+    close to the risk-free rate - a regulated utility, a low-beta staple -
+    the uncapped figure would sit a whisker below WACC and the perpetuity
+    would blow up. Such a company gets WACC less the margin instead, which
+    is lower than the risk-free rate by construction.
+    """
+    return min(risk_free_rate, wacc - TERMINAL_GROWTH_SAFETY_MARGIN)
 
 # The growth fade is opt-in and off by default, so a valuation nobody has
 # touched is the flat projection it has always been.
@@ -117,6 +149,20 @@ class Provenance:
     raw: float | None = None
     limit: float | None = None
     why: str | None = None
+
+    # The range this assumption may be moved through, where that depends on
+    # the company rather than on the kind of quantity.
+    #
+    # Most sliders have bounds that are a property of the thing being
+    # measured - an operating margin is a percentage of revenue whatever the
+    # company - and those live with the control. Terminal growth does not:
+    # its ceiling is this company's own risk-free rate held below this
+    # company's own WACC, so it has to travel with the value.
+    #
+    # None means "the control's own bounds apply", which is every other
+    # assumption.
+    allowed_min: float | None = None
+    allowed_max: float | None = None
 
     @property
     def is_derived(self) -> bool:
@@ -348,8 +394,14 @@ def derive_assumptions(fin: CompanyFinancials,
                      **clamp) -> float:
         if name in overrides:
             supplied = float(overrides[name])
-            store[name] = Provenance(name, supplied, "override",
-                                     f"supplied by caller (would have been {value:.4g} from {source})")
+            # The allowed range describes the control, not the value, so it
+            # survives the override: a slider the user has moved still needs
+            # to know how far it may travel.
+            store[name] = Provenance(
+                name, supplied, "override",
+                f"supplied by caller (would have been {value:.4g} from {source})",
+                allowed_min=clamp.get("allowed_min"),
+                allowed_max=clamp.get("allowed_max"))
             return supplied
         store[name] = Provenance(name, value, source, detail, **clamp)
         return value
@@ -479,9 +531,56 @@ def derive_assumptions(fin: CompanyFinancials,
     else:
         wacc = record("wacc", wacc_value, "derived", wacc_detail)
 
+    # --- Terminal growth: the rate is the ceiling, not a suggestion --------
+    #
+    # The slider runs from nothing to the current risk-free rate and rests at
+    # the top. That is a deliberate shape. Long-run growth above the
+    # risk-free rate is the assumption that quietly produces enormous
+    # figures, so rather than leaving it reachable and warning about it, it
+    # is simply not offered: the user can argue the company down from the
+    # rate, never up past it.
+    #
+    # The ceiling is held below WACC as well, because a perpetuity divides by
+    # the gap between them. For a company whose cost of capital is close to
+    # the risk-free rate the binding limit is WACC, not the rate.
+    #
+    # The range is company-specific, so it travels with the value rather than
+    # living in the control.
+    rf_for_growth = wacc_components.get("risk_free_rate")
+    wacc_ceiling = max(wacc - TERMINAL_GROWTH_SAFETY_MARGIN, 0.0)
+
+    if rf_for_growth is None:
+        ceiling = min(DEFAULT_TERMINAL_GROWTH, wacc_ceiling)
+        terminal_growth = record(
+            "terminal_growth", ceiling, "default",
+            "no risk-free rate available; the ceiling falls back to the "
+            "global default (~long-run nominal GDP growth), held below WACC; "
+            "adjustable downward",
+            allowed_min=0.0, allowed_max=ceiling)
+        diagnostics["terminal_growth_capped"] = ceiling < DEFAULT_TERMINAL_GROWTH
+        diagnostics["terminal_growth_uncapped"] = DEFAULT_TERMINAL_GROWTH
+    else:
+        uncapped = float(rf_for_growth)
+        ceiling = derived_terminal_growth(uncapped, wacc)
+        ceiling = max(ceiling, 0.0)
+        capped = ceiling < uncapped
+        detail = (
+            f"defaults to the ceiling, which is WACC less "
+            f"{TERMINAL_GROWTH_SAFETY_MARGIN:.1%} rather than the risk-free "
+            f"rate of {uncapped:.2%}, because that rate is too close to this "
+            f"company's WACC of {wacc:.2%} for the perpetuity to mean "
+            "anything; adjustable downward to 0%"
+            if capped else
+            "defaults to the current risk-free rate (US 10-year Treasury), "
+            "which is the ceiling; adjustable downward to 0%")
+        terminal_growth = record("terminal_growth", ceiling, "derived", detail,
+                                 allowed_min=0.0, allowed_max=ceiling)
+        diagnostics["terminal_growth_capped"] = capped
+        diagnostics["terminal_growth_uncapped"] = uncapped
+
+    diagnostics["terminal_growth_ceiling"] = ceiling
+
     # --- Global defaults ---------------------------------------------------
-    terminal_growth = record("terminal_growth", DEFAULT_TERMINAL_GROWTH, "default",
-                             "global default (~long-run nominal GDP growth)")
     projection_years = record("projection_years", DEFAULT_PROJECTION_YEARS, "default",
                               "modelling convention")
 

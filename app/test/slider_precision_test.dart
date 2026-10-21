@@ -41,6 +41,8 @@ final List<AdjustableAssumption> allSpecs = [
 ];
 
 void main() {
+  terminalGrowthRangeTests();
+
   group('step sizes', () {
     test('discount rates and terminal growth step by 0.1%', () {
       for (final s in [
@@ -571,5 +573,92 @@ void main() {
         expect(overrides['years_to_profitability'], isA<int>());
       },
     );
+  });
+}
+
+// Terminal growth's ceiling belongs to the company, not to the control.
+//
+// Its maximum is that company's own risk-free rate, held below that
+// company's own WACC, so the backend sends the range and the slider defers
+// to it. The point of the shape is that long-run growth above the risk-free
+// rate is simply not offered: the user argues the company down from the
+// rate, never up past it.
+void terminalGrowthRangeTests() {
+  const base = AdjustableAssumption(
+    name: 'terminal_growth',
+    label: 'Terminal growth',
+    help: 'Perpetual growth; must stay below WACC',
+    min: 0.0,
+    max: 0.06,
+    step: 0.001,
+  );
+
+  group('the terminal-growth range comes from the backend', () {
+    test('a supplied ceiling replaces the control default', () {
+      final spec = base.withBounds(min: 0.0, max: 0.0398);
+      expect(spec.max, 0.0398);
+      expect(spec.min, 0.0);
+    });
+
+    test('a typed value above the ceiling is rejected', () {
+      final spec = base.withBounds(min: 0.0, max: 0.0398);
+      final result = parseExactValue(
+        text: '5.0',
+        spec: spec,
+        specs: [spec, kAdjustable.firstWhere((s) => s.name == 'wacc')],
+        current: const {'terminal_growth': 0.0398, 'wacc': 0.0548},
+      );
+      expect(result.value, isNull,
+          reason: '5% is above this company\'s 3.98% ceiling');
+      expect(result.error, isNotNull);
+    });
+
+    test('a typed value at or below the ceiling is accepted', () {
+      final spec = base.withBounds(min: 0.0, max: 0.0398);
+      for (final text in ['3.98', '2.5', '0']) {
+        final result = parseExactValue(
+          text: text,
+          spec: spec,
+          specs: [spec, kAdjustable.firstWhere((s) => s.name == 'wacc')],
+          current: const {'terminal_growth': 0.0398, 'wacc': 0.0548},
+        );
+        expect(result.error, isNull, reason: '$text% should be reachable');
+      }
+    });
+
+    test('a company-specific ceiling never reaches WACC', () {
+      // The utility case: the rate is most of the cost of capital, so the
+      // ceiling is WACC less the margin rather than the rate.
+      const wacc = 0.0548;
+      final spec = base.withBounds(min: 0.0, max: wacc - 0.015);
+      expect(spec.max, lessThan(wacc));
+      expect(
+        growthExceedsDiscountRate(
+          {'terminal_growth': spec.max, 'wacc': wacc},
+          [spec, kAdjustable.firstWhere((s) => s.name == 'wacc')],
+        ),
+        isFalse,
+      );
+    });
+
+    test('an absent range leaves the control exactly as it was', () {
+      final spec = base.withBounds(min: null, max: null);
+      expect(spec.min, base.min);
+      expect(spec.max, base.max);
+    });
+
+    test('an impossible range is ignored rather than rendered', () {
+      // A slider that cannot be moved would be worse than one with the
+      // wrong ceiling, so a max at or below the min is refused.
+      final spec = base.withBounds(min: 0.0, max: 0.0);
+      expect(spec.max, base.max);
+    });
+
+    test('the step still divides the company-specific range', () {
+      final spec = base.withBounds(min: 0.0, max: 0.0398);
+      expect(spec.divisions, greaterThan(0));
+      expect(spec.snap(0.0398), lessThanOrEqualTo(spec.max));
+      expect(spec.snap(-1), spec.snap(-1).clamp(spec.min, spec.max));
+    });
   });
 }

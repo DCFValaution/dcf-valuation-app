@@ -387,6 +387,14 @@ class AssumptionOut(BaseModel):
     source: str = Field(..., description="derived | derived (clamped) | default | override")
     detail: str
     is_percent: bool = Field(..., description="True if value should render as a percentage")
+    # Present only where the range depends on the company rather than on the
+    # kind of quantity. Terminal growth is the case: its ceiling is this
+    # company's own risk-free rate, held below this company's own WACC. A
+    # client that receives these must prefer them to its own bounds.
+    min_value: float | None = Field(
+        None, description="Lowest value this assumption may be set to, if company-specific")
+    max_value: float | None = Field(
+        None, description="Highest value this assumption may be set to, if company-specific")
 
 
 class SensitivityOut(BaseModel):
@@ -1006,7 +1014,8 @@ def _capital_returns_out(cr) -> "CapitalReturnsOut | None":
 def _assumption_list(store: dict) -> list[AssumptionOut]:
     return [
         AssumptionOut(name=name, value=prov.value, source=prov.source,
-                      detail=prov.detail, is_percent=name in PERCENT_NAMES)
+                      detail=prov.detail, is_percent=name in PERCENT_NAMES,
+                      min_value=prov.allowed_min, max_value=prov.allowed_max)
         for name, prov in store.items()
     ]
 

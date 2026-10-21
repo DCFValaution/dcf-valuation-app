@@ -38,6 +38,30 @@ class AdjustableAssumption {
     this.isPercent = true,
   });
 
+  /// The same slider with bounds the backend supplied for this company.
+  ///
+  /// Terminal growth's ceiling is the company's own risk-free rate held
+  /// below its own WACC, so it cannot be a constant here. Everything else
+  /// keeps the bounds that belong to the quantity.
+  ///
+  /// A max below the min would be a backend fault rather than something to
+  /// render, so it is ignored in favour of the control's own range: a
+  /// slider that cannot be moved is worse than one with the wrong ceiling.
+  AdjustableAssumption withBounds({double? min, double? max}) {
+    final lo = min ?? this.min;
+    final hi = max ?? this.max;
+    if (!(hi > lo)) return this;
+    return AdjustableAssumption(
+      name: name,
+      label: label,
+      help: help,
+      min: lo,
+      max: hi,
+      step: step,
+      isPercent: isPercent,
+    );
+  }
+
   /// Slider notches between [min] and [max].
   int get divisions => ((max - min) / step).round();
 
@@ -53,7 +77,14 @@ class AdjustableAssumption {
     if (isWholeNumber) return value.roundToDouble().clamp(min, max);
     final notches = ((value - min) / step).round();
     final snapped = min + notches * step;
-    return (snapped * 1e6).round() / 1e6;
+    // Clamped, because the notch grid does not have to land on the ceiling.
+    // It always used to: every maximum was a whole number of steps from
+    // zero. A company-specific ceiling is whatever that company's risk-free
+    // rate happens to be - 3.98% against a 0.1% step - and rounding to the
+    // nearest notch would put the value a notch above its own maximum, which
+    // for this assumption means above the risk-free rate.
+    final bounded = snapped.clamp(min, max);
+    return (bounded * 1e6).round() / 1e6;
   }
 
   String format(double value) => isPercent

@@ -115,12 +115,24 @@ class Assumption {
   final String detail;
   final bool isPercent;
 
+  /// The range this assumption may be moved through, where the backend says
+  /// it depends on the company.
+  ///
+  /// Null for almost everything: a margin's bounds are a property of the
+  /// quantity and live on the slider. Terminal growth is the exception -
+  /// its ceiling is this company's own risk-free rate held below this
+  /// company's own WACC - so the backend sends it and the control defers.
+  final double? minValue;
+  final double? maxValue;
+
   const Assumption({
     required this.name,
     required this.value,
     required this.source,
     required this.detail,
     required this.isPercent,
+    this.minValue,
+    this.maxValue,
   });
 
   bool get isOverridden => source == 'override';
@@ -131,6 +143,8 @@ class Assumption {
     source: json['source'] as String? ?? '',
     detail: json['detail'] as String? ?? '',
     isPercent: json['is_percent'] as bool? ?? false,
+    minValue: (json['min_value'] as num?)?.toDouble(),
+    maxValue: (json['max_value'] as num?)?.toDouble(),
   );
 }
 
