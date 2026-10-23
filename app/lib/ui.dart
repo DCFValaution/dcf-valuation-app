@@ -915,11 +915,21 @@ class _PressFeedbackState extends State<PressFeedback>
 /// horizontally does: the relative view lives to the right of the intrinsic
 /// one, and the content travels the same way the tab indicator does.
 ///
-/// Each view leaves the way it arrived, which is what makes the direction
-/// read without anyone having to think about it. That falls out of the
-/// construction rather than being computed: a view's transition is built
-/// once, when it enters, and its exit replays that same transition
-/// backwards. So the view that came from the right goes back to the right.
+/// The two views move as one rigid strip, and that is the whole of this
+/// widget. Their offsets are read from a single animation and always differ
+/// by exactly one viewport width, so at every frame the pair tiles the
+/// viewport: one of them covers the part the other has vacated, and neither
+/// ever covers the other.
+///
+/// This was first built on AnimatedSwitcher, which cannot do that. It gives
+/// each view its own controller and its own curve, and under a decelerate
+/// curve the arriving view rushes to the centre - 84% of the way there by a
+/// third of the duration - while the leaving view has barely started, 0.5%
+/// of the way out. For most of the transition both sat in the middle of the
+/// screen drawing over each other: the gap between them, which has to stay
+/// at 1.0 for the strip to hold together, fell to 0.068 at the half-way
+/// point. No amount of clipping addresses that, because the overlap is not
+/// outside the viewport - it is the whole of the viewport.
 ///
 /// Transform only. No opacity anywhere, deliberately: this is the largest
 /// subtree in the app - a full set of sliders, a sensitivity grid, a peer
@@ -927,61 +937,105 @@ class _PressFeedbackState extends State<PressFeedback>
 /// every frame, on the surface least able to afford one. A fractional
 /// translation costs a transform on an existing layer and nothing else.
 ///
-/// The clip is a plain rectangle for the same reason; it bounds the view
-/// that is on its way out without allocating anything.
-class LensTransition extends StatelessWidget {
+/// The clip is a plain rectangle for the same reason: it bounds the halves
+/// of each view that have travelled past the edge without allocating
+/// anything.
+class LensTransition extends StatefulWidget {
   const LensTransition({super.key, required this.child});
 
-  /// Keyed by which lens it is: that key is what tells the switcher a
-  /// different view has arrived rather than the same one rebuilding, which
-  /// this subtree does constantly as sliders move.
+  /// Keyed by which lens it is: that key is what tells one view from
+  /// another rather than the same one rebuilding, which this subtree does
+  /// on every frame of a slider drag.
   final Widget child;
 
-  @override
-  Widget build(BuildContext context) {
-    // An instant switch for anyone who asked for less motion. Returning the
-    // child bare also keeps the two views from ever being mounted at once.
-    if (AppMotion.reduced(context)) return child;
-
-    return ClipRect(
-      child: AnimatedSwitcher(
-        duration: AppMotion.lens,
-        switchInCurve: AppMotion.enterCurve,
-        switchOutCurve: AppMotion.enterCurve,
-        layoutBuilder: (current, previous) => Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            // Positioned, so the view on its way out takes no part in sizing
-            // the stack. Without this the pair would be as tall as the
-            // taller of them for the length of the transition and the page
-            // would change height twice; this way it is the size of where
-            // the user is going, immediately.
-            for (final entry in previous)
-              Positioned(top: 0, left: 0, right: 0, child: entry),
-            ?current,
-          ],
-        ),
-        transitionBuilder: (child, animation) => SlideTransition(
-          position: Tween<Offset>(
-            // Built with the direction that was current when this view
-            // entered, and kept: the exit runs this same tween in reverse.
-            begin: Offset(_towardsRelative(child) ? 1 : -1, 0),
-            end: Offset.zero,
-          ).animate(animation),
-          child: child,
-        ),
-        child: child,
-      ),
-    );
-  }
-
-  /// The keys the two views must carry. They are the whole of how the
-  /// switcher tells "a different lens" from "the same lens rebuilding",
-  /// which this subtree does on every frame of a slider drag.
+  /// The keys the two views must carry.
   static const Key intrinsicKey = ValueKey('lens-intrinsic');
   static const Key relativeKey = ValueKey('lens-relative');
 
-  /// Whether this view sits to the right of the one it replaces. The
-  /// relative lens is the right-hand tab, so it arrives from the right.
-  static bool _towardsRelative(Widget child) => child.key == relativeKey;
+  @override
+  State<LensTransition> createState() => _LensTransitionState();
+}
+
+class _LensTransitionState extends State<LensTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(
+        vsync: this,
+        duration: AppMotion.lens,
+      )..addStatusListener((status) {
+        // The view that has left is unmounted the moment it is off screen.
+        // Leaving it in place would keep the heaviest subtree in the app built
+        // and painting behind the one the user is reading.
+        if (status == AnimationStatus.completed && _leaving != null) {
+          setState(() => _leaving = null);
+        }
+      });
+
+  Widget? _leaving;
+
+  /// +1 when the arriving view comes from the right.
+  double _direction = 1;
+
+  @override
+  void didUpdateWidget(LensTransition old) {
+    super.didUpdateWidget(old);
+    if (old.child.key == widget.child.key) return;
+    _leaving = old.child;
+    _direction = widget.child.key == LensTransition.relativeKey ? 1 : -1;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final leaving = _leaving;
+    // An instant switch for anyone who asked for less motion, and nothing
+    // built around it: the two views are never mounted at once.
+    if (leaving == null || AppMotion.reduced(context)) {
+      return KeyedSubtree(key: widget.child.key, child: widget.child);
+    }
+
+    final progress = CurvedAnimation(
+      parent: _controller,
+      curve: AppMotion.enterCurve,
+    );
+    // One animation, two offsets, a constant width apart. The arriving view
+    // closes on the centre from `_direction`; the leaving view is wherever
+    // the arriving one is, less that same full width.
+    final arriving = Tween<Offset>(
+      begin: Offset(_direction, 0),
+      end: Offset.zero,
+    ).animate(progress);
+    final departing = Tween<Offset>(
+      begin: Offset.zero,
+      end: Offset(-_direction, 0),
+    ).animate(progress);
+
+    return ClipRect(
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          // Positioned, so the view on its way out takes no part in sizing
+          // the pair. Without this the page would stand as tall as the
+          // taller lens for the length of the transition and change height
+          // twice on the way through.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SlideTransition(position: departing, child: leaving),
+          ),
+          SlideTransition(
+            position: arriving,
+            child: KeyedSubtree(key: widget.child.key, child: widget.child),
+          ),
+        ],
+      ),
+    );
+  }
 }

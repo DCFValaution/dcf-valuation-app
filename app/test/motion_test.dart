@@ -685,6 +685,54 @@ void main() {
       );
     });
 
+    testWidgets('the two views never overlap, in either direction', (
+      tester,
+    ) async {
+      // The bug this guards. Built on AnimatedSwitcher, each view had its
+      // own controller and its own curve, and under a decelerate curve the
+      // arriving one rushed to the centre while the leaving one had barely
+      // started - so for most of the transition both sat in the middle of
+      // the screen, drawing over each other. The gap below fell to 0.068 at
+      // the half-way point where it has to stay at 1.0.
+      //
+      // Clipping could never have fixed that: the overlap was not outside
+      // the viewport, it was the whole of the viewport.
+      Future<void> sweep(bool toRelative) async {
+        await tester.pumpWidget(lens(!toRelative));
+        await tester.pump(AppMotion.lens + const Duration(milliseconds: 20));
+        await tester.pumpWidget(lens(toRelative));
+        await tester.pump(Duration.zero);
+
+        final step = AppMotion.lens ~/ 20;
+        for (var i = 0; i <= 20; i++) {
+          final slides = tester
+              .widgetList<SlideTransition>(
+                find.descendant(
+                  of: find.byType(LensTransition),
+                  matching: find.byType(SlideTransition),
+                ),
+              )
+              .toList();
+          if (slides.length < 2) break;
+          final a = slides[0].position.value.dx;
+          final b = slides[1].position.value.dx;
+          expect(
+            (a - b).abs(),
+            closeTo(1.0, 0.001),
+            reason:
+                'the pair must tile the viewport exactly - a gap under 1.0 '
+                'is one view drawing on top of the other, at '
+                '${i * 5}% through a switch to '
+                '${toRelative ? 'relative' : 'intrinsic'}',
+          );
+          await tester.pump(step);
+        }
+      }
+
+      await sweep(true);
+      await sweep(false);
+    });
+
     testWidgets('both are on screen only while it moves', (tester) async {
       await tester.pumpWidget(lens(false));
       await tester.pumpWidget(lens(true));
@@ -710,19 +758,14 @@ void main() {
       await tester.pumpWidget(lens(true));
       await tester.pump(Duration.zero);
 
+      expect(find.text('peers'), findsOneWidget);
       expect(
-        tester
-            .widget<SlideTransition>(
-              find
-                  .ancestor(
-                    of: find.text('peers'),
-                    matching: find.byType(SlideTransition),
-                  )
-                  .first,
-            )
-            .position
-            .value,
-        Offset.zero,
+        find.descendant(
+          of: find.byType(LensTransition),
+          matching: find.byType(SlideTransition),
+        ),
+        findsNothing,
+        reason: 'at rest there is nothing transforming the view at all',
       );
     });
 
