@@ -16,6 +16,7 @@ import 'package:http/testing.dart';
 
 import 'package:dcf_app/assumption_sliders.dart';
 import 'package:dcf_app/main.dart';
+import 'package:dcf_app/theme.dart';
 import 'package:dcf_app/relative_controller.dart';
 import 'package:dcf_app/relative_view.dart';
 import 'package:dcf_app/valuation_api.dart';
@@ -514,6 +515,9 @@ void main() {
       await tester.tap(find.text('Relative (market)'));
       await tester.pump();
       await tester.pump();
+      // The lenses slide past each other, and a view that is still
+      // travelling is not a target yet - on a device as much as here.
+      await tester.pump(AppMotion.lens + const Duration(milliseconds: 20));
     }
 
     Future<void> addViaSheet(WidgetTester tester, List<String> queries) async {

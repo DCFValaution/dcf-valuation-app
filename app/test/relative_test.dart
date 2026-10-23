@@ -99,6 +99,9 @@ Future<void> openRelative(WidgetTester tester) async {
   await tester.tap(_relativeTab);
   await tester.pump();
   await tester.pump();
+  // The lenses slide past each other, and a view that is still travelling
+  // is not a target yet - on a device as much as here.
+  await tester.pump(AppMotion.lens + const Duration(milliseconds: 20));
 }
 
 void main() {

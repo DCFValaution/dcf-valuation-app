@@ -570,11 +570,28 @@ class _EntranceTransitionState extends State<EntranceTransition>
       parent: _controller,
       curve: AppMotion.enterCurve,
     );
+    // The fade runs on its own, shorter clock than the travel, and starts
+    // part-lit rather than at nothing. Both exist for the same reason: at
+    // half a second, a figure that fades up from zero over the whole
+    // duration is a figure the user cannot read while they are waiting to
+    // read it. The answer is legible within the first few frames; what takes
+    // the full duration is only its settling into place.
+    final fade = CurvedAnimation(
+      parent: _controller,
+      curve: Interval(
+        0,
+        AppMotion.arriveFadeFraction,
+        curve: AppMotion.enterCurve,
+      ),
+    );
     // The travel is dropped under reduced motion; the fade is kept, because
     // it is what says the content changed.
     final travel = AppMotion.reduced(context) ? 0.0 : AppMotion.enterTravel;
     return FadeTransition(
-      opacity: curved,
+      opacity: Tween<double>(
+        begin: AppMotion.arriveFadeFrom,
+        end: 1.0,
+      ).animate(fade),
       // Translate by a fixed distance rather than a fraction of the subtree.
       // The subtree is a short refusal card on one run and a full DCF on the
       // next, and a percentage of that made the same animation conspicuous
@@ -889,4 +906,82 @@ class _PressFeedbackState extends State<PressFeedback>
       ),
     );
   }
+}
+
+/// Slides one lens out while the other slides in.
+///
+/// The two lenses are a pair of views onto the same company, and a cut
+/// between them says nothing about which way the user went. Moving them
+/// horizontally does: the relative view lives to the right of the intrinsic
+/// one, and the content travels the same way the tab indicator does.
+///
+/// Each view leaves the way it arrived, which is what makes the direction
+/// read without anyone having to think about it. That falls out of the
+/// construction rather than being computed: a view's transition is built
+/// once, when it enters, and its exit replays that same transition
+/// backwards. So the view that came from the right goes back to the right.
+///
+/// Transform only. No opacity anywhere, deliberately: this is the largest
+/// subtree in the app - a full set of sliders, a sensitivity grid, a peer
+/// table - and an opacity layer over it would mean a saveLayer over the lot,
+/// every frame, on the surface least able to afford one. A fractional
+/// translation costs a transform on an existing layer and nothing else.
+///
+/// The clip is a plain rectangle for the same reason; it bounds the view
+/// that is on its way out without allocating anything.
+class LensTransition extends StatelessWidget {
+  const LensTransition({super.key, required this.child});
+
+  /// Keyed by which lens it is: that key is what tells the switcher a
+  /// different view has arrived rather than the same one rebuilding, which
+  /// this subtree does constantly as sliders move.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // An instant switch for anyone who asked for less motion. Returning the
+    // child bare also keeps the two views from ever being mounted at once.
+    if (AppMotion.reduced(context)) return child;
+
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: AppMotion.lens,
+        switchInCurve: AppMotion.enterCurve,
+        switchOutCurve: AppMotion.enterCurve,
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            // Positioned, so the view on its way out takes no part in sizing
+            // the stack. Without this the pair would be as tall as the
+            // taller of them for the length of the transition and the page
+            // would change height twice; this way it is the size of where
+            // the user is going, immediately.
+            for (final entry in previous)
+              Positioned(top: 0, left: 0, right: 0, child: entry),
+            ?current,
+          ],
+        ),
+        transitionBuilder: (child, animation) => SlideTransition(
+          position: Tween<Offset>(
+            // Built with the direction that was current when this view
+            // entered, and kept: the exit runs this same tween in reverse.
+            begin: Offset(_towardsRelative(child) ? 1 : -1, 0),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  /// The keys the two views must carry. They are the whole of how the
+  /// switcher tells "a different lens" from "the same lens rebuilding",
+  /// which this subtree does on every frame of a slider drag.
+  static const Key intrinsicKey = ValueKey('lens-intrinsic');
+  static const Key relativeKey = ValueKey('lens-relative');
+
+  /// Whether this view sits to the right of the one it replaces. The
+  /// relative lens is the right-hand tab, so it arrives from the right.
+  static bool _towardsRelative(Widget child) => child.key == relativeKey;
 }

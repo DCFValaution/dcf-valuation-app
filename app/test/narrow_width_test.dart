@@ -132,6 +132,9 @@ Future<void> openRelative(WidgetTester tester) async {
   await tester.tap(find.text('Relative (market)'));
   await tester.pump();
   await tester.pump();
+  // The lenses slide past each other, and a view that is still travelling
+  // is not a target yet - on a device as much as here.
+  await tester.pump(AppMotion.lens + const Duration(milliseconds: 20));
 }
 
 /// Asserts a screen fits, reporting every overflow and every clipped label.

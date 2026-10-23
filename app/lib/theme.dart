@@ -555,7 +555,28 @@ abstract final class AppMotion {
   /// It costs nothing in waiting: the layout is final on the first frame and
   /// only opacity and a small translation move, so the figure is readable
   /// well before the animation ends.
-  static const Duration arrive = Duration(milliseconds: 380);
+  static const Duration arrive = Duration(milliseconds: 500);
+
+  /// The fraction of [arrive] the fade gets. The travel takes the whole
+  /// duration; the fade is finished in well under half of it, because the
+  /// answer must be readable long before it has stopped moving.
+  static const double arriveFadeFraction = 0.4;
+
+  /// The opacity an arriving result starts at.
+  ///
+  /// Not zero. At half a second a fade from nothing would mean the figure
+  /// the user asked for is genuinely absent for the first frames, and this
+  /// animation is not permitted to delay the answer - it settles a figure
+  /// that is already there. Starting part-lit also follows the rule that
+  /// nothing in the world appears from nothing.
+  static const double arriveFadeFrom = 0.35;
+
+  /// Sliding from one lens to the other.
+  ///
+  /// Quick, because this is a toggle: the two views are a pair and the user
+  /// flicks between them. Long enough to read as one surface moving rather
+  /// than a cut.
+  static const Duration lens = Duration(milliseconds: 280);
 
   /// The Advanced section opening. Past the usual 300ms ceiling, which is a
   /// deliberate exception: a disclosure the user chose to open is the one
@@ -586,7 +607,7 @@ abstract final class AppMotion {
   /// first: the result subtree is a refusal card on one run and a full DCF
   /// on the next, so a percentage made the travel unpredictable and, on the
   /// short ones, invisible. A fixed distance reads the same every time.
-  static const double enterTravel = 28.0;
+  static const double enterTravel = 40.0;
 
   /// How far a pressed control shrinks. Subtle: the control should look
   /// like it took the press, not like it performed. The spring carries the

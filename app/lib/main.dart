@@ -1062,89 +1062,105 @@ class _ValuationScreenState extends State<ValuationScreen> {
               // separate, market-based second opinion, fetched only on request.
               _LensSwitcher(lens: _lens, onChanged: _selectLens),
               const SizedBox(height: AppSpacing.xl),
-              if (_lens == _Lens.relative && _relativeController != null)
-                RelativeView(
-                  controller: _relativeController!,
-                  peerSearch: _peerSearch,
-                  intrinsicAdjusted: _activeOverrides.isNotEmpty,
-                  // Passed unconditionally: the peer comparison arrives after
-                  // this build, and notifies the view rather than this screen,
-                  // so a decision made here would be made before there is an
-                  // outcome to decide on - and never revisited. The view shows
-                  // it only where a figure actually stood up.
-                  footer: ExportButton(
-                    busy: _exporting,
-                    caption:
-                        'A spreadsheet of the peer comparison: every '
-                        'multiple, the medians, and who the peers are.',
-                    onPressed: _exportRelative,
-                  ),
-                )
-              else ...[
-                _SuccessCard(
-                  result: result,
-                  intrinsicValue:
-                      _displayIntrinsic ?? result.intrinsicValuePerShare,
-                  upsideDownside: _displayUpside ?? result.upsideDownside,
-                  note: _displayNote,
-                  status: _status,
-                  // Only meaningful once something has actually been changed.
-                  baselineValue: (_activeOverrides.isEmpty)
-                      ? null
-                      : _baselineValue,
-                  correctionNote: _correctionNote,
-                ),
-                // Both methods have a workbook of their own now: a discounted
-                // cash flow model, or the dividend model for the companies
-                // valued on their dividends. The backend decides which to build
-                // from the same report this screen is showing, so the button
-                // does not need to know which it will get.
-                const SizedBox(height: AppSpacing.xl),
-                ExportButton(
-                  busy: _exporting,
-                  // Terminal growth at or above the discount rate - WACC for a
-                  // DCF, the cost of equity for a DDM - would make the backend
-                  // refuse; do not offer an export that cannot succeed.
-                  blocked: _growthExceedsDiscountRate,
-                  blockedReason: 'Set terminal growth below the discount rate before exporting.',
-                  overrideCount: _activeOverrides.length,
-                  onPressed: _exportExcel,
-                ),
-                // Advanced overrides: the shape of the model rather than its
-                // numbers. The standard DCF only - the dividend, speculative,
-                // hypothetical and relative models each have their own horizon
-                // and no growth path to fade.
-                if (result.method == ValuationMethod.dcf) ...[
-                  const SizedBox(height: AppSpacing.xxl),
-                  AdvancedPanel(
-                    expanded: _advancedOpen,
-                    onExpandedChanged: (v) => setState(() => _advancedOpen = v),
-                    fadeEnabled: _fadeEnabled,
-                    onFadeChanged: _onFadeChanged,
-                    fadeStartYear: _fadeStartYear,
-                    onStartYearChanged: _onFadeStartYearChanged,
-                    fadePattern: _fadePattern,
-                    onPatternChanged: _onFadePatternChanged,
-                    projectionYears: _projectionYears,
-                    growthPath: _growthPath,
-                    busy: _revaluing,
-                  ),
-                ],
-                if (_derived.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.xxl),
-                  AssumptionSliders(
-                    specs: _specs,
-                    derived: _derived,
-                    current: _slider,
-                    sources: _sources,
-                    busy: _revaluing,
-                    onChanged: _onSliderChanged,
-                    onChangeEnd: _onSliderChangeEnd,
-                    onReset: _reset,
-                    statusLine: _StatusLine(status: _status),
-                  ),
-                ],
-              ],
+              // The switcher itself stays put; what slides is the content
+              // under it, in the direction the user moved.
+              LensTransition(
+                child: (_lens == _Lens.relative && _relativeController != null)
+                    ? KeyedSubtree(
+                        key: LensTransition.relativeKey,
+                        child: RelativeView(
+                          controller: _relativeController!,
+                          peerSearch: _peerSearch,
+                          intrinsicAdjusted: _activeOverrides.isNotEmpty,
+                          // Passed unconditionally: the peer comparison arrives after
+                          // this build, and notifies the view rather than this screen,
+                          // so a decision made here would be made before there is an
+                          // outcome to decide on - and never revisited. The view shows
+                          // it only where a figure actually stood up.
+                          footer: ExportButton(
+                            busy: _exporting,
+                            caption:
+                                'A spreadsheet of the peer comparison: every '
+                                'multiple, the medians, and who the peers are.',
+                            onPressed: _exportRelative,
+                          ),
+                        ),
+                      )
+                    : KeyedSubtree(
+                        key: LensTransition.intrinsicKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _SuccessCard(
+                              result: result,
+                              intrinsicValue:
+                                  _displayIntrinsic ??
+                                  result.intrinsicValuePerShare,
+                              upsideDownside:
+                                  _displayUpside ?? result.upsideDownside,
+                              note: _displayNote,
+                              status: _status,
+                              // Only meaningful once something has actually been changed.
+                              baselineValue: (_activeOverrides.isEmpty)
+                                  ? null
+                                  : _baselineValue,
+                              correctionNote: _correctionNote,
+                            ),
+                            // Both methods have a workbook of their own now: a discounted
+                            // cash flow model, or the dividend model for the companies
+                            // valued on their dividends. The backend decides which to build
+                            // from the same report this screen is showing, so the button
+                            // does not need to know which it will get.
+                            const SizedBox(height: AppSpacing.xl),
+                            ExportButton(
+                              busy: _exporting,
+                              // Terminal growth at or above the discount rate - WACC for a
+                              // DCF, the cost of equity for a DDM - would make the backend
+                              // refuse; do not offer an export that cannot succeed.
+                              blocked: _growthExceedsDiscountRate,
+                              blockedReason: 'Set terminal growth below the discount rate before exporting.',
+                              overrideCount: _activeOverrides.length,
+                              onPressed: _exportExcel,
+                            ),
+                            // Advanced overrides: the shape of the model rather than its
+                            // numbers. The standard DCF only - the dividend, speculative,
+                            // hypothetical and relative models each have their own horizon
+                            // and no growth path to fade.
+                            if (result.method == ValuationMethod.dcf) ...[
+                              const SizedBox(height: AppSpacing.xxl),
+                              AdvancedPanel(
+                                expanded: _advancedOpen,
+                                onExpandedChanged: (v) =>
+                                    setState(() => _advancedOpen = v),
+                                fadeEnabled: _fadeEnabled,
+                                onFadeChanged: _onFadeChanged,
+                                fadeStartYear: _fadeStartYear,
+                                onStartYearChanged: _onFadeStartYearChanged,
+                                fadePattern: _fadePattern,
+                                onPatternChanged: _onFadePatternChanged,
+                                projectionYears: _projectionYears,
+                                growthPath: _growthPath,
+                                busy: _revaluing,
+                              ),
+                            ],
+                            if (_derived.isNotEmpty) ...[
+                              const SizedBox(height: AppSpacing.xxl),
+                              AssumptionSliders(
+                                specs: _specs,
+                                derived: _derived,
+                                current: _slider,
+                                sources: _sources,
+                                busy: _revaluing,
+                                onChanged: _onSliderChanged,
+                                onChangeEnd: _onSliderChangeEnd,
+                                onReset: _reset,
+                                statusLine: _StatusLine(status: _status),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+              ),
             ],
           ),
           ValuationNotSuitable() => _NotSuitableCard(

@@ -120,12 +120,52 @@ void main() {
     ) async {
       // Far enough to be seen as movement rather than a bare fade, and
       // short enough that the figure is not travelling across the screen.
-      expect(AppMotion.enterTravel, inInclusiveRange(16.0, 40.0));
-      expect(
-        AppMotion.arrive.inMilliseconds,
-        lessThanOrEqualTo(400),
-        reason: 'past this the answer feels withheld rather than softened',
+      expect(AppMotion.enterTravel, inInclusiveRange(16.0, 48.0));
+      // This one is allowed to run long - it is the only motion in the app
+      // that is meant to be noticed - but only because it withholds nothing
+      // while it runs. That is what the next two tests are for.
+      expect(AppMotion.arrive.inMilliseconds, lessThanOrEqualTo(550));
+    });
+
+    testWidgets('the figure is readable on the very first frame', (
+      tester,
+    ) async {
+      // The constraint that makes a 500ms entrance acceptable. A fade from
+      // nothing would mean the number the user asked for is genuinely
+      // absent while they are waiting to read it; this one starts part-lit
+      // and the motion only settles a figure that is already there.
+      await tester.pumpWidget(
+        wrap(const EntranceTransition(child: Text(r'$117.98'))),
       );
+      await tester.pump(Duration.zero);
+
+      final opacity = tester
+          .widget<FadeTransition>(fadeIn(EntranceTransition).first)
+          .opacity
+          .value;
+      expect(opacity, greaterThanOrEqualTo(AppMotion.arriveFadeFrom - 0.01));
+      expect(opacity, lessThan(1.0), reason: 'it should still be arriving');
+    });
+
+    testWidgets('the fade finishes well before the travel does', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(const EntranceTransition(child: Text('result'))),
+      );
+      await tester.pump(Duration.zero);
+
+      // By the time the slide is half way, the content is fully lit.
+      await tester.pump(AppMotion.arrive ~/ 2);
+      expect(
+        tester
+            .widget<FadeTransition>(fadeIn(EntranceTransition).first)
+            .opacity
+            .value,
+        1.0,
+      );
+      // ...while it is still travelling.
+      expect(translationOf(tester, EntranceTransition).dy, greaterThan(0));
     });
 
     testWidgets('it plays once, not on every rebuild', (tester) async {
@@ -541,6 +581,174 @@ void main() {
         reason: 'someone who asked for less motion gets none of this spring',
       );
       await gesture.up();
+    });
+  });
+
+  group('the lenses slide, and pay nothing for it', () {
+    Widget lens(bool relative) => wrap(
+      LensTransition(
+        child: relative
+            ? const KeyedSubtree(
+                key: LensTransition.relativeKey,
+                child: Text('peers'),
+              )
+            : const KeyedSubtree(
+                key: LensTransition.intrinsicKey,
+                child: Text('figure'),
+              ),
+      ),
+    );
+
+    testWidgets('no opacity layer is drawn over the content', (tester) async {
+      // The whole point of sliding rather than cross-fading. This is the
+      // largest subtree in the app, and an opacity layer over it would mean
+      // a saveLayer over the lot on every frame of the transition, on the
+      // surface least able to afford one.
+      await tester.pumpWidget(lens(false));
+      await tester.pumpWidget(lens(true));
+      await tester.pump(AppMotion.lens ~/ 2);
+
+      expect(fadeIn(LensTransition), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(LensTransition),
+          matching: find.byType(Opacity),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(LensTransition),
+          matching: find.byType(AnimatedOpacity),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the relative lens arrives from the right', (tester) async {
+      await tester.pumpWidget(lens(false));
+      await tester.pumpWidget(lens(true));
+      await tester.pump(Duration.zero);
+
+      final arriving = tester.widget<SlideTransition>(
+        find
+            .ancestor(
+              of: find.text('peers'),
+              matching: find.byType(SlideTransition),
+            )
+            .first,
+      );
+      expect(
+        arriving.position.value.dx,
+        greaterThan(0),
+        reason: 'the right-hand tab comes in from the right',
+      );
+    });
+
+    testWidgets('and leaves the way it came', (tester) async {
+      // Which is what makes the direction read without anyone thinking
+      // about it - and it falls out of the construction, since an exit
+      // replays the entrance backwards.
+      await tester.pumpWidget(lens(false));
+      await tester.pumpWidget(lens(true));
+      await tester.pump(AppMotion.lens + const Duration(milliseconds: 20));
+
+      await tester.pumpWidget(lens(false));
+      await tester.pump(const Duration(milliseconds: 40));
+
+      final leaving = tester.widget<SlideTransition>(
+        find
+            .ancestor(
+              of: find.text('peers'),
+              matching: find.byType(SlideTransition),
+            )
+            .first,
+      );
+      expect(
+        leaving.position.value.dx,
+        greaterThan(0),
+        reason: 'the relative lens goes back out to the right',
+      );
+
+      final arriving = tester.widget<SlideTransition>(
+        find
+            .ancestor(
+              of: find.text('figure'),
+              matching: find.byType(SlideTransition),
+            )
+            .first,
+      );
+      expect(
+        arriving.position.value.dx,
+        lessThan(0),
+        reason: 'while the intrinsic one comes back in from the left',
+      );
+    });
+
+    testWidgets('both are on screen only while it moves', (tester) async {
+      await tester.pumpWidget(lens(false));
+      await tester.pumpWidget(lens(true));
+      await tester.pump(AppMotion.lens ~/ 2);
+      expect(find.text('figure'), findsOneWidget);
+      expect(find.text('peers'), findsOneWidget);
+
+      await tester.pump(AppMotion.lens);
+      expect(
+        find.text('figure'),
+        findsNothing,
+        reason: 'the old lens must not be left mounted behind the new one',
+      );
+    });
+
+    testWidgets('a rebuild of the same lens does not restart it', (
+      tester,
+    ) async {
+      // This subtree rebuilds on every frame of a slider drag. If that read
+      // as a new lens the screen would slide under the finger.
+      await tester.pumpWidget(lens(true));
+      await tester.pump(AppMotion.lens + const Duration(milliseconds: 20));
+      await tester.pumpWidget(lens(true));
+      await tester.pump(Duration.zero);
+
+      expect(
+        tester
+            .widget<SlideTransition>(
+              find
+                  .ancestor(
+                    of: find.text('peers'),
+                    matching: find.byType(SlideTransition),
+                  )
+                  .first,
+            )
+            .position
+            .value,
+        Offset.zero,
+      );
+    });
+
+    testWidgets('reduced motion switches instantly', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          const LensTransition(
+            child: KeyedSubtree(
+              key: LensTransition.relativeKey,
+              child: Text('peers'),
+            ),
+          ),
+          reducedMotion: true,
+        ),
+      );
+      await tester.pump(Duration.zero);
+
+      expect(find.text('peers'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(LensTransition),
+          matching: find.byType(SlideTransition),
+        ),
+        findsNothing,
+        reason: 'no transition at all for someone who asked for none',
+      );
     });
   });
 
