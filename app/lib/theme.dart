@@ -350,6 +350,9 @@ ThemeData _build({
 
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        // Hover only ever resolves under a real pointer, so this is the
+        // desktop and web state and costs touch nothing.
+        overlayColor: scheme.onPrimary,
         backgroundColor: accent,
         foregroundColor: scheme.onPrimary,
         disabledBackgroundColor: colors.hairline,
@@ -364,6 +367,7 @@ ThemeData _build({
 
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
+        overlayColor: accent,
         foregroundColor: accent,
         disabledForegroundColor: colors.textSecondary,
         textStyle: text.labelLarge,
@@ -420,6 +424,17 @@ ThemeData _build({
               ? colors.accentSurface
               : surface,
         ),
+        // This widget resolves its own background, which paints over the
+        // default overlay; without this a hovered segment looks dead.
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.pressed)) {
+            return accent.withValues(alpha: 0.12);
+          }
+          if (states.contains(WidgetState.hovered)) {
+            return accent.withValues(alpha: 0.06);
+          }
+          return null;
+        }),
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
               ? accent
@@ -440,7 +455,9 @@ ThemeData _build({
       dragHandleColor: colors.hairline,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.card),
+        ),
       ),
     ),
 
@@ -514,3 +531,101 @@ ThemeData buildDarkTheme() => _build(
   textPrimary: const Color(0xFFE8ECF3),
   colors: AppColors.dark,
 );
+
+/// Durations and curves for the app's three animations.
+///
+/// There is no general motion system here on purpose. This app's identity is
+/// clarity about numbers, and motion that draws attention to itself works
+/// against that, so only three moments animate: a result arriving, the
+/// Advanced section opening, and nothing else. These tokens exist so those
+/// three agree with each other rather than each inventing a duration.
+///
+/// The curve is the strong ease-out - slow built-in curves read as sluggish
+/// at these durations, and ease-in is never used: it holds still at exactly
+/// the moment the user is watching.
+abstract final class AppMotion {
+  /// A result arriving.
+  ///
+  /// Longer than the usual ceiling for UI, and deliberately: at 200ms the
+  /// landing was over before it registered, which is the worst of both -
+  /// the cost of an animation with none of the softening. This is the one
+  /// place in the app where the motion is meant to be *noticed*, because it
+  /// marks the moment the app answers the question it was asked.
+  ///
+  /// It costs nothing in waiting: the layout is final on the first frame and
+  /// only opacity and a small translation move, so the figure is readable
+  /// well before the animation ends.
+  static const Duration arrive = Duration(milliseconds: 380);
+
+  /// The Advanced section opening. Past the usual 300ms ceiling, which is a
+  /// deliberate exception: a disclosure the user chose to open is the one
+  /// place a little length reads as grace rather than lag, and at 260ms it
+  /// stopped dead rather than settling.
+  static const Duration enter = Duration(milliseconds: 330);
+
+  /// Closing something the user has dismissed: quicker than opening, because
+  /// they have already decided and are waiting for it to be gone.
+  static const Duration exit = Duration(milliseconds: 280);
+
+  /// A segmented control moving its selection.
+  static const Duration select = Duration(milliseconds: 180);
+
+  /// cubic-bezier(0.23, 1, 0.32, 1) - a stronger decelerate than
+  /// Curves.easeOut, which is too gentle to register at these durations.
+  static const Curve enterCurve = Cubic(0.23, 1, 0.32, 1);
+
+  /// cubic-bezier(0.32, 0.72, 0, 1) - the iOS drawer curve. It carries speed
+  /// much further into the movement than [enterCurve] and then lands almost
+  /// flat, which is what reads as settling into place rather than stopping.
+  /// Used where a panel changes its own size.
+  static const Curve panelCurve = Cubic(0.32, 0.72, 0, 1);
+
+  /// How far an arriving result travels before settling, in logical pixels.
+  ///
+  /// Pixels rather than a fraction of the subtree, which is what this was
+  /// first: the result subtree is a refusal card on one run and a full DCF
+  /// on the next, so a percentage made the travel unpredictable and, on the
+  /// short ones, invisible. A fixed distance reads the same every time.
+  static const double enterTravel = 28.0;
+
+  /// How far a pressed control shrinks. Subtle: the control should look
+  /// like it took the press, not like it performed. The spring carries the
+  /// quality here, not the size.
+  static const double pressScale = 0.96;
+
+  /// A finger landing on a control.
+  ///
+  /// A spring rather than a duration and a curve, for two reasons. It can be
+  /// interrupted and keep its velocity, so a second press part way through
+  /// the spring back continues from where the control actually is instead of
+  /// snapping and restarting. And the settle is governed by physics, which
+  /// is what separates a control that feels alive from one that performs a
+  /// 110ms scale.
+  ///
+  /// Going down is near-critically damped: a finger pressing a surface does
+  /// not bounce into it.
+  static final SpringDescription pressDown = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: 1000,
+    ratio: 0.92,
+  );
+
+  /// Coming back up carries a little bounce - Apple's 0.2, roughly - because
+  /// this is the half the user watches, and a dead return is the thing that
+  /// makes a press feel mechanical.
+  static final SpringDescription pressRelease =
+      SpringDescription.withDampingRatio(mass: 1, stiffness: 620, ratio: 0.78);
+
+  /// Whether the platform has asked for less motion.
+  ///
+  /// On the web this follows prefers-reduced-motion; on iOS and Android it
+  /// follows the system accessibility setting. Reduced motion means gentler,
+  /// not absent: a fade stays because it explains that content changed, and
+  /// only the travel is dropped.
+  static bool reduced(BuildContext context) =>
+      MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  /// A duration, honouring a request for reduced motion.
+  static Duration forContext(BuildContext context, Duration duration) =>
+      reduced(context) ? const Duration(milliseconds: 1) : duration;
+}

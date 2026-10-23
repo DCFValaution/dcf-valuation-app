@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import 'excel_delivery.dart';
 import 'theme.dart';
+import 'ui.dart';
 import 'valuation_api.dart';
 
 /// Runs an export end to end and reports the outcome through [showMessage].
@@ -104,16 +105,21 @@ class ExportButton extends StatelessWidget {
       children: [
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: (busy || blocked) ? null : onPressed,
-            icon: busy
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.grid_on_rounded, size: 18),
-            label: Text(busy ? 'Building workbook…' : label),
+          // Inert while busy or blocked: no feedback for a press that will
+          // not do anything.
+          child: PressFeedback(
+            enabled: !(busy || blocked),
+            child: OutlinedButton.icon(
+              onPressed: (busy || blocked) ? null : onPressed,
+              icon: busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.grid_on_rounded, size: 18),
+              label: Text(busy ? 'Building workbook…' : label),
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.sm),

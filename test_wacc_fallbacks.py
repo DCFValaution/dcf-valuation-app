@@ -172,14 +172,19 @@ def test_sensitivity_marks_undefined_cells_when_growth_meets_wacc():
     from dcf import BaseYearData, run_dcf
 
     fin = make_fin()
-    d = derive_assumptions(fin, overrides={"wacc": 0.03, "terminal_growth": 0.025})
+    # The centre has to be an assumption set the API would actually accept:
+    # terminal growth is now held 1.5 points below WACC, so a 3% WACC puts
+    # the ceiling at 1.5%. The grid still walks g up and WACC down from
+    # there, which is what makes its far corner degenerate - the centre never
+    # had to be degenerate itself for that to happen.
+    d = derive_assumptions(fin, overrides={"wacc": 0.03, "terminal_growth": 0.015})
     base = BaseYearData(revenue=10_000, total_debt=1_000, cash=1_000,
                         shares=1_000, current_price=100.0)
     r = run_dcf(base, d.assumptions)
 
-    # WACC grid [2.0, 2.5, 3.0, 3.5, 4.0]; g grid [1.5, 2.0, 2.5, 3.0, 3.5]
-    assert r.sensitivity[0][1] is None, "g 2.0% >= WACC 2.0% must be undefined"
-    assert r.sensitivity[4][0] is not None, "g 1.5% < WACC 4.0% is well defined"
+    assert r.sensitivity[0][3] is None, "g at or above WACC must be undefined"
+    assert r.sensitivity[0][4] is None
+    assert r.sensitivity[4][0] is not None, "the low-g, high-WACC corner holds"
 
 
 def test_unknown_override_is_rejected_and_lists_valid_names():

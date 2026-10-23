@@ -15,6 +15,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart' show SpringSimulation;
 
 import 'formatting.dart';
 import 'theme.dart';
@@ -407,8 +408,7 @@ class LabelledValue extends StatelessWidget {
   }
 }
 
-String _asPercent(double fraction) =>
-    '${(fraction * 100).toStringAsFixed(1)}%';
+String _asPercent(double fraction) => '${(fraction * 100).toStringAsFixed(1)}%';
 
 /// Return on invested capital, beside the cost of that capital.
 ///
@@ -434,7 +434,11 @@ class CapitalReturnsLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final (Color tone, IconData icon, String heading) = switch (returns.verdict) {
+    final (
+      Color tone,
+      IconData icon,
+      String heading,
+    ) = switch (returns.verdict) {
       CapitalVerdict.above => (
         colors.positive,
         Icons.trending_up_rounded,
@@ -508,6 +512,380 @@ class CapitalReturnsLine extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Plays its child in once, with a short rise and fade.
+///
+/// Used where a result replaces the waiting state. The point is to soften a
+/// hard cut, not to stage an arrival: the layout is final on the first frame
+/// and only opacity and a 1.5% translation animate, so the figure is legible
+/// almost immediately and never moves far enough to be read as moving.
+///
+/// Keyed by the thing that arrived rather than rebuilt on every frame: a
+/// slider drag rebuilds this subtree constantly, and an entrance that
+/// restarted on each rebuild would make the whole screen shiver while the
+/// user drags.
+///
+/// Opacity over a large subtree costs a saveLayer on every frame it runs, so
+/// this is deliberately one-shot and short. Flutter skips the layer entirely
+/// once opacity reaches 1, which means the cost ends when the animation does
+/// rather than lasting as long as the screen.
+class EntranceTransition extends StatefulWidget {
+  const EntranceTransition({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<EntranceTransition> createState() => _EntranceTransitionState();
+}
+
+class _EntranceTransitionState extends State<EntranceTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.arrive,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_controller.isDismissed) {
+      _controller.duration = AppMotion.forContext(context, AppMotion.arrive);
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: AppMotion.enterCurve,
+    );
+    // The travel is dropped under reduced motion; the fade is kept, because
+    // it is what says the content changed.
+    final travel = AppMotion.reduced(context) ? 0.0 : AppMotion.enterTravel;
+    return FadeTransition(
+      opacity: curved,
+      // Translate by a fixed distance rather than a fraction of the subtree.
+      // The subtree is a short refusal card on one run and a full DCF on the
+      // next, and a percentage of that made the same animation conspicuous
+      // on one and invisible on the other.
+      child: AnimatedBuilder(
+        animation: curved,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, travel * (1 - curved.value)),
+          child: child,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// The shape of a result, drawn flat while one is being fetched.
+///
+/// This is the whole loading state, not a decoration above one. An earlier
+/// version kept the old spinner block underneath and the screen read as two
+/// things at once - a half-drawn result on top, a separate "loading" panel
+/// below. One state, or it is not a state.
+///
+/// The blocks sit where the figure, the price-and-upside row and the
+/// assumption rows will be, so the wait reads as the answer loading rather
+/// than as the app having stopped. On a cold start that wait can run to a
+/// minute, which is long enough for the difference to matter.
+///
+/// Deliberately static - no shimmer, nothing looping. A sweep would repaint
+/// for that whole minute, on the weakest surface, at the moment the device
+/// is already busy fetching, and it would tell the user nothing the still
+/// shapes do not.
+class ResultSkeleton extends StatelessWidget {
+  const ResultSkeleton({
+    super.key,
+    required this.caption,
+    this.detail,
+    this.notice,
+  });
+
+  /// What is happening, in the words the screen already used.
+  final String caption;
+  final String? detail;
+
+  /// Why this one is taking so long, once it has been long enough that the
+  /// question has occurred to the user.
+  ///
+  /// Null for the first few seconds and on every quick valuation after,
+  /// because a warning about a minute-long wait attached to a two-second
+  /// one teaches the user to expect a slowness that is not there.
+  final String? notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    // Faint enough to read as absence rather than as content. A placeholder
+    // with presence competes with the figure that replaces it.
+    final fill = colors.hairline;
+
+    Widget block(double width, double height, {double radius = 6}) => Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+
+    Widget card({required List<Widget> children}) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: context.scheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: colors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        0,
+        AppSpacing.xl,
+        AppSpacing.xxxl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // What is happening, said once, at the top where the company name
+          // will be. The message belongs to this state rather than sitting
+          // under it as a second panel.
+          Text(caption, style: context.text.titleMedium),
+          if (detail != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              detail!,
+              style: context.text.bodySmall?.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+          // Appears only once the wait has actually run long. It fades in
+          // rather than snapping, because something appearing instantly on a
+          // screen the user has been staring at for four seconds reads as an
+          // error arriving. Opacity on one small row: no layer worth the
+          // name, unlike a fade over the skeleton itself.
+          AnimatedSize(
+            duration: AppMotion.forContext(context, AppMotion.enter),
+            curve: AppMotion.panelCurve,
+            alignment: Alignment.topLeft,
+            child: notice == null
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.lg),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.schedule_rounded,
+                          size: 16,
+                          color: colors.textSecondary,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            notice!,
+                            style: context.text.bodySmall?.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+
+          // The figure, and the price/upside row beneath it.
+          card(
+            children: [
+              block(120, 10),
+              const SizedBox(height: AppSpacing.md),
+              block(200, 38, radius: 8),
+              const SizedBox(height: AppSpacing.xl),
+              Divider(color: colors.hairline, height: 1),
+              const SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        block(80, 9),
+                        const SizedBox(height: AppSpacing.sm),
+                        block(70, 18),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        block(90, 9),
+                        const SizedBox(height: AppSpacing.sm),
+                        block(80, 18),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xl),
+
+          // Where the explanation note will be.
+          card(
+            children: [
+              block(double.infinity, 9),
+              const SizedBox(height: AppSpacing.sm),
+              block(double.infinity, 9),
+              const SizedBox(height: AppSpacing.sm),
+              block(220, 9),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xl),
+
+          // Where the assumptions will be.
+          for (var i = 0; i < 4; i++) ...[
+            card(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [block(130, 14), block(60, 14)],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                block(double.infinity, 8),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shrinks very slightly while a finger is on it.
+///
+/// The feedback starts on the press, not on the release. A control that only
+/// responds when the finger lifts reads as laggy even when nothing is slow,
+/// because the response arrives after the user has finished acting. Native
+/// controls answer the moment contact is made, and this is what that costs.
+///
+/// Subtle on purpose - 4% - and fast. The control should look like it took
+/// the press, not like it performed. Anything larger starts drawing the eye
+/// away from the figures, which on this screen is the thing motion is least
+/// allowed to do.
+///
+/// Built on [Listener] rather than a gesture detector, and that is the whole
+/// trick: a Listener watches raw pointer events without entering the gesture
+/// arena, so the button inside keeps its own tap handling and its own Material
+/// ripple. Wrapping a button in a GestureDetector instead puts two tap
+/// recognisers in one arena, and whichever wins, the other's behaviour is
+/// silently lost.
+///
+/// Cancelling matters as much as pressing: a finger that slides off has to
+/// spring the control back, or it is left looking held down by a touch that
+/// went nowhere.
+///
+/// Transform only, on a leaf widget. No opacity layer, so nothing here costs
+/// a saveLayer.
+class PressFeedback extends StatefulWidget {
+  const PressFeedback({
+    super.key,
+    required this.child,
+    this.enabled = true,
+    this.scale = AppMotion.pressScale,
+  });
+
+  final Widget child;
+
+  /// False leaves the control still: no feedback for a press that will not
+  /// do anything.
+  final bool enabled;
+
+  final double scale;
+
+  @override
+  State<PressFeedback> createState() => _PressFeedbackState();
+}
+
+class _PressFeedbackState extends State<PressFeedback>
+    with SingleTickerProviderStateMixin {
+  /// Unbounded because a spring overshoots: a bounded controller would clamp
+  /// the overshoot away and take the life out of the return.
+  late final AnimationController _controller = AnimationController.unbounded(
+    value: 1,
+    vsync: this,
+  );
+
+  void _set(bool down) {
+    if (!widget.enabled) return;
+    // Reduced motion keeps the control responsive without moving it.
+    if (AppMotion.reduced(context)) {
+      _controller.stop();
+      _controller.value = 1;
+      return;
+    }
+    // Starting from the current value *and the current velocity* is the
+    // whole of interruptibility: press again while it is springing back and
+    // it carries that motion into the new target instead of snapping to
+    // where it would have been and starting over.
+    _controller.animateWith(
+      SpringSimulation(
+        down ? AppMotion.pressDown : AppMotion.pressRelease,
+        _controller.value,
+        down ? widget.scale : 1.0,
+        _controller.velocity,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      // Translucent rather than the default deferToChild: the squeeze should
+      // answer a press anywhere in the control's bounds, including any
+      // padding around the child, and a child that does not take part in hit
+      // testing should not silently disable the feedback. Translucent adds
+      // this to the hit path without taking anything away from what is
+      // behind it, which matters because a Listener is purely observational.
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: widget.enabled ? (_) => _set(true) : null,
+      onPointerUp: widget.enabled ? (_) => _set(false) : null,
+      onPointerCancel: widget.enabled ? (_) => _set(false) : null,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) =>
+            Transform.scale(scale: _controller.value, child: child),
+        child: widget.child,
       ),
     );
   }

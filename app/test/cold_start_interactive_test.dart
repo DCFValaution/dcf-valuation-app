@@ -59,6 +59,29 @@ class SleepingBackend {
   );
 }
 
+/// A server whose /health answers at once but whose valuations still crawl.
+///
+/// The case the explanation used to miss entirely: the launch ping succeeds,
+/// so the app believes the server is awake, and then the valuation takes
+/// forty seconds anyway. Waking the instance is not the same as it being
+/// quick, and a user watching a still screen deserves to be told either way.
+class AwakeButSlowBackend {
+  ValuationApi api() => ValuationApi(
+    baseUrl: 'http://test',
+    client: MockClient((request) {
+      if (request.url.path == '/health') {
+        return Future.value(http.Response('{"status":"ok"}', 200));
+      }
+      if (request.url.path == '/search') {
+        return Future.value(
+          http.Response('{"status":"ok","query":"","results":[]}', 200),
+        );
+      }
+      return Completer<http.Response>().future;
+    }),
+  );
+}
+
 /// Run the clock past the app's longest request timeout.
 ///
 /// Against a server that never answers, the app's requests are each waiting on
@@ -71,6 +94,36 @@ Future<void> drain(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('a slow valuation is explained even when the server answered', (
+    tester,
+  ) async {
+    // This is the regression. The notice used to be suppressed the moment
+    // the ping came back, which meant the one case that most needed
+    // explaining - a long wait against a server we had just confirmed was
+    // up - was the one case that got nothing.
+    final server = AwakeButSlowBackend();
+    await tester.pumpWidget(DcfApp(api: server.api()));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'AAPL');
+    await tester.tap(find.widgetWithText(FilledButton, 'Value'));
+    await tester.pump();
+    await tester.pump(
+      ValuationApi.wakingThreshold + const Duration(seconds: 1),
+    );
+
+    expect(
+      find.textContaining('taking longer than usual'),
+      findsOneWidget,
+      reason: 'the wait is real whatever the ping said',
+    );
+    // And it does not claim the server is asleep, because we know it is not.
+    expect(find.textContaining('Waking up the server'), findsNothing);
+
+    await drain(tester);
+  });
+
   testWidgets('the wake-up ping goes out without anyone tapping anything', (
     tester,
   ) async {
@@ -155,7 +208,30 @@ void main() {
       ValuationApi.wakingThreshold + const Duration(seconds: 1),
     );
 
-    expect(find.text('Waking up the server'), findsOneWidget);
+    expect(find.textContaining('Waking up the server'), findsOneWidget);
+    expect(find.textContaining('up to a minute'), findsOneWidget);
+
+    await drain(tester);
+  });
+
+  testWidgets('the explanation waits for the wait to be long', (tester) async {
+    // A warning about a minute-long wait attached to a two-second one
+    // teaches the user to expect a slowness that is not there.
+    final server = SleepingBackend();
+    await tester.pumpWidget(DcfApp(api: server.api()));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'AAPL');
+    await tester.tap(find.widgetWithText(FilledButton, 'Value'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.textContaining('up to a minute'), findsNothing);
+    expect(
+      find.text('Valuing AAPL'),
+      findsOneWidget,
+      reason: 'the skeleton says what it is doing without the alarm',
+    );
 
     await drain(tester);
   });

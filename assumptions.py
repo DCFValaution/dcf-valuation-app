@@ -76,6 +76,12 @@ DEFAULT_PROJECTION_YEARS = 5
 # point.
 TERMINAL_GROWTH_SAFETY_MARGIN = 0.015
 
+# How far outside its stated range a supplied value may fall before it is
+# refused. One basis point: wide enough to absorb a client that rounds the
+# range it was given to two decimal places before echoing a value back,
+# narrow enough that nothing economically meaningful passes through it.
+_RANGE_TOLERANCE = 1e-4
+
 
 def derived_terminal_growth(risk_free_rate: float, wacc: float) -> float:
     """Long-run growth that tracks the rate environment but stays usable.
@@ -397,11 +403,30 @@ def derive_assumptions(fin: CompanyFinancials,
             # The allowed range describes the control, not the value, so it
             # survives the override: a slider the user has moved still needs
             # to know how far it may travel.
+            low = clamp.get("allowed_min")
+            high = clamp.get("allowed_max")
+            # ...and where there is a range, it is a limit, not a label. This
+            # used to be reported and then ignored: the API would answer a
+            # request for a terminal growth above the company's own ceiling
+            # with a number, while the same response carried the range that
+            # number broke. Only terminal growth carries a range today, and
+            # for it the ceiling is the whole point of the control - above
+            # the risk-free rate, or within 1.5 points of WACC, the Gordon
+            # perpetuity stops meaning anything and starts dividing by a gap
+            # that is about to go negative. A caller that asks for that has
+            # asked for a number no one should act on, so it is refused
+            # rather than served.
+            if low is not None and supplied < low - _RANGE_TOLERANCE:
+                raise ValueError(
+                    f"{name} must be at least {low:.4%}; got {supplied:.4%}")
+            if high is not None and supplied > high + _RANGE_TOLERANCE:
+                raise ValueError(
+                    f"{name} must be at most {high:.4%} for this company; "
+                    f"got {supplied:.4%}")
             store[name] = Provenance(
                 name, supplied, "override",
                 f"supplied by caller (would have been {value:.4g} from {source})",
-                allowed_min=clamp.get("allowed_min"),
-                allowed_max=clamp.get("allowed_max"))
+                allowed_min=low, allowed_max=high)
             return supplied
         store[name] = Provenance(name, value, source, detail, **clamp)
         return value

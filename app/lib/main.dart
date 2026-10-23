@@ -53,6 +53,11 @@ class _LensSwitcher extends StatelessWidget {
             key: const Key('lens-switcher'),
             showSelectedIcon: false,
             style: const ButtonStyle(
+              // The selected segment's fill moves rather than jumping. It is
+              // the one place a tab's state change is worth showing: the two
+              // lenses answer different questions, and a hard cut makes the
+              // switch read as a reload rather than as a change of view.
+              animationDuration: AppMotion.select,
               // The default horizontal padding is generous enough to force a
               // wrap on its own at this width.
               padding: WidgetStatePropertyAll(
@@ -407,10 +412,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// The fade's own overrides, kept apart from the sliders' because one of
   /// them names a shape rather than carrying a number.
   Map<String, double> get _fadeOverrides => _fadeEnabled
-      ? {
-          'fade_enabled': 1,
-          'fade_start_year': _fadeStartYear.toDouble(),
-        }
+      ? {'fade_enabled': 1, 'fade_start_year': _fadeStartYear.toDouble()}
       : const {};
 
   Map<String, String> get _fadeTextOverrides =>
@@ -652,7 +654,8 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// succession would otherwise fire a request per gesture.
   /// The horizon the fade has to fit inside.
   int get _projectionYears =>
-      (_slider['projection_years'] ?? _derived['projection_years'] ?? 5).round();
+      (_slider['projection_years'] ?? _derived['projection_years'] ?? 5)
+          .round();
 
   void _onFadeChanged(bool value) {
     setState(() {
@@ -745,12 +748,11 @@ class _ValuationScreenState extends State<ValuationScreen> {
     if (_exporting || _resultTicker.isEmpty) return;
     setState(() => _exporting = true);
     await runExport(
-      fetch: () =>
-          _api.downloadExcel(
-            _resultTicker,
-            overrides: _activeOverrides,
-            textOverrides: _fadeTextOverrides,
-          ),
+      fetch: () => _api.downloadExcel(
+        _resultTicker,
+        overrides: _activeOverrides,
+        textOverrides: _fadeTextOverrides,
+      ),
       ticker: _resultTicker,
       showMessage: _showMessage,
       onDone: () {
@@ -769,8 +771,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
       fetch: () => _api.downloadRelativeExcel(
         _resultTicker,
         addPeers: _relativeController?.applied.added ?? const [],
-        removePeers:
-            _relativeController?.applied.removed.toList() ?? const [],
+        removePeers: _relativeController?.applied.removed.toList() ?? const [],
       ),
       ticker: _resultTicker,
       showMessage: _showMessage,
@@ -954,9 +955,14 @@ class _ValuationScreenState extends State<ValuationScreen> {
                     TextFieldTapRegion(
                       child: SizedBox(
                         height: 54,
-                        child: FilledButton(
-                          onPressed: _submit,
-                          child: const Text('Value'),
+                        // The press is answered the instant the finger
+                        // lands, which is what separates a control that
+                        // feels native from one that feels like a page.
+                        child: PressFeedback(
+                          child: FilledButton(
+                            onPressed: _submit,
+                            child: const Text('Value'),
+                          ),
                         ),
                       ),
                     ),
@@ -999,40 +1005,30 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
   Widget _buildResultArea() {
     if (_loading) {
-      // Once a request has run past the threshold, a sleeping free-tier
-      // instance is the likeliest cause. Saying so turns an alarming silent
-      // wait into an expected one - the delay is identical either way, but
-      // an unexplained minute reads as a broken app.
-      final waking = _wakingServer && !_serverAwake;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 26,
-                height: 26,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Text(
-                waking ? 'Waking up the server' : 'Valuing $_resultTicker',
-                style: context.text.titleMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                waking
-                    ? 'This can take up to a minute on the first use after a '
-                          'while. Later valuations are quick.'
-                    : 'Reading filings and deriving assumptions',
-                style: context.text.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+      // The shape of the answer, drawn flat, rather than a spinner in the
+      // middle of an empty screen.
+      //
+      // The heading does not change while the user waits: swapping it part
+      // way through makes the screen look like it restarted. What arrives
+      // instead is a note underneath, and only once the wait has run long
+      // enough for the user to wonder.
+      //
+      // This used to be suppressed whenever the launch ping had answered,
+      // which turned out to be exactly backwards: the ping waking the server
+      // does not make the valuation itself quick, so the one case that most
+      // needed explaining - a slow first valuation against a server we had
+      // just poked - was the case that got no explanation at all. Elapsed
+      // time is the honest trigger. What differs is only how much we are
+      // entitled to claim about the cause.
+      return ResultSkeleton(
+        caption: 'Valuing $_resultTicker',
+        detail: 'Reading filings and deriving assumptions',
+        notice: !_wakingServer
+            ? null
+            : _serverAwake
+            ? 'This one is taking longer than usual - still working.'
+            : 'Waking up the server - the first valuation after a while '
+                  'can take up to a minute. Later ones are quick.',
       );
     }
 
@@ -1043,115 +1039,123 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
     // The backend's outcomes are distinct by design; render each on its own
     // terms rather than collapsing them into "worked" and "didn't".
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        0,
-        AppSpacing.xl,
-        AppSpacing.xxxl,
-      ),
-      child: switch (result) {
-        ValuationSuccess() => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Two lenses on the same company. The intrinsic one is the
-            // default and is left exactly as it was; the relative one is a
-            // separate, market-based second opinion, fetched only on request.
-            _LensSwitcher(lens: _lens, onChanged: _selectLens),
-            const SizedBox(height: AppSpacing.xl),
-            if (_lens == _Lens.relative && _relativeController != null)
-              RelativeView(
-                controller: _relativeController!,
-                peerSearch: _peerSearch,
-                intrinsicAdjusted: _activeOverrides.isNotEmpty,
-                // Passed unconditionally: the peer comparison arrives after
-                // this build, and notifies the view rather than this screen,
-                // so a decision made here would be made before there is an
-                // outcome to decide on - and never revisited. The view shows
-                // it only where a figure actually stood up.
-                footer: ExportButton(
-                  busy: _exporting,
-                  caption:
-                      'A spreadsheet of the peer comparison: every '
-                      'multiple, the medians, and who the peers are.',
-                  onPressed: _exportRelative,
-                ),
-              )
-            else ...[
-              _SuccessCard(
-                result: result,
-                intrinsicValue:
-                    _displayIntrinsic ?? result.intrinsicValuePerShare,
-                upsideDownside: _displayUpside ?? result.upsideDownside,
-                note: _displayNote,
-                status: _status,
-                // Only meaningful once something has actually been changed.
-                baselineValue: (_activeOverrides.isEmpty)
-                    ? null
-                    : _baselineValue,
-                correctionNote: _correctionNote,
-              ),
-              // Both methods have a workbook of their own now: a discounted
-              // cash flow model, or the dividend model for the companies
-              // valued on their dividends. The backend decides which to build
-              // from the same report this screen is showing, so the button
-              // does not need to know which it will get.
+    //
+    // Keyed by ticker and outcome so the entrance plays when an answer
+    // arrives and not when a slider drag rebuilds this subtree. All three
+    // outcomes are wrapped, so a refusal arrives the same way a valuation
+    // does rather than being the one that still snaps.
+    return EntranceTransition(
+      key: ValueKey('$_resultTicker|${result.runtimeType}'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          0,
+          AppSpacing.xl,
+          AppSpacing.xxxl,
+        ),
+        child: switch (result) {
+          ValuationSuccess() => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Two lenses on the same company. The intrinsic one is the
+              // default and is left exactly as it was; the relative one is a
+              // separate, market-based second opinion, fetched only on request.
+              _LensSwitcher(lens: _lens, onChanged: _selectLens),
               const SizedBox(height: AppSpacing.xl),
-              ExportButton(
-                busy: _exporting,
-                // Terminal growth at or above the discount rate - WACC for a
-                // DCF, the cost of equity for a DDM - would make the backend
-                // refuse; do not offer an export that cannot succeed.
-                blocked: _growthExceedsDiscountRate,
-                blockedReason: 'Set terminal growth below the discount rate before exporting.',
-                overrideCount: _activeOverrides.length,
-                onPressed: _exportExcel,
-              ),
-              // Advanced overrides: the shape of the model rather than its
-              // numbers. The standard DCF only - the dividend, speculative,
-              // hypothetical and relative models each have their own horizon
-              // and no growth path to fade.
-              if (result.method == ValuationMethod.dcf) ...[
-                const SizedBox(height: AppSpacing.xxl),
-                AdvancedPanel(
-                  expanded: _advancedOpen,
-                  onExpandedChanged: (v) => setState(() => _advancedOpen = v),
-                  fadeEnabled: _fadeEnabled,
-                  onFadeChanged: _onFadeChanged,
-                  fadeStartYear: _fadeStartYear,
-                  onStartYearChanged: _onFadeStartYearChanged,
-                  fadePattern: _fadePattern,
-                  onPatternChanged: _onFadePatternChanged,
-                  projectionYears: _projectionYears,
-                  growthPath: _growthPath,
-                  busy: _revaluing,
+              if (_lens == _Lens.relative && _relativeController != null)
+                RelativeView(
+                  controller: _relativeController!,
+                  peerSearch: _peerSearch,
+                  intrinsicAdjusted: _activeOverrides.isNotEmpty,
+                  // Passed unconditionally: the peer comparison arrives after
+                  // this build, and notifies the view rather than this screen,
+                  // so a decision made here would be made before there is an
+                  // outcome to decide on - and never revisited. The view shows
+                  // it only where a figure actually stood up.
+                  footer: ExportButton(
+                    busy: _exporting,
+                    caption:
+                        'A spreadsheet of the peer comparison: every '
+                        'multiple, the medians, and who the peers are.',
+                    onPressed: _exportRelative,
+                  ),
+                )
+              else ...[
+                _SuccessCard(
+                  result: result,
+                  intrinsicValue:
+                      _displayIntrinsic ?? result.intrinsicValuePerShare,
+                  upsideDownside: _displayUpside ?? result.upsideDownside,
+                  note: _displayNote,
+                  status: _status,
+                  // Only meaningful once something has actually been changed.
+                  baselineValue: (_activeOverrides.isEmpty)
+                      ? null
+                      : _baselineValue,
+                  correctionNote: _correctionNote,
                 ),
-              ],
-              if (_derived.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xxl),
-                AssumptionSliders(
-                  specs: _specs,
-                  derived: _derived,
-                  current: _slider,
-                  sources: _sources,
-                  busy: _revaluing,
-                  onChanged: _onSliderChanged,
-                  onChangeEnd: _onSliderChangeEnd,
-                  onReset: _reset,
-                  statusLine: _StatusLine(status: _status),
+                // Both methods have a workbook of their own now: a discounted
+                // cash flow model, or the dividend model for the companies
+                // valued on their dividends. The backend decides which to build
+                // from the same report this screen is showing, so the button
+                // does not need to know which it will get.
+                const SizedBox(height: AppSpacing.xl),
+                ExportButton(
+                  busy: _exporting,
+                  // Terminal growth at or above the discount rate - WACC for a
+                  // DCF, the cost of equity for a DDM - would make the backend
+                  // refuse; do not offer an export that cannot succeed.
+                  blocked: _growthExceedsDiscountRate,
+                  blockedReason: 'Set terminal growth below the discount rate before exporting.',
+                  overrideCount: _activeOverrides.length,
+                  onPressed: _exportExcel,
                 ),
+                // Advanced overrides: the shape of the model rather than its
+                // numbers. The standard DCF only - the dividend, speculative,
+                // hypothetical and relative models each have their own horizon
+                // and no growth path to fade.
+                if (result.method == ValuationMethod.dcf) ...[
+                  const SizedBox(height: AppSpacing.xxl),
+                  AdvancedPanel(
+                    expanded: _advancedOpen,
+                    onExpandedChanged: (v) => setState(() => _advancedOpen = v),
+                    fadeEnabled: _fadeEnabled,
+                    onFadeChanged: _onFadeChanged,
+                    fadeStartYear: _fadeStartYear,
+                    onStartYearChanged: _onFadeStartYearChanged,
+                    fadePattern: _fadePattern,
+                    onPatternChanged: _onFadePatternChanged,
+                    projectionYears: _projectionYears,
+                    growthPath: _growthPath,
+                    busy: _revaluing,
+                  ),
+                ],
+                if (_derived.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xxl),
+                  AssumptionSliders(
+                    specs: _specs,
+                    derived: _derived,
+                    current: _slider,
+                    sources: _sources,
+                    busy: _revaluing,
+                    onChanged: _onSliderChanged,
+                    onChangeEnd: _onSliderChangeEnd,
+                    onReset: _reset,
+                    statusLine: _StatusLine(status: _status),
+                  ),
+                ],
               ],
             ],
-          ],
-        ),
-        ValuationNotSuitable() => _NotSuitableCard(
-          result: result,
-          onShowSpeculative: result.speculativeEstimateAvailable
-              ? () => _openSpeculative(result)
-              : null,
-        ),
-        ValuationFailure() => _FailureCard(result: result),
-      },
+          ),
+          ValuationNotSuitable() => _NotSuitableCard(
+            result: result,
+            onShowSpeculative: result.speculativeEstimateAvailable
+                ? () => _openSpeculative(result)
+                : null,
+          ),
+          ValuationFailure() => _FailureCard(result: result),
+        },
+      ),
     );
   }
 }

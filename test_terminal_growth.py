@@ -164,6 +164,45 @@ def test_the_range_survives_an_override(monkeypatch, profitable):
     assert prov.allowed_max > 0.01
 
 
+def test_the_ceiling_is_a_limit_and_not_only_a_label(monkeypatch, profitable):
+    """The range was reported and then ignored.
+
+    Production would answer a request for a terminal growth above the
+    company's own ceiling with a number, while the very same response carried
+    the range that number broke - asked 6.117% against a 5.117% ceiling, got
+    $136.44. Above the ceiling the Gordon perpetuity divides by a gap that is
+    on its way to zero, so the honest answer is a refusal, not a figure.
+    """
+    monkeypatch.setattr(A, "fetch_risk_free_rate",
+                        lambda tenor="year10": (0.047, "pinned for test"))
+    ceiling = A.derive_assumptions(profitable).provenance[
+        "terminal_growth"].allowed_max
+
+    with pytest.raises(ValueError, match="at most"):
+        A.derive_assumptions(profitable,
+                             overrides={"terminal_growth": ceiling + 0.01})
+
+    with pytest.raises(ValueError, match="at least"):
+        A.derive_assumptions(profitable, overrides={"terminal_growth": -0.01})
+
+
+def test_the_ceiling_itself_is_still_accepted(monkeypatch, profitable):
+    """Where the control rests by default has to remain reachable."""
+    monkeypatch.setattr(A, "fetch_risk_free_rate",
+                        lambda tenor="year10": (0.047, "pinned for test"))
+    ceiling = A.derive_assumptions(profitable).provenance[
+        "terminal_growth"].allowed_max
+
+    derived = A.derive_assumptions(profitable,
+                                   overrides={"terminal_growth": ceiling})
+    assert derived.assumptions.terminal_growth == pytest.approx(ceiling)
+
+    # And a client that rounded the range it was given to two decimal places
+    # before echoing a value back is not punished for it.
+    rounded = round(ceiling * 100, 2) / 100
+    A.derive_assumptions(profitable, overrides={"terminal_growth": rounded})
+
+
 def test_sliding_down_recovers_the_conservative_figure(monkeypatch, profitable):
     """The old behaviour is still reachable: it is where the slider used to
     rest, not somewhere the user has been locked out of."""

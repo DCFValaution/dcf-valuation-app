@@ -22,7 +22,6 @@ import 'dcf_engine.dart' show fadeExponential, fadeLinear;
 import 'theme.dart';
 import 'ui.dart';
 
-
 class AdvancedPanel extends StatelessWidget {
   const AdvancedPanel({
     super.key,
@@ -65,104 +64,145 @@ class AdvancedPanel extends StatelessWidget {
     return AppCard(
       key: const Key('advanced-panel'),
       padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            key: const Key('advanced-header'),
-            onTap: () => onExpandedChanged(!expanded),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                children: [
-                  Icon(Icons.tune_rounded,
-                      size: 18, color: colors.textSecondary),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      // AppCard paints a rounded background but is a plain Container, so the
+      // header's ink would land on whatever Material is behind the card -
+      // under the opaque white, invisible except where it escaped the curve,
+      // which drew grey square corners for exactly as long as a tap lasted.
+      // A transparent Material of the card's own shape gives the ink a
+      // surface above that background and clips it, and clips the expanding
+      // section's bottom corners with it.
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              key: const Key('advanced-header'),
+              onTap: () => onExpandedChanged(!expanded),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.tune_rounded,
+                      size: 18,
+                      color: colors.textSecondary,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Advanced', style: context.text.titleSmall),
+                          const SizedBox(height: 2),
+                          Text(
+                            fadeEnabled
+                                ? 'Growth fade on - your override, not the default model'
+                                : 'Change the shape of the model, not just its numbers',
+                            style: context.text.labelSmall?.copyWith(
+                              color: fadeEnabled
+                                  ? context.scheme.primary
+                                  : colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      color: colors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Reveals by changing its own height rather than by fading a
+            // large subtree: an opacity layer over this content would cost a
+            // saveLayer on every frame it ran, and the web build is the
+            // surface least able to afford one.
+            //
+            // The sizing animates; the contents are simply present or absent.
+            // A cross-fade here would mean drawing both states at once, which
+            // is the expensive thing this avoids.
+            //
+            AnimatedSize(
+              duration: expanded
+                  ? AppMotion.forContext(context, AppMotion.enter)
+                  : AppMotion.forContext(context, AppMotion.exit),
+              curve: AppMotion.panelCurve,
+              alignment: Alignment.topCenter,
+              child: !expanded
+                  ? const SizedBox(width: double.infinity, height: 0)
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Advanced', style: context.text.titleSmall),
-                        const SizedBox(height: 2),
-                        Text(
-                          fadeEnabled
-                              ? 'Growth fade on - your override, not the default model'
-                              : 'Change the shape of the model, not just its numbers',
-                          style: context.text.labelSmall?.copyWith(
-                            color: fadeEnabled
-                                ? context.scheme.primary
-                                : colors.textSecondary,
+                        Divider(height: 1, color: colors.hairline),
+                        Padding(
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Fade growth to the terminal rate',
+                                          style: context.text.bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Hold the starting rate, then glide to the '
+                                          'terminal rate by the final year, instead of '
+                                          'dropping to it all at once.',
+                                          style: context.text.labelSmall
+                                              ?.copyWith(
+                                                color: colors.textSecondary,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    key: const Key('fade-toggle'),
+                                    value: fadeEnabled,
+                                    onChanged: busy ? null : onFadeChanged,
+                                  ),
+                                ],
+                              ),
+                              if (fadeEnabled) ...[
+                                const SizedBox(height: AppSpacing.lg),
+                                _StartYear(
+                                  value: fadeStartYear,
+                                  projectionYears: projectionYears,
+                                  onChanged: busy ? null : onStartYearChanged,
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                _Pattern(
+                                  value: fadePattern,
+                                  onChanged: busy ? null : onPatternChanged,
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                GrowthPathView(path: growthPath),
+                              ],
+                            ],
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  Icon(
-                    expanded
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                    color: colors.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (expanded) ...[
-            Divider(height: 1, color: colors.hairline),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Fade growth to the terminal rate',
-                              style: context.text.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Hold the starting rate, then glide to the '
-                              'terminal rate by the final year, instead of '
-                              'dropping to it all at once.',
-                              style: context.text.labelSmall
-                                  ?.copyWith(color: colors.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        key: const Key('fade-toggle'),
-                        value: fadeEnabled,
-                        onChanged: busy ? null : onFadeChanged,
-                      ),
-                    ],
-                  ),
-                  if (fadeEnabled) ...[
-                    const SizedBox(height: AppSpacing.lg),
-                    _StartYear(
-                      value: fadeStartYear,
-                      projectionYears: projectionYears,
-                      onChanged: busy ? null : onStartYearChanged,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    _Pattern(
-                      value: fadePattern,
-                      onChanged: busy ? null : onPatternChanged,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    GrowthPathView(path: growthPath),
-                  ],
-                ],
-              ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -192,14 +232,17 @@ class _StartYear extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text('Hold the starting rate through year',
-                  style: context.text.bodyMedium),
+              child: Text(
+                'Hold the starting rate through year',
+                style: context.text.bodyMedium,
+              ),
             ),
             Text(
               '${current.round()}',
               key: const Key('fade-start-year-value'),
-              style: context.text.titleSmall
-                  ?.copyWith(color: context.scheme.primary),
+              style: context.text.titleSmall?.copyWith(
+                color: context.scheme.primary,
+              ),
             ),
           ],
         ),
@@ -238,16 +281,18 @@ class _Pattern extends StatelessWidget {
           ],
           selected: {value},
           showSelectedIcon: false,
-          onSelectionChanged:
-              onChanged == null ? null : (s) => onChanged!(s.first),
+          onSelectionChanged: onChanged == null
+              ? null
+              : (s) => onChanged!(s.first),
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
           value == fadeExponential
               ? 'Equal-proportion decay: falls fast at first, then levels off.'
               : 'Equal steps down, the same number of percentage points a year.',
-          style: context.text.labelSmall
-              ?.copyWith(color: context.colors.textSecondary),
+          style: context.text.labelSmall?.copyWith(
+            color: context.colors.textSecondary,
+          ),
         ),
       ],
     );
@@ -307,8 +352,9 @@ class GrowthPathView extends StatelessWidget {
         children: [
           Text(
             'Growth applied each year',
-            style:
-                context.text.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: context.text.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           Wrap(
@@ -318,8 +364,9 @@ class GrowthPathView extends StatelessWidget {
               for (final entry in summarise(path))
                 Text(
                   entry,
-                  style: context.text.labelSmall
-                      ?.copyWith(color: colors.textSecondary),
+                  style: context.text.labelSmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
             ],
           ),
@@ -327,8 +374,9 @@ class GrowthPathView extends StatelessWidget {
           Text(
             'The final year matches the terminal growth rate, so the '
             'perpetuity that follows starts from the same place.',
-            style:
-                context.text.labelSmall?.copyWith(color: colors.textSecondary),
+            style: context.text.labelSmall?.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
         ],
       ),
