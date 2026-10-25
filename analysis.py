@@ -20,7 +20,8 @@ from statistics import median
 from assumptions import DerivedAssumptions, derive_assumptions
 from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
-                            growth_below_terminal_warning)
+                            growth_below_terminal_warning, signed_pct,
+                            _possessive)
 from dcf import BaseYearData, DCFResult, run_dcf
 from ddm import DDMInputs, DDMResult, run_ddm
 from ddm_assumptions import (DIVIDEND_CUT_TOLERANCE, DerivedDDMAssumptions,
@@ -1045,9 +1046,21 @@ def assess_speculative_suitability(fin: CompanyFinancials,
     else:
         latest, cagr = d["latest_revenue_growth"], d["revenue_cagr"]
         if latest is not None and cagr is not None and latest <= 0 and cagr <= 0:
+            # Both are non-positive here, so the figures are stated without
+            # their signs: the sentence already says which way they went, and
+            # repeating it as "-0.5%" after a dash read "fallen - -0.5%".
+            # Where the fall is too small to print, it is flatness rather
+            # than a fall, and the sentence says that instead of claiming a
+            # decline of 0.0%.
+            flat = (float(f"{latest * 100:.1f}") == 0
+                    and float(f"{cagr * 100:.1f}") == 0)
+            movement = (
+                "revenue has not grown"
+                if flat else
+                f"revenue has fallen {abs(latest):.1%} in the latest year "
+                f"and {abs(cagr):.1%} a year over the period")
             reasons.append(
-                f"{name}'s revenue has fallen - {latest:.1%} in the latest year and "
-                f"{cagr:.1%} a year over the period. This approach projects growth into "
+                f"{_possessive(name)} {movement}. This approach projects growth into "
                 "profitability; a shrinking company offers no growth to extend, and assuming "
                 "a reversal would invent it.")
 
@@ -1282,13 +1295,19 @@ def _reality_contrast(user: UserAssumptions,
         actual_growth = None
     else:
         actual_growth = cagr if cagr is not None else latest
-        direction = "fallen" if actual_growth < 0 else "grown"
         recent = ("" if latest is None
-                  else f", and {latest:+.1%} in the latest year alone")
+                  else f", and {signed_pct(latest)} in the latest year alone")
+        # A change too small to print is not a direction: "grown 0.0% a year"
+        # states a trend the figure beside it refuses to support, so the
+        # flat case gets a sentence of its own rather than a number.
+        if float(f"{actual_growth * 100:.1f}") == 0:
+            actually = "has actually been flat"
+        else:
+            direction = "fallen" if actual_growth < 0 else "grown"
+            actually = f"has actually {direction} {abs(actual_growth):.1%} a year"
         growth_statement = (
-            f"You have assumed revenue grows {user.revenue_growth:+.1%} a year. "
-            f"{short}'s revenue has actually {direction} {abs(actual_growth):.1%} a "
-            f"year{recent}.")
+            f"You have assumed revenue grows {signed_pct(user.revenue_growth)} a year. "
+            f"{short}'s revenue {actually}{recent}.")
         contradicts = user.revenue_growth > actual_growth
 
     out.append(RealityContrast(
@@ -1488,7 +1507,8 @@ def hypothetical_disclaimer(report: HypotheticalReport) -> str:
         f"WORTH. It is arithmetic on assumptions you typed in. {short} loses money and was "
         "refused a standard valuation; it was then refused a speculative estimate as well, "
         "because its own figures show no path to profitability to project. Nothing here is "
-        f"derived from the company's data: you have assumed revenue grows {u.revenue_growth:+.1%} "
+        f"derived from the company's data: you have assumed revenue grows "
+        f"{signed_pct(u.revenue_growth)} "
         f"a year and that the operating margin reaches {u.target_operating_margin:.0%}"
         f"{margin_clause} within {_count(u.years_to_target, 'year')}, and the figure below is "
         f"what those assumptions imply.{contradiction} Change any one of them and it moves by "

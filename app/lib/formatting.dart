@@ -17,11 +17,13 @@ String tidyBackendMessage(String raw) {
   final paragraphs = raw.split(RegExp(r'\n[ \t]*\n'));
 
   return paragraphs
-      .map((paragraph) => paragraph
-          .split('\n')
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
-          .join(' '))
+      .map(
+        (paragraph) => paragraph
+            .split('\n')
+            .map((line) => line.trim())
+            .where((line) => line.isNotEmpty)
+            .join(' '),
+      )
       .where((paragraph) => paragraph.isNotEmpty)
       .join('\n\n');
 }
@@ -39,4 +41,35 @@ String tidyBackendMessage(String raw) {
   message = message.replaceFirst(RegExp(r'[\s,]*\bat\b[\s,:]*$'), '');
   message = message.replaceFirst(RegExp(r'[\s,:]+$'), '');
   return (message, match.group(1));
+}
+
+/// Rounds a number for display, with negative zero folded into zero.
+///
+/// Fixed-point formatting keeps a sign that rounding has already made
+/// meaningless: a revenue change of -0.004% is "-0.0%", which reads as a
+/// fall the figure itself denies, and -0.0 is "-0.0%" for a number that is
+/// not negative at all. Worse where a sign is prefixed by hand, because
+/// -0.0 compares equal to 0.0 and so takes the positive branch: the implied
+/// upside badge rendered "+-0.0%".
+///
+/// Anything that rounds to zero is zero.
+String fixed(double value, int places) {
+  final text = value.toStringAsFixed(places);
+  // Catches "-0", "-0.0", "-0.00" without being fooled by "-0.01".
+  return RegExp(r'^-0(\.0*)?$').hasMatch(text) ? text.substring(1) : text;
+}
+
+/// A percentage, from a fraction, with no false negative zero.
+String percent(double fraction, {int places = 1}) =>
+    '${fixed(fraction * 100, places)}%';
+
+/// A percentage carrying an explicit sign, as a change figure does.
+///
+/// The sign is taken from the rounded text rather than from the input, so a
+/// value that rounds away to nothing is "0.0%" rather than "+0.0%" claiming
+/// a rise that is not there.
+String signedPercent(double fraction, {int places = 1}) {
+  final text = fixed(fraction * 100, places);
+  if (text.startsWith('-')) return '$text%';
+  return double.parse(text) == 0 ? '$text%' : '+$text%';
 }

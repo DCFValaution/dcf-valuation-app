@@ -17,9 +17,40 @@ from __future__ import annotations
 from assumptions import Provenance
 
 
+def fixed(value: float, places: int = 1) -> str:
+    """Round for display, folding negative zero into zero.
+
+    Fixed-point formatting keeps a sign that the rounding has already made
+    meaningless: a revenue change of -0.004% prints as "-0.0%", which reads
+    as a fall the printed figure itself denies. Anything that rounds to zero
+    is zero.
+    """
+    text = f"{value:.{places}f}"
+    stripped = text.lstrip("-")
+    return stripped if float(stripped) == 0 else text
+
+
+def pct(value: float, places: int = 1) -> str:
+    """A percentage from a fraction, with no false negative zero."""
+    return fixed(value * 100, places) + "%"
+
+
+def signed_pct(value: float, places: int = 1) -> str:
+    """A percentage carrying an explicit sign, as a change figure does.
+
+    The sign comes from the rounded text rather than the input, so a value
+    that rounds away to nothing reads as "0.0%" rather than claiming a rise
+    with "+0.0%".
+    """
+    text = fixed(value * 100, places)
+    if text.startswith("-") or float(text) == 0:
+        return text + "%"
+    return "+" + text + "%"
+
+
 def _pct(value: float) -> str:
     """A percentage as a person would say it: 15%, 2.5%, not 15.0% or 2.50%."""
-    text = f"{value * 100:.1f}"
+    text = fixed(value * 100, 1)
     return (text[:-2] if text.endswith(".0") else text) + "%"
 
 

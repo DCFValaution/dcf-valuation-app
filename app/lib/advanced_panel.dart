@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'dcf_engine.dart' show fadeExponential, fadeLinear;
 import 'theme.dart';
 import 'ui.dart';
+import 'formatting.dart';
 
 class AdvancedPanel extends StatelessWidget {
   const AdvancedPanel({
@@ -309,7 +310,7 @@ class GrowthPathView extends StatelessWidget {
 
   final List<double> path;
 
-  static String _pct(double v) => '${(v * 100).toStringAsFixed(1)}%';
+  static String _pct(double v) => percent(v);
 
   /// Consecutive years at the same rate are written as one range, so the flat
   /// run at the start reads as "Yr1-3: 18.0%" rather than three identical

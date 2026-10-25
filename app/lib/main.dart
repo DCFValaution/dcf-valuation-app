@@ -1538,11 +1538,9 @@ class _SuccessCard extends StatelessWidget {
 
   String _money(double v) => '\$${v.toStringAsFixed(2)}';
 
-  String _percent(double fraction) {
-    final pct = fraction * 100;
-    final sign = pct >= 0 ? '+' : '';
-    return '$sign${pct.toStringAsFixed(1)}%';
-  }
+  // Hand-rolled here once, and it rendered "+-0.0%": negative zero takes
+  // the positive branch of a >= 0 test and then prints its own minus sign.
+  String _percent(double fraction) => signedPercent(fraction);
 
   @override
   Widget build(BuildContext context) {
@@ -1900,7 +1898,7 @@ class _DividendBasisCard extends StatelessWidget {
   final String whyNotDcf;
 
   static String _money(double v) => '\$${v.toStringAsFixed(2)}';
-  static String _pct(double f) => '${(f * 100).toStringAsFixed(1)}%';
+  static String _pct(double f) => percent(f);
 
   @override
   Widget build(BuildContext context) {
@@ -2146,7 +2144,7 @@ class _BaselineDelta extends StatelessWidget {
                 TextSpan(
                   text:
                       '$sign\$${diff.abs().toStringAsFixed(2)} '
-                      '($sign${pct.abs().toStringAsFixed(1)}%)',
+                      '($sign${fixed(pct.abs(), 1)}%)',
                   style: context.text.bodySmall?.copyWith(
                     color: colour,
                     fontWeight: FontWeight.w600,

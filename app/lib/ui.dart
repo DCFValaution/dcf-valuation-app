@@ -408,7 +408,7 @@ class LabelledValue extends StatelessWidget {
   }
 }
 
-String _asPercent(double fraction) => '${(fraction * 100).toStringAsFixed(1)}%';
+String _asPercent(double fraction) => percent(fraction);
 
 /// Return on invested capital, beside the cost of that capital.
 ///

@@ -23,6 +23,8 @@ library;
 
 import 'dart:math' as math;
 
+import 'formatting.dart';
+
 /// The company's reported starting point. All monetary values in $mm.
 class BaseYearData {
   final double revenue;
@@ -48,14 +50,13 @@ class BaseYearData {
   });
 
   factory BaseYearData.fromJson(Map<String, dynamic> json) => BaseYearData(
-        revenue: (json['revenue'] as num).toDouble(),
-        totalDebt: (json['total_debt'] as num).toDouble(),
-        cash: (json['cash'] as num).toDouble(),
-        shares: (json['shares'] as num).toDouble(),
-        currentPrice: (json['current_price'] as num).toDouble(),
-        minorityInterest:
-            (json['minority_interest'] as num?)?.toDouble() ?? 0,
-      );
+    revenue: (json['revenue'] as num).toDouble(),
+    totalDebt: (json['total_debt'] as num).toDouble(),
+    cash: (json['cash'] as num).toDouble(),
+    shares: (json['shares'] as num).toDouble(),
+    currentPrice: (json['current_price'] as num).toDouble(),
+    minorityInterest: (json['minority_interest'] as num?)?.toDouble() ?? 0,
+  );
 }
 
 /// The inputs that drive the projection. Rates are decimals: 0.06 is 6%.
@@ -98,35 +99,35 @@ class DcfAssumptions {
   /// Build from the backend's flat name/value map, which is how the app holds
   /// the assumption set between requests.
   factory DcfAssumptions.fromMap(Map<String, double> m) => DcfAssumptions(
-        revenueGrowth: m['revenue_growth'] ?? 0,
-        operatingMargin: m['operating_margin'] ?? 0,
-        taxRate: m['tax_rate'] ?? 0,
-        daPct: m['da_pct'] ?? 0,
-        capexPct: m['capex_pct'] ?? 0,
-        nwcPct: m['nwc_pct'] ?? 0,
-        wacc: m['wacc'] ?? 0,
-        terminalGrowth: m['terminal_growth'] ?? 0,
-        projectionYears: (m['projection_years'] ?? 5).round(),
-        fadeEnabled: (m['fade_enabled'] ?? 0) != 0,
-        fadeStartYear: (m['fade_start_year'] ?? 1).round(),
-      );
+    revenueGrowth: m['revenue_growth'] ?? 0,
+    operatingMargin: m['operating_margin'] ?? 0,
+    taxRate: m['tax_rate'] ?? 0,
+    daPct: m['da_pct'] ?? 0,
+    capexPct: m['capex_pct'] ?? 0,
+    nwcPct: m['nwc_pct'] ?? 0,
+    wacc: m['wacc'] ?? 0,
+    terminalGrowth: m['terminal_growth'] ?? 0,
+    projectionYears: (m['projection_years'] ?? 5).round(),
+    fadeEnabled: (m['fade_enabled'] ?? 0) != 0,
+    fadeStartYear: (m['fade_start_year'] ?? 1).round(),
+  );
 
   DcfAssumptions copyWith(Map<String, double> overrides) =>
       DcfAssumptions.fromMap({...toMap(), ...overrides});
 
   Map<String, double> toMap() => {
-        'revenue_growth': revenueGrowth,
-        'operating_margin': operatingMargin,
-        'tax_rate': taxRate,
-        'da_pct': daPct,
-        'capex_pct': capexPct,
-        'nwc_pct': nwcPct,
-        'wacc': wacc,
-        'terminal_growth': terminalGrowth,
-        'projection_years': projectionYears.toDouble(),
-        'fade_enabled': fadeEnabled ? 1 : 0,
-        'fade_start_year': fadeStartYear.toDouble(),
-      };
+    'revenue_growth': revenueGrowth,
+    'operating_margin': operatingMargin,
+    'tax_rate': taxRate,
+    'da_pct': daPct,
+    'capex_pct': capexPct,
+    'nwc_pct': nwcPct,
+    'wacc': wacc,
+    'terminal_growth': terminalGrowth,
+    'projection_years': projectionYears.toDouble(),
+    'fade_enabled': fadeEnabled ? 1 : 0,
+    'fade_start_year': fadeStartYear.toDouble(),
+  };
 }
 
 const String fadeLinear = 'linear';
@@ -180,6 +181,7 @@ List<double> growthPath(DcfAssumptions a) {
 class ProjectionYear {
   final int period;
   final double revenue;
+
   /// The rate this year actually grew at.
   final double revenueGrowth;
   final double ebit;
@@ -278,20 +280,22 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
     final discountFactor = 1 / math.pow(1 + a.wacc, t).toDouble();
     final pvUfcf = ufcf * discountFactor;
 
-    years.add(ProjectionYear(
-      period: t,
-      revenue: revenue,
-      revenueGrowth: growthByYear[t - 1],
-      ebit: ebit,
-      tax: tax,
-      nopat: nopat,
-      da: da,
-      capex: capex,
-      deltaNwc: deltaNwc,
-      ufcf: ufcf,
-      discountFactor: discountFactor,
-      pvUfcf: pvUfcf,
-    ));
+    years.add(
+      ProjectionYear(
+        period: t,
+        revenue: revenue,
+        revenueGrowth: growthByYear[t - 1],
+        ebit: ebit,
+        tax: tax,
+        nopat: nopat,
+        da: da,
+        capex: capex,
+        deltaNwc: deltaNwc,
+        ufcf: ufcf,
+        discountFactor: discountFactor,
+        pvUfcf: pvUfcf,
+      ),
+    );
     prevRevenue = revenue;
   }
 
@@ -313,7 +317,9 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
   final upsideDownside = base.currentPrice == 0
       ? 0.0
       : (intrinsicValuePerShare - base.currentPrice) / base.currentPrice;
-  final tvPctOfEv = enterpriseValue == 0 ? 0.0 : pvTerminalValue / enterpriseValue;
+  final tvPctOfEv = enterpriseValue == 0
+      ? 0.0
+      : pvTerminalValue / enterpriseValue;
 
   return DcfResult(
     years: years,
@@ -335,9 +341,11 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
 
 /// Equivalent of Python's `f"{value:,.2f}"`.
 String formatMoney(double value) {
-  final negative = value < 0;
-  final fixed = value.abs().toStringAsFixed(2);
-  final parts = fixed.split('.');
+  // Rounded first, so an amount smaller than half a cent does not keep a
+  // minus sign the printed figure no longer justifies - "-0.00".
+  final rounded = fixed(value, 2);
+  final negative = rounded.startsWith('-');
+  final parts = rounded.replaceFirst('-', '').split('.');
   final digits = parts[0];
 
   final buffer = StringBuffer();
@@ -348,9 +356,9 @@ String formatMoney(double value) {
   return '${negative ? '-' : ''}$buffer.${parts[1]}';
 }
 
-/// Equivalent of Python's `f"{value:.2%}"`.
-String formatPercent2(double fraction) =>
-    '${(fraction * 100).toStringAsFixed(2)}%';
+/// Equivalent of Python's `f"{value:.2%}"`, less the negative zero that
+/// formatting produces on both sides and neither side means.
+String formatPercent2(double fraction) => percent(fraction, places: 2);
 
 /// Rebuilds the backend's caveat sentence with locally recomputed figures.
 ///

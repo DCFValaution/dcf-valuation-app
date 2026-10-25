@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'formatting.dart';
 
 /// One assumption the user can move, with a range wide enough to be
 /// interesting but not absurd.
@@ -231,7 +232,7 @@ const List<AdjustableAssumption> kSpeculativeAdjustable = [
   ),
 ];
 
-String formatPercent(double v) => '${(v * 100).toStringAsFixed(2)}%';
+String formatPercent(double v) => percent(v, places: 2);
 
 /// The message for terminal growth at or above the discount rate - one
 /// wording, used by the panel and by typed entry, so a dragged value and a

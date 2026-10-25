@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 import 'valuation_api.dart';
+import 'formatting.dart';
 
 class SensitivityTable extends StatelessWidget {
   const SensitivityTable({
@@ -40,8 +41,8 @@ class SensitivityTable extends StatelessWidget {
   /// longer describes.
   final bool stale;
 
-  static String _axis(double v, bool percent) =>
-      percent ? '${(v * 100).toStringAsFixed(1)}%' : '${v.round()}y';
+  static String _axis(double v, bool isPercent) =>
+      isPercent ? percent(v) : '${v.round()}y';
 
   @override
   Widget build(BuildContext context) {
