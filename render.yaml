@@ -92,3 +92,55 @@ services:
       - path: /index.html
         name: Cache-Control
         value: no-cache, no-store, must-revalidate
+
+      # Security headers.
+      #
+      # The policy below was tested against a real release build served
+      # locally with exactly these headers: the app booted, CanvasKit and
+      # Roboto loaded from gstatic, and a fetch to the API returned 200 -
+      # while a fetch to an origin outside connect-src was refused. A CSP
+      # that breaks the app would help nobody, so it was checked rather than
+      # reasoned about.
+      #
+      # Why each source is here:
+      #   script-src   the engine's loader is inlined into index.html, and
+      #                CanvasKit is WebAssembly, which needs wasm-unsafe-eval
+      #   font-src     Roboto comes from fonts.gstatic.com
+      #   connect-src  the app calls exactly one API and nothing else
+      #   worker-src   the service worker is created from a blob URL
+      - path: /*
+        name: Content-Security-Policy
+        value: >-
+          default-src 'self';
+          script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.gstatic.com;
+          style-src 'self' 'unsafe-inline';
+          font-src 'self' https://fonts.gstatic.com data:;
+          img-src 'self' data: blob:;
+          connect-src 'self' https://dcf-valuation-api.onrender.com https://www.gstatic.com https://fonts.gstatic.com;
+          worker-src 'self' blob:;
+          object-src 'none';
+          base-uri 'self';
+          frame-ancestors 'none'
+
+      # Nothing here is meant to be embedded in another site, and the
+      # clickjacking this prevents matters more than usual on a page whose
+      # whole output is a number someone might act on.
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+
+      # Render already sends this, but it belongs in version control rather
+      # than depending on a platform default that can change.
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+
+      # A ticker is not secret, but it is the user's interest and it has no
+      # business travelling to gstatic in a Referer header.
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+
+      - path: /*
+        name: Permissions-Policy
+        value: geolocation=(), camera=(), microphone=()

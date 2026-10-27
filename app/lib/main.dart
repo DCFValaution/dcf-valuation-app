@@ -2083,6 +2083,140 @@ Future<void> showDisclaimerSheet(BuildContext context) {
                 ],
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            // The two documents a free, account-less app actually owes its
+            // users: what happens to what they type, and what they are and
+            // are not being promised. Both live in this one sheet rather
+            // than behind a link to somewhere else, because a legal page
+            // nobody can find has not been provided.
+            TextButton.icon(
+              onPressed: () => showPrivacySheet(context),
+              icon: const Icon(Icons.lock_outline_rounded, size: 18),
+              label: const Text('Privacy'),
+            ),
+            TextButton.icon(
+              onPressed: () => showTermsSheet(context),
+              icon: const Icon(Icons.gavel_rounded, size: 18),
+              label: const Text('Terms of use'),
+            ),
+            // Attribution, which is an obligation rather than a courtesy.
+            // Almost everything this app is built on is BSD-3-Clause, and
+            // that licence asks for the copyright notice to be reproduced
+            // in the materials shipped with the binary. Flutter collects
+            // every bundled package's licence itself; this is the door to
+            // it, and without the door the obligation is unmet.
+            TextButton.icon(
+              onPressed: () => showLicensePage(
+                context: context,
+                applicationName: 'Intrinsic',
+                applicationLegalese:
+                    'Valuations are educational estimates, not investment '
+                    'advice.',
+              ),
+              icon: const Icon(Icons.article_outlined, size: 18),
+              label: const Text('Open-source licences'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// What happens to what the user types, which is: nothing.
+///
+/// Written to be true rather than reassuring. The gstatic paragraph is the
+/// one most apps leave out - the web build really does fetch its engine and
+/// its font from Google, and Google really does see an IP address when it
+/// does. Omitting that would make the rest of the page less trustworthy,
+/// not more.
+///
+/// Google is named and the market data provider is not, which looks
+/// inconsistent and is not. The user's own browser connects to Google, so
+/// who that is, is a fact about them. The statements are fetched by this
+/// server, so the provider never sees the user at all - naming it would
+/// tell them nothing about their own privacy, and the app does not name it
+/// anywhere else a person reads.
+Future<void> showPrivacySheet(BuildContext context) => _legalSheet(
+  context,
+  title: 'Privacy',
+  paragraphs: const [
+    'Intrinsic has no accounts, no sign-in and no database. We do not ask '
+        'who you are and have no way to know.',
+    'When you value a company, your device sends us the ticker symbol. We '
+        'use it to fetch that company’s published financials and return '
+        'a valuation. We do not store the ticker, the valuation, or anything '
+        'else about your session. Nothing you do here is recorded.',
+    'No cookies. No analytics. No advertising or tracking of any kind. No '
+        'marketing emails — we have no address to send one to. Your data '
+        'is never used to train any AI model.',
+    'Company financials come from a third-party market data provider; we '
+        'request them from our own server, so your device never contacts '
+        'them and they never see you. The web version loads its '
+        'graphics engine and the Roboto font from Google’s content '
+        'network, which means Google’s servers see your IP address when '
+        'the page loads, as they would for any site using those files. They '
+        'set no cookies.',
+    'The app and its server run on Render. Like any web host, Render keeps '
+        'standard server logs, which include IP addresses.',
+    'Because we store nothing, there is nothing to export, correct or '
+        'delete.',
+  ],
+);
+
+/// What is and is not being promised. No liability caps, no indemnities and
+/// no governing-law clause: enterprise machinery on a free app with no
+/// accounts is noise, and noise in a legal document is where the important
+/// sentence goes to hide.
+Future<void> showTermsSheet(BuildContext context) => _legalSheet(
+  context,
+  title: 'Terms of use',
+  paragraphs: const [
+    'Intrinsic is free, provided as-is, with no warranty of any kind.',
+    'The valuations are educational estimates produced by a model from '
+        'assumptions you can change. They are not investment advice, not a '
+        'recommendation, and not an offer to buy or sell anything. They may '
+        'be wrong — because the model is a simplification, because the '
+        'assumptions are arguable, or because the underlying market data is '
+        'delayed, incomplete or incorrect.',
+    'You are responsible for any decision you make. Do your own research '
+        'and consider speaking to a licensed financial professional.',
+    'Please don’t attempt to disrupt the service or overload it with '
+        'automated requests. There are rate limits; they are there to keep '
+        'it working for everyone.',
+    'The service may change or stop at any time.',
+  ],
+);
+
+Future<void> _legalSheet(
+  BuildContext context, {
+  required String title,
+  required List<String> paragraphs,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (context) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xxl,
+          0,
+          AppSpacing.xxl,
+          AppSpacing.xxl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: context.text.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            for (final p in paragraphs) _DisclaimerParagraph(p),
           ],
         ),
       ),

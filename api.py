@@ -61,6 +61,7 @@ there is no secret to leak, misconfigure, or rotate.
 """
 
 import os
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -292,6 +293,48 @@ def _rate_limited(key: str, now: float, limit: int = RATE_LIMIT_REQUESTS) -> boo
                 del _rate_history[stale]
 
         return False
+
+
+# The interactive docs are the one place this service serves a page rather
+# than JSON, and Swagger UI loads its script and stylesheet from a CDN.
+_DOCS_PATHS = ("/docs", "/redoc")
+
+# Everything else returns JSON or a spreadsheet, so it needs no origin of any
+# kind. "default-src 'none'" is the strongest policy there is, and it costs
+# nothing here because there is nothing to permit.
+_API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+_DOCS_CSP = (
+    "default-src 'none'; "
+    "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "img-src 'self' https://fastapi.tiangolo.com data:; "
+    "font-src 'self' data:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'none'"
+)
+
+
+@app.middleware("http")
+async def _security_headers_middleware(request: Request, call_next):
+    """Headers that cost nothing and close off whole classes of attack.
+
+    None of these defend against a flaw in this service; they stop a browser
+    being talked into misusing a correct response. An API that returns JSON
+    has no legitimate reason to be framed, sniffed as another content type,
+    or to leak the URL a user came from to an upstream host.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    # Nothing here uses a camera, a microphone or a location, so decline them
+    # rather than relying on never asking.
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+    is_docs = request.url.path.startswith(_DOCS_PATHS)
+    response.headers.setdefault(
+        "Content-Security-Policy", _DOCS_CSP if is_docs else _API_CSP)
+    return response
 
 
 @app.middleware("http")
@@ -1368,9 +1411,43 @@ def search(
                                  exchange=r.exchange, type=r.type) for r in found])
 
 
+# The shared secret that opens the diagnostics endpoint, read from the
+# environment so it never lives in the repository.
+#
+# UNSET MEANS DISABLED, not open. An operator who has not set this gets a 404
+# from /diagnostics rather than an endpoint that quietly serves upstream
+# internals to anyone who finds it. Failing closed is the only safe default:
+# a missing variable is far more likely to be an oversight than a decision to
+# publish, and the cost of being wrong in the other direction is a public
+# probe of our data source.
+DIAGNOSTICS_TOKEN = os.environ.get("DIAGNOSTICS_TOKEN", "").strip()
+
+
+def _require_diagnostics_token(request: Request) -> None:
+    """Let the request through only with the right token.
+
+    Compared with compare_digest rather than ==, so the comparison cannot be
+    timed to recover the token a character at a time.
+
+    The token travels in a header rather than the query string: a URL ends up
+    in server logs, browser history and Referer headers, and a secret that
+    reaches any of those is no longer one.
+    """
+    if not DIAGNOSTICS_TOKEN:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, "diagnostics_disabled",
+            "Diagnostics are not enabled on this instance.")
+
+    supplied = request.headers.get("x-diagnostics-token", "")
+    if not secrets.compare_digest(supplied, DIAGNOSTICS_TOKEN):
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "diagnostics_unauthorised",
+            "A valid X-Diagnostics-Token header is required.")
+
+
 @app.get("/diagnostics/upstream", tags=["meta"],
          summary="What Yahoo Finance actually returns to this server")
-def upstream_diagnostics(ticker: str = "AAPL") -> dict:
+def upstream_diagnostics(request: Request, ticker: str = "AAPL") -> dict:
     """
     Report Yahoo's raw response to *this* machine.
 
@@ -1380,9 +1457,16 @@ def upstream_diagnostics(ticker: str = "AAPL") -> dict:
     block is distinguishable from a genuinely unknown ticker without reading
     server logs.
 
-    Discloses nothing sensitive: no credentials exist, and the only input is
-    a ticker symbol.
+    Behind a token. The original note here said it disclosed nothing
+    sensitive, and in the narrow sense that was true - there are no
+    credentials to leak. But it does report the shape of our upstream
+    plumbing, including the status codes and response fragments Yahoo
+    returns to this IP, and it will fetch any symbol a caller names. That is
+    a free probe of someone else's service wearing our address, and it is
+    worth more to an attacker than it is to the public.
     """
+    _require_diagnostics_token(request)
+
     from market_data import fetch_financials, probe_symbol
 
     verdict, detail = probe_symbol(ticker)
