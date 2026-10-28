@@ -22,7 +22,8 @@ from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
                             growth_below_terminal_warning, signed_pct,
                             _possessive)
-from dcf import BaseYearData, DCFResult, run_dcf
+from dcf import (BaseYearData, DCFResult, growth_economics,
+                 growth_reduces_value, run_dcf)
 from ddm import DDMInputs, DDMResult, run_ddm
 from ddm_assumptions import (DIVIDEND_CUT_TOLERANCE, DerivedDDMAssumptions,
                              DividendRecord, analyse_dividends,
@@ -305,6 +306,10 @@ class ValuationReport:
     # suitability guards run first, is every refusal.
     capital_returns: CapitalReturns | None = None
 
+    # Set for the rare company whose valuation falls as the growth
+    # assumption rises. None where it does not, and on every refusal.
+    growth_cost_note: str | None = None
+
     @property
     def suitable(self) -> bool:
         return self.suitability.suitable
@@ -312,6 +317,48 @@ class ValuationReport:
     @property
     def method(self) -> str:
         return "dcf"
+
+
+def growth_cost_note(report: "ValuationReport") -> str | None:
+    """Explain a valuation that falls when the growth assumption rises.
+
+    Most businesses are worth more if they grow faster. A few are not: where
+    each extra dollar of revenue costs more in working capital and new
+    assets than it returns in after-tax operating profit, that revenue is
+    bought at a loss, and assuming more of it lowers the figure.
+
+    It is correct, and it looks exactly like a bug - a user drags a slider
+    one way and the number goes the other. It was reported as one. So it is
+    said plainly, with the two numbers that cause it, and only for the
+    companies where it is actually true.
+
+    Whether it is true is decided by running the model again a percentage
+    point faster, not by comparing the two per-dollar figures. They are not
+    the same test: the working-capital charge falls on the increment while
+    the profit falls on the level, so a wide enough margin absorbs the drag
+    at any plausible rate. Coca-Cola reinvests more per incremental dollar
+    than it earns on one and is still worth more the faster it grows.
+    """
+    if report.result is None or not report.suitable:
+        return None
+
+    assumptions = report.derived.assumptions
+    if not growth_reduces_value(report.base, assumptions,
+                                report.result.intrinsic_value_per_share):
+        return None
+
+    profit, reinvestment = growth_economics(assumptions)
+    name = report.company_name.rstrip(".")
+    return (
+        f"Raising the growth assumption lowers this figure, which is a real "
+        f"property of {name} rather than a fault in the model. Each extra "
+        f"dollar of revenue earns about {profit * 100:.0f} cents of "
+        f"after-tax operating profit, but needs roughly "
+        f"{reinvestment * 100:.0f} cents of additional working capital and "
+        f"capital spending to support. Revenue bought on those terms costs "
+        f"more than it brings in, so assuming more of it is worth less, not "
+        f"more. Most companies are the other way round; this one is not."
+    )
 
 
 def financial_sector_reason(fin: CompanyFinancials) -> str:
@@ -633,7 +680,7 @@ def value_company(ticker: str,
         if suitability.suitable else None
     )
 
-    return ValuationReport(
+    report = ValuationReport(
         ticker=fin.ticker,
         company_name=fin.company_name,
         sector=fin.sector,
@@ -646,6 +693,10 @@ def value_company(ticker: str,
         result=result,
         capital_returns=capital_returns,
     )
+    # Needs the finished report, because deciding this means valuing the
+    # company a second time at a slightly higher growth rate.
+    report.growth_cost_note = growth_cost_note(report)
+    return report
 
 
 # ---------------------------------------------------------------------------

@@ -1155,6 +1155,17 @@ class _ValuationScreenState extends State<ValuationScreen> {
                                 onChangeEnd: _onSliderChangeEnd,
                                 onReset: _reset,
                                 statusLine: _StatusLine(status: _status),
+                                // Under the row that causes the confusion,
+                                // rather than in a general caveat area: the
+                                // user is looking at the growth slider at
+                                // the moment the figure moves the wrong way.
+                                noteFor: (name) =>
+                                    name == 'revenue_growth' &&
+                                        result.growthCostNote != null
+                                    ? _GrowthCostNote(
+                                        text: result.growthCostNote!,
+                                      )
+                                    : null,
                               ),
                             ],
                           ],
@@ -2222,6 +2233,52 @@ Future<void> _legalSheet(
       ),
     ),
   );
+}
+
+/// Why this company is worth less the faster it grows.
+///
+/// Toned as information rather than warning. Nothing is wrong - the model is
+/// describing a business that has to spend more to grow than growing earns
+/// it - and a red banner would say the opposite of what the words do.
+class _GrowthCostNote extends StatelessWidget {
+  const _GrowthCostNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: context.scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.trending_down_rounded,
+              size: 18,
+              color: colors.textSecondary,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                text,
+                style: context.text.bodySmall?.copyWith(
+                  color: colors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DisclaimerParagraph extends StatelessWidget {

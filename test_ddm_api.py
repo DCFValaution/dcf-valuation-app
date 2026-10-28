@@ -181,6 +181,10 @@ def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
         # Added later as a read-only diagnostic beside the valuation;
         # it changes nothing the DCF computes.
         "capital_returns",
+        # Added later again: an explanation, set only for the rare company
+        # whose valuation falls as the growth assumption rises. Null here,
+        # but the field is always present.
+        "growth_cost_note",
     }
     assert body["method_fit_warnings"] == []
 

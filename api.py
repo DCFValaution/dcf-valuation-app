@@ -550,6 +550,15 @@ class ValuationResponse(BaseModel):
         description="Return on invested capital beside WACC, where it is "
                     "meaningful. Absent for companies the DCF refuses.",
     )
+    growth_cost_note: str | None = Field(
+        None,
+        description="Set only for the rare company whose valuation FALLS as the "
+                    "revenue growth assumption rises, because each extra dollar of "
+                    "revenue costs more to support than it earns. Display it beside "
+                    "the growth assumption: without it, a user who raises growth and "
+                    "watches the figure drop has every reason to think the app is "
+                    "broken. Null for every other company - it is an explanation of "
+                    "one company's economics, not a general caveat.")
     warnings: list[str]
     method_fit_warnings: list[str] = Field(
         default_factory=list,
@@ -1101,6 +1110,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
         assumptions=_assumption_list(report.derived.provenance),
         global_levers=_assumption_list(levers),
         capital_returns=_capital_returns_out(report.capital_returns),
+        growth_cost_note=report.growth_cost_note,
         wacc_build_up=report.derived.diagnostics.get("wacc_components", {}),
         wacc_inputs=_assumption_list(report.derived.wacc_inputs),
         sensitivity=SensitivityOut(

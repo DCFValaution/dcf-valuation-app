@@ -284,6 +284,15 @@ class ValuationSuccess extends ValuationResult {
   /// backend sent no grid worth drawing.
   final SensitivityGrid? sensitivity;
 
+  /// Why raising the growth assumption lowers this figure.
+  ///
+  /// Null for almost every company, and that is the point: it is set only
+  /// where the behaviour is real, so it explains one business rather than
+  /// hedging about all of them. Without it, a user who drags growth up and
+  /// watches the value fall has every reason to think the app is broken -
+  /// which is exactly how it was first reported.
+  final String? growthCostNote;
+
   const ValuationSuccess({
     required this.ticker,
     required this.companyName,
@@ -301,6 +310,7 @@ class ValuationSuccess extends ValuationResult {
     this.methodFitWarnings = const [],
     this.sensitivity,
     this.capitalReturns,
+    this.growthCostNote,
     this.growthPath = const [],
   });
 
@@ -388,6 +398,10 @@ class ValuationSuccess extends ValuationResult {
       capitalReturns: CapitalReturns.fromJson(
         json['capital_returns'] as Map<String, dynamic>?,
       ),
+      growthCostNote:
+          (json['growth_cost_note'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (json['growth_cost_note'] as String).trim(),
       growthPath: [
         for (final y in (json['projection'] as List<dynamic>? ?? const []))
           ((y as Map<String, dynamic>)['revenue_growth'] as num?)?.toDouble() ??
@@ -1807,14 +1821,15 @@ class ValuationApi {
     try {
       // A body means the workbook depends on something the user changed, so
       // it cannot be fetched by URL alone.
-      response = await (body == null
-              ? _client.get(uri)
-              : _client.post(
-                  uri,
-                  headers: const {'Content-Type': 'application/json'},
-                  body: jsonEncode(body),
-                ))
-          .timeout(_excelTimeout);
+      response =
+          await (body == null
+                  ? _client.get(uri)
+                  : _client.post(
+                      uri,
+                      headers: const {'Content-Type': 'application/json'},
+                      body: jsonEncode(body),
+                    ))
+              .timeout(_excelTimeout);
     } on TimeoutException {
       return const ExcelFailure(
         ValuationFailureKind.backendUnreachable,

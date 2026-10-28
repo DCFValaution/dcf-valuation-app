@@ -141,6 +141,9 @@ def test_the_standard_valuation_is_unchanged_and_never_fetches_peers(client, mon
         # Added later as a read-only diagnostic beside the valuation;
         # it changes nothing the DCF computes.
         "capital_returns",
+        # And later again: an explanation, set only for the rare company
+        # whose valuation falls as the growth assumption rises.
+        "growth_cost_note",
     }
     assert body["method_fit_warnings"] == []
 

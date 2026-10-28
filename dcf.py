@@ -1,6 +1,6 @@
 """DCF valuation engine — reproduces the logic from AAPL_DCF_Model.xlsx."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import List, Optional
 
 
@@ -281,6 +281,56 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
         sensitivity_waccs=sensitivity_waccs,
         sensitivity_gs=sensitivity_gs,
     )
+
+
+# How much to raise the growth assumption by when asking which way the
+# valuation moves. A percentage point: large enough that the answer is not
+# floating-point noise, small enough to be the local slope rather than the
+# average over a wide span.
+GROWTH_PROBE = 0.01
+
+
+def growth_reduces_value(base: BaseYearData, assumptions: Assumptions,
+                         baseline_per_share: float,
+                         probe: float = GROWTH_PROBE) -> bool:
+    """Whether assuming faster revenue growth *lowers* the valuation.
+
+    True for a business that has to spend more to grow than growing earns
+    it: when each extra dollar of revenue costs more in working capital and
+    new assets than it returns in after-tax operating profit, the extra
+    revenue is bought at a loss and buying more of it is worth less.
+
+    Measured by running the model again a percentage point faster and
+    comparing, rather than by comparing the per-dollar figures directly.
+    The two are not equivalent, and the arithmetic reason matters: the
+    working-capital charge falls on the *increment* while the profit falls
+    on the *level*, so the drag enters as nwc x g/(1+g) rather than nwc x g.
+    Coca-Cola reinvests more per incremental dollar than it earns on one and
+    its value still rises with growth, because its margin is wide enough to
+    absorb the drag at any plausible rate. A rule comparing the two
+    per-dollar numbers would wrongly flag it.
+
+    Running the real engine also guarantees the note cannot contradict the
+    slider the user is about to move: it is the same calculation, asked the
+    same question.
+    """
+    faster = replace(assumptions,
+                     revenue_growth=assumptions.revenue_growth + probe)
+    return run_dcf(base, faster).intrinsic_value_per_share < baseline_per_share
+
+
+def growth_economics(assumptions: Assumptions) -> tuple[float, float]:
+    """What a dollar of extra revenue returns, and what it costs to get.
+
+    Returns (profit, reinvestment), both as a fraction of that dollar.
+    Depreciation is netted against capex because it is added back in the
+    cash flow: what the business actually funds is the capital spending
+    above its own depreciation.
+    """
+    profit = assumptions.operating_margin * (1 - assumptions.tax_rate)
+    reinvestment = (assumptions.capex_pct - assumptions.da_pct
+                    + assumptions.nwc_pct)
+    return profit, reinvestment
 
 
 def _equity_value_per_share(base: BaseYearData, assumptions: Assumptions) -> float:
