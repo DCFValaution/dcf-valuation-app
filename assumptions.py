@@ -133,7 +133,21 @@ CLAMP_OPERATING_MARGIN = (-1.00, 0.60)
 CLAMP_TAX_RATE = (0.00, 0.35)
 CLAMP_DA_PCT = (0.00, 0.30)
 CLAMP_CAPEX_PCT = (0.00, 0.40)
-CLAMP_NWC_PCT = (-0.10, 0.30)
+# Working capital as a share of revenue.
+#
+# Recalibrated when the derivation changed from a two-endpoint delta to a
+# median level, because the two are not the same quantity and the old bounds
+# were not a rail for this one - they were the answer. Measured across 44
+# large listed companies, the median level runs from -32.7% (Salesforce, paid
+# in advance) to +100.3% (Deere, whose receivables are its business), with a
+# median of -5.6%. Sixteen of the forty-four sat below the old -10% floor, so
+# more than a third of companies would have had their coefficient set by the
+# clamp rather than by their filings - five of them pinned to exactly -0.100.
+#
+# These bounds clear every one of those except Deere, which is a captive
+# finance balance sheet a growth-perpetuity DCF describes poorly whatever
+# this number says.
+CLAMP_NWC_PCT = (-0.40, 0.60)
 
 RATIO_WINDOW = 3  # years of history used for median ratios
 
@@ -525,24 +539,51 @@ def derive_assumptions(fin: CompanyFinancials,
     )
 
     # --- Change in NWC as a share of revenue growth ------------------------
-    # Aggregated endpoint-to-endpoint rather than year-by-year: annual NWC
-    # swings are extremely noisy (Apple's year-on-year ratio ranges from +62%
-    # to -261% across this window), while the multi-year aggregate is stable
-    # and is what actually matters over a projection horizon.
+    # The working capital a business ties up, as the share of revenue it has
+    # actually held - not the change between two years.
+    #
+    # This was a two-endpoint delta: (NWC_newest - NWC_oldest) divided by the
+    # change in revenue. It is the same shape of mistake the revenue CAGR
+    # used to make, and it failed the same way. Two endpoints cannot tell a
+    # structural ratio from a transitional drift, and when a company's
+    # working capital is drifting the delta reports the drift as if it were
+    # the structure.
+    #
+    # Alibaba is the case that exposed it. Its working capital is negative -
+    # a marketplace collects from buyers before it pays merchants, so growth
+    # is funded by the float - but it has been eroding, from -23.0% of
+    # revenue to -15.1% over four years. The delta read that erosion as
+    # +0.292: every extra dollar of revenue consumes 29 cents. Carried into
+    # a perpetuity that assumes the ratio swings 44 points, crosses zero in
+    # year eight and settles at +29%, which nothing in the filings proposes.
+    # It made the company appear to destroy value by growing.
+    #
+    # A median of year-on-year changes does not fix it and was measured
+    # rather than assumed: for Alibaba it gives +0.459, worse than the
+    # endpoint, because every delta over this window carries the same drift.
+    # The disagreement is not noise against robustness. It is two different
+    # questions - "how has working capital moved lately" against "what share
+    # of revenue does this business tie up" - and only the second is a
+    # statement about the next thirty years.
+    #
+    # So the level, across every year rather than the latest, and the median
+    # rather than the mean so that one unusual balance-sheet date cannot
+    # carry it. Where the ratio really is stable the two methods agree, and
+    # most companies barely move.
     nwc_value, nwc_detail = None, ""
-    if len(balance) >= 2 and len(revenues) >= 2:
-        nwc_newest = _net_working_capital(balance[0])
-        nwc_oldest = _net_working_capital(balance[-1])
-        revenue_delta = revenues[0] - revenues[-1]
-        if revenue_delta > 0:
-            nwc_value = (nwc_newest - nwc_oldest) / revenue_delta
-            nwc_detail = (f"aggregate change in NWC / change in revenue, "
-                          f"FY{years[-1]}-FY{years[0]}")
-            diagnostics["nwc_newest"] = nwc_newest
-            diagnostics["nwc_oldest"] = nwc_oldest
+    ratios = [
+        _net_working_capital(row) / revenue
+        for row, revenue in zip(balance, revenues)
+        if revenue > 0
+    ]
+    if ratios:
+        nwc_value = median(ratios)
+        nwc_detail = (f"median working capital as a share of revenue across "
+                      f"FY{years[-1]}-FY{years[0]} ({len(ratios)} years)")
+        diagnostics["nwc_ratios"] = ratios
     nwc_pct = derive(
         "nwc_pct", nwc_value, CLAMP_NWC_PCT, nwc_detail,
-        0.0, "revenue did not grow over the window; assumed no NWC investment",
+        0.0, "no year had revenue to measure working capital against",
     )
 
     # --- WACC: derived from CAPM + the company's own capital structure -----

@@ -154,13 +154,19 @@ def test_a_defaulted_dividend_growth_says_why():
 # ---------------------------------------------------------------------------
 
 def _company_with_extreme_working_capital():
-    """A synthetic company whose supplier credit balloons as it grows, so the
-    working-capital ratio lands far below the model's -10% limit - AAPL's shape."""
+    """A synthetic company funded by its suppliers, year in and year out, so
+    the working-capital ratio lands far below the model's floor.
+
+    Every year, not just the newest. The coefficient is now the median of
+    each year's level, so a single extreme balance-sheet date is exactly
+    what it is built to ignore - which is the point of it, and means a
+    fixture that moves one year no longer describes an extreme company.
+    """
     from test_api import make_fin
 
     fin = make_fin("WCAP", "Working Capital Co.")
-    newest = fin.balance[0]
-    newest["totalCurrentLiabilities"] = newest["totalCurrentAssets"] * 3
+    for row in fin.balance:
+        row["totalCurrentLiabilities"] = row["totalCurrentAssets"] * 12
     return fin
 
 
