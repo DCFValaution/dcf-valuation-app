@@ -28,6 +28,23 @@ const apple = MarketSnapshot(
   revenueTtm: 478834000000,
   netMargin: 0.27604,
   eps: 8.98,
+  currentRatio: 1.0232,
+);
+
+/// JPMorgan: a bank. Its balance sheet is not split current and
+/// non-current, so the current ratio is withheld - the same treatment the
+/// price/earnings ratio gets on a loss, and for the same reason: the
+/// division would produce a number that looks like a measurement.
+const bank = MarketSnapshot(
+  currency: 'USD',
+  marketCap: 840000000000,
+  peRatio: 15.2,
+  pbRatio: 2.6,
+  dividendYield: 0.019,
+  revenueTtm: 180000000000,
+  netMargin: 0.3,
+  eps: 20.4,
+  currentRatio: null,
 );
 
 /// Crocs: profitable at the operating line, a loss after a write-down, and
@@ -41,6 +58,7 @@ const lossMaker = MarketSnapshot(
   revenueTtm: 4000000000,
   netMargin: -0.0201,
   eps: -1.50,
+  currentRatio: 1.2653,
 );
 
 void main() {
@@ -55,10 +73,11 @@ void main() {
       expect(s.peRatio, isNull);
       expect(s.eps, isNull);
       expect(s.marketCap, 1.0e9);
+      expect(s.currentRatio, isNull);
     });
 
     test('an entirely empty snapshot is no snapshot', () {
-      // A card of seven dashes is worse than no card.
+      // A card of nothing but dashes is worse than no card.
       expect(MarketSnapshot.fromJson({'currency': 'USD'}), isNull);
       expect(MarketSnapshot.fromJson(null), isNull);
     });
@@ -90,6 +109,7 @@ void main() {
         'dividend_yield': 0.00316,
         'revenue_ttm': 478834000000.0,
         'net_margin': 0.27604,
+        'current_ratio': 1.0232,
         'eps': 8.98,
       },
     };
@@ -121,6 +141,7 @@ void main() {
       expect(find.text('Company at a glance'), findsOneWidget);
       expect(find.text(r'$5.0T'), findsOneWidget);
       expect(find.text('38.1x'), findsOneWidget);
+      expect(find.text('1.0'), findsOneWidget);
     });
   });
 
@@ -138,6 +159,19 @@ void main() {
       expect(find.text('27.6%'), findsOneWidget);
       expect(find.text('0.3%'), findsOneWidget);
       expect(find.text(r'$8.98'), findsOneWidget);
+      // One decimal and no multiple suffix: a current ratio is read as a
+      // bare number, not as "1.0x".
+      expect(find.text('1.0'), findsOneWidget);
+      expect(find.text('Current ratio'), findsOneWidget);
+    });
+
+    testWidgets('a bank gets a dash for the current ratio', (tester) async {
+      await tester.pumpWidget(wrap(const MarketSnapshotCard(snapshot: bank)));
+
+      expect(find.text('Current ratio'), findsOneWidget);
+      // Exactly one dash on this card, and it is this field: everything
+      // else about a bank is reportable.
+      expect(find.text('—'), findsOneWidget);
     });
 
     testWidgets('says it is not part of the valuation', (tester) async {
@@ -184,6 +218,8 @@ void main() {
         netMargin: 0.10346,
       );
       await tester.pumpWidget(wrap(const MarketSnapshotCard(snapshot: baba)));
+      // A ratio of two converted figures: the rate cancels, so the number
+      // is the same whichever currency the statements arrived in.
       // Converted to the trading currency, so the EPS beside a dollar
       // price is in dollars - the bug this panel would otherwise have
       // shipped printed it as 44.00 yuan.

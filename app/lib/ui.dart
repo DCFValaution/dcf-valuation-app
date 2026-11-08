@@ -1080,6 +1080,10 @@ class MarketSnapshotCard extends StatelessWidget {
       ('Net margin', pct(s.netMargin)),
       ('Dividend yield', pct(s.dividendYield)),
       ('EPS', perShare(s.eps)),
+      // No "x" suffix: a current ratio is read as a bare number, and the
+      // dash carries real information here - it marks a balance sheet the
+      // ratio does not describe, not a figure that happened to be missing.
+      ('Current ratio', s.currentRatio == null ? _dash : fixed(s.currentRatio!, 1)),
     ];
 
     return AppCard(

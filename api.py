@@ -530,6 +530,11 @@ class MarketSnapshotOut(BaseModel):
         description="Legitimately negative for a loss-maker, and shown as such: "
                     "a loss per share is a true figure, unlike the price/earnings "
                     "ratio built from it. Null only where earnings are unreported.")
+    current_ratio: float | None = Field(
+        None,
+        description="Current assets over current liabilities. Null for banks, "
+                    "insurers and anyone else without a classified balance "
+                    "sheet, where the division is arithmetic without meaning.")
 
 
 class CapitalReturnsOut(BaseModel):
@@ -1329,6 +1334,7 @@ def _snapshot_out(snapshot) -> "MarketSnapshotOut | None":
         revenue_ttm=snapshot.revenue_ttm,
         net_margin=snapshot.net_margin,
         eps=snapshot.eps,
+        current_ratio=snapshot.current_ratio,
     )
 
 

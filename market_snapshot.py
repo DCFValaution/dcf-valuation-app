@@ -38,17 +38,59 @@ class MarketSnapshot:
     revenue_ttm: float | None
     net_margin: float | None
     eps: float | None
+    current_ratio: float | None
 
     @property
     def has_anything(self) -> bool:
         return any(v is not None for v in (
             self.market_cap, self.pe_ratio, self.pb_ratio,
-            self.dividend_yield, self.revenue_ttm, self.net_margin, self.eps))
+            self.dividend_yield, self.revenue_ttm, self.net_margin, self.eps,
+            self.current_ratio))
 
 
 def _positive(value: float | None) -> float | None:
     """A figure that only means something above zero."""
     return value if value is not None and value > 0 else None
+
+
+# The classifications whose balance sheets are split into current and
+# non-current the ordinary way. A bank does not present one: deposits are
+# payable on demand and loans run for years, and dividing one Yahoo-inferred
+# total by the other produces a number that looks like liquidity and measures
+# nothing. Insurers and other balance-sheet lenders are in the same position.
+#
+# "unclassified" is excluded deliberately. It means the company is in the
+# Financial Services sector and the data could not say which kind, so the
+# honest reading is that the ratio may not apply - and the dash says exactly
+# that. A fee-based financial (Visa, an asset manager) does present a
+# classified balance sheet, so it keeps the ratio.
+_CLASSIFIED_BALANCE_SHEET = frozenset({"not_financial", "fee_based"})
+
+
+def _current_ratio(fin: CompanyFinancials,
+                   balance: dict) -> float | None:
+    """Current assets over current liabilities, where that division means
+    something.
+
+    Two gates, and both are needed. The first is what the company is: a
+    bank or an insurer is withheld even when the data source hands over a
+    pair of figures, because the ratio is not a liquidity measure on an
+    unclassified balance sheet. The second is whether the figures exist at
+    all - they are genuinely absent for lenders, and absent for anyone else
+    whose filing was not parsed into the two lines.
+
+    No currency concern: both sides are converted by the same scalar on the
+    way in, so the rate cancels.
+    """
+    # Imported here, not at module scope: analysis imports this module, so
+    # a top-level import the other way is a cycle.
+    from analysis import classify_financial
+
+    if classify_financial(fin).kind not in _CLASSIFIED_BALANCE_SHEET:
+        return None
+    assets = _positive(num(balance, "totalCurrentAssets"))
+    liabilities = _positive(num(balance, "totalCurrentLiabilities"))
+    return assets / liabilities if (assets and liabilities) else None
 
 
 def market_snapshot(fin: CompanyFinancials,
@@ -111,6 +153,8 @@ def market_snapshot(fin: CompanyFinancials,
     net_margin = (net_income / revenue
                   if (net_income is not None and revenue) else None)
 
+    current_ratio = _current_ratio(fin, balance)
+
     snapshot = MarketSnapshot(
         currency=fin.trading_currency or fin.profile.get("currency") or "USD",
         market_cap=market_cap,
@@ -120,5 +164,6 @@ def market_snapshot(fin: CompanyFinancials,
         revenue_ttm=revenue,
         net_margin=net_margin,
         eps=eps,
+        current_ratio=current_ratio,
     )
     return snapshot if snapshot.has_anything else None

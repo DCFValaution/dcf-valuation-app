@@ -192,6 +192,11 @@ class MarketSnapshot {
   /// column, two fields disagreeing about whether the company made money.
   final double? eps;
 
+  /// Current assets over current liabilities. Null for banks and insurers,
+  /// whose balance sheets are not split current and non-current, so the
+  /// division is arithmetic rather than a liquidity measure.
+  final double? currentRatio;
+
   const MarketSnapshot({
     required this.currency,
     this.marketCap,
@@ -201,6 +206,7 @@ class MarketSnapshot {
     this.revenueTtm,
     this.netMargin,
     this.eps,
+    this.currentRatio,
   });
 
   /// Nothing to show rather than a card of dashes.
@@ -211,7 +217,8 @@ class MarketSnapshot {
       dividendYield != null ||
       revenueTtm != null ||
       netMargin != null ||
-      eps != null;
+      eps != null ||
+      currentRatio != null;
 
   static MarketSnapshot? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
@@ -225,6 +232,7 @@ class MarketSnapshot {
       revenueTtm: d('revenue_ttm'),
       netMargin: d('net_margin'),
       eps: d('eps'),
+      currentRatio: d('current_ratio'),
     );
     return snapshot.hasAnything ? snapshot : null;
   }
