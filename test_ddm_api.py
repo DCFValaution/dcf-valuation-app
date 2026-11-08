@@ -185,6 +185,9 @@ def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
         # whose valuation falls as the growth assumption rises. Null here,
         # but the field is always present.
         "growth_cost_note",
+        # And later again: current market multiples, carried beside the
+        # figure for reference and forming no part of it.
+        "snapshot",
     }
     assert body["method_fit_warnings"] == []
 

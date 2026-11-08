@@ -19,7 +19,7 @@ import 'package:flutter/physics.dart' show SpringSimulation;
 
 import 'formatting.dart';
 import 'theme.dart';
-import 'valuation_api.dart' show CapitalReturns, CapitalVerdict;
+import 'valuation_api.dart' show CapitalReturns, CapitalVerdict, MarketSnapshot;
 
 /// The meaning a tinted surface carries.
 enum Tone { neutral, accent, caution, negative, positive }
@@ -1036,6 +1036,138 @@ class _LensTransitionState extends State<LensTransition>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What the market pays for the company, beside what the model says.
+///
+/// Deliberately set apart from the figure above it, with its own heading
+/// and a quieter surface. A price/earnings ratio is what buyers are
+/// willing to pay today; the intrinsic value is what this model thinks the
+/// business is worth. They answer different questions, and a reader who
+/// takes a market multiple for a second opinion from the model has been
+/// misled by the layout rather than by the numbers.
+///
+/// Absent is absent. A figure that cannot be computed honestly shows a
+/// dash: a loss-maker has no price/earnings ratio, and a company that pays
+/// no dividend has no yield, which is not the same as a yield of zero.
+class MarketSnapshotCard extends StatelessWidget {
+  const MarketSnapshotCard({super.key, required this.snapshot});
+
+  final MarketSnapshot snapshot;
+
+  static const _dash = '—';
+
+  @override
+  Widget build(BuildContext context) {
+    final s = snapshot;
+    final symbol = currencySymbol(s.currency);
+    String money(double? v) =>
+        v == null ? _dash : compactMoney(v, symbol: symbol);
+    String ratio(double? v) => v == null ? _dash : '${fixed(v, 1)}x';
+    String pct(double? v) => v == null ? _dash : percent(v);
+    // Sign before the symbol, not inside the number: a loss per share is
+    // "-$1.50", never "$-1.50".
+    String perShare(double? v) =>
+        v == null ? _dash : '${v < 0 ? '-' : ''}$symbol${fixed(v.abs(), 2)}';
+
+    final fields = <(String, String)>[
+      ('Market cap', money(s.marketCap)),
+      ('P/E', ratio(s.peRatio)),
+      ('Revenue (TTM)', money(s.revenueTtm)),
+      ('P/B', ratio(s.pbRatio)),
+      ('Net margin', pct(s.netMargin)),
+      ('Dividend yield', pct(s.dividendYield)),
+      ('EPS', perShare(s.eps)),
+    ];
+
+    return AppCard(
+      tone: null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.insights_outlined,
+                size: 18,
+                color: context.colors.textSecondary,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Text('Market snapshot', style: context.text.titleSmall),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'What the market pays today, in ${s.currency}. Reference only — '
+            'these are not part of the valuation above.',
+            style: context.text.labelSmall?.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          // Two columns where there is room for two, one where there is
+          // not: at a large text scale a pair of columns turns every value
+          // into a two-line wrap.
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth < 320 ? 1 : 2;
+              final rows = <Widget>[];
+              for (var i = 0; i < fields.length; i += columns) {
+                final slice = fields.skip(i).take(columns).toList();
+                rows.add(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var c = 0; c < columns; c++)
+                          Expanded(
+                            child: c < slice.length
+                                ? _SnapshotField(
+                                    label: slice[c].$1,
+                                    value: slice[c].$2,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return Column(children: rows);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SnapshotField extends StatelessWidget {
+  const _SnapshotField({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: context.text.labelSmall?.copyWith(
+            color: context.colors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ],
     );
   }
 }

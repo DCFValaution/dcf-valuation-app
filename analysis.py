@@ -22,6 +22,7 @@ from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
                             growth_below_terminal_warning, signed_pct,
                             _possessive)
+from market_snapshot import MarketSnapshot, market_snapshot
 from dcf import (BaseYearData, DCFResult, growth_economics,
                  growth_reduces_value, run_dcf)
 from ddm import DDMInputs, DDMResult, run_ddm
@@ -309,6 +310,10 @@ class ValuationReport:
     # Set for the rare company whose valuation falls as the growth
     # assumption rises. None where it does not, and on every refusal.
     growth_cost_note: str | None = None
+
+    # Current market multiples, beside the model's estimate rather than
+    # part of it. Reference only; nothing here is an input.
+    snapshot: MarketSnapshot | None = None
 
     @property
     def suitable(self) -> bool:
@@ -696,6 +701,7 @@ def value_company(ticker: str,
     # Needs the finished report, because deciding this means valuing the
     # company a second time at a slightly higher growth rate.
     report.growth_cost_note = growth_cost_note(report)
+    report.snapshot = market_snapshot(fin, base.current_price)
     return report
 
 
@@ -728,6 +734,10 @@ class DDMReport:
     inputs: DDMInputs
     why_not_dcf: str
     result: DDMResult | None  # None whenever suitability.suitable is False
+
+    # The same market reference block the DCF carries. A dividend payer's
+    # multiples are no less worth seeing beside its valuation.
+    snapshot: MarketSnapshot | None = None
 
     @property
     def suitable(self) -> bool:
@@ -766,6 +776,7 @@ def _value_with_ddm(fin: CompanyFinancials, overrides: dict | None) -> DDMReport
         inputs=inputs,
         why_not_dcf=financial_sector_reason(fin),
         result=result,
+        snapshot=market_snapshot(fin, inputs.current_price),
     )
 
 

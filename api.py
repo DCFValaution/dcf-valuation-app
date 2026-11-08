@@ -502,6 +502,36 @@ class CompanyOut(BaseModel):
     exchange: str
 
 
+class MarketSnapshotOut(BaseModel):
+    """What the market pays for the company today.
+
+    Reference figures beside the valuation, never part of it. Display them
+    under a heading of their own: a price/earnings ratio is what buyers are
+    currently willing to pay, and the intrinsic value is what this model
+    thinks the business is worth. A reader who takes the first for a second
+    opinion from the model has been misled by the layout.
+
+    Every monetary field is in `currency`, which is the currency the
+    valuation itself is expressed in. Any field may be null, and null means
+    render a dash - never a zero, and never a negative multiple.
+    """
+    currency: str = Field(..., description="Trading currency of every monetary field here")
+    market_cap: float | None = Field(None, description="Quoted, or price x diluted shares")
+    pe_ratio: float | None = Field(
+        None, description="Null for a loss-maker: a negative multiple reads as a bargain")
+    pb_ratio: float | None = Field(None, description="Null where book equity is not positive")
+    dividend_yield: float | None = Field(
+        None, description="Fraction. Null for a non-payer, which is not the same as zero")
+    revenue_ttm: float | None = None
+    net_margin: float | None = Field(
+        None, description="Fraction, and legitimately negative for a loss-maker")
+    eps: float | None = Field(
+        None,
+        description="Legitimately negative for a loss-maker, and shown as such: "
+                    "a loss per share is a true figure, unlike the price/earnings "
+                    "ratio built from it. Null only where earnings are unreported.")
+
+
 class CapitalReturnsOut(BaseModel):
     """Return on invested capital, beside the cost of that capital.
 
@@ -550,6 +580,10 @@ class ValuationResponse(BaseModel):
         description="Return on invested capital beside WACC, where it is "
                     "meaningful. Absent for companies the DCF refuses.",
     )
+    snapshot: MarketSnapshotOut | None = Field(
+        None,
+        description="Current market multiples, for reference beside the figure. "
+                    "Absent where nothing could be computed.")
     growth_cost_note: str | None = Field(
         None,
         description="Set only for the rare company whose valuation FALLS as the "
@@ -672,6 +706,10 @@ class DDMValuationResponse(BaseModel):
     intrinsic_value_per_share: float
     current_price: float
     upside_downside: float = Field(..., description="Fraction, e.g. -0.12 for -12%")
+    snapshot: MarketSnapshotOut | None = Field(
+        None,
+        description="Current market multiples, for reference beside the figure. "
+                    "A dividend payer's multiples are no less worth seeing.")
     note: str = Field(..., description="Why this figure is not a measurement. Display it.")
     why_not_dcf: str = Field(..., description="Why a DCF was not used for this company")
     dividend_base: DividendBaseOut
@@ -1110,6 +1148,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
         assumptions=_assumption_list(report.derived.provenance),
         global_levers=_assumption_list(levers),
         capital_returns=_capital_returns_out(report.capital_returns),
+        snapshot=_snapshot_out(report.snapshot),
         growth_cost_note=report.growth_cost_note,
         wacc_build_up=report.derived.diagnostics.get("wacc_components", {}),
         wacc_inputs=_assumption_list(report.derived.wacc_inputs),
@@ -1152,6 +1191,7 @@ def _serialise_ddm(report: DDMReport) -> DDMValuationResponse:
     centre = len(r.sensitivity_costs_of_equity) // 2
 
     return DDMValuationResponse(
+        snapshot=_snapshot_out(report.snapshot),
         company=_company_out(report),
         intrinsic_value_per_share=r.intrinsic_value_per_share,
         current_price=r.current_price,
@@ -1270,6 +1310,26 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
         return JSONResponse(status_code=exc.status_code, content=detail)
     return JSONResponse(status_code=exc.status_code,
                         content={"code": "error", "message": str(detail)})
+
+
+def _snapshot_out(snapshot) -> "MarketSnapshotOut | None":
+    """Carry the snapshot through, or nothing at all.
+
+    Null fields stay null. The client renders a dash for each, which is the
+    only honest thing to show where a figure does not exist.
+    """
+    if snapshot is None:
+        return None
+    return MarketSnapshotOut(
+        currency=snapshot.currency,
+        market_cap=snapshot.market_cap,
+        pe_ratio=snapshot.pe_ratio,
+        pb_ratio=snapshot.pb_ratio,
+        dividend_yield=snapshot.dividend_yield,
+        revenue_ttm=snapshot.revenue_ttm,
+        net_margin=snapshot.net_margin,
+        eps=snapshot.eps,
+    )
 
 
 def _run_valuation(ticker: str, overrides: dict, valuer=None) -> Any:

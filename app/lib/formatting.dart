@@ -73,3 +73,37 @@ String signedPercent(double fraction, {int places = 1}) {
   if (text.startsWith('-')) return '$text%';
   return double.parse(text) == 0 ? '$text%' : '+$text%';
 }
+
+/// A large amount, shortened the way a reader says it: $4.98T, $478.8B.
+///
+/// Thresholds are absolute so a loss is shortened the same way a profit is,
+/// and the sign is applied once at the end rather than surviving inside the
+/// rounded text - which is where "-0.0" comes from.
+String compactMoney(double value, {String symbol = r'$'}) {
+  final sign = value < 0 ? '-' : '';
+  final size = value.abs();
+  for (final unit in const [(1e12, 'T'), (1e9, 'B'), (1e6, 'M')]) {
+    if (size >= unit.$1) {
+      return '$sign$symbol${fixed(size / unit.$1, 1)}${unit.$2}';
+    }
+  }
+  return '$sign$symbol${fixed(size, 0)}';
+}
+
+/// The symbol for a currency code, or the code itself where there is no
+/// well-known one.
+///
+/// Returning the code is the safe failure: "CHF 12.40" is unambiguous,
+/// while guessing a symbol for a currency that does not have one, or
+/// silently printing a dollar sign over a yuan figure, is the error this
+/// whole conversion exists to prevent.
+String currencySymbol(String code) => switch (code.toUpperCase()) {
+  'USD' => r'$',
+  'EUR' => '€',
+  'GBP' => '£',
+  'JPY' => '¥',
+  'CNY' => '¥',
+  'INR' => '₹',
+  'KRW' => '₩',
+  _ => '$code ',
+};

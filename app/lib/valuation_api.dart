@@ -157,6 +157,79 @@ class Assumption {
 /// show it. The app does not decide; it renders what arrived.
 enum CapitalVerdict { above, about, below }
 
+/// What the market pays for the company today.
+///
+/// Reference figures beside the valuation, never part of it. A
+/// price/earnings ratio is what buyers are currently willing to pay; the
+/// intrinsic value above it is what this model thinks the business is
+/// worth. The screen keeps them apart under their own heading, because a
+/// reader who takes the first for a second opinion from the model has been
+/// misled by the layout rather than by the numbers.
+///
+/// Every monetary field is in [currency], which is the currency the
+/// valuation itself is expressed in. Any field may be null, and null means
+/// a dash - never a zero, and never a negative multiple.
+class MarketSnapshot {
+  final String currency;
+  final double? marketCap;
+
+  /// Null for a loss-maker. A negative price/earnings ratio is not a low
+  /// multiple; it is arithmetic that reads as a bargain.
+  final double? peRatio;
+  final double? pbRatio;
+
+  /// Fraction. Null for a company that pays no dividend, which is not the
+  /// same statement as a yield of zero.
+  final double? dividendYield;
+  final double? revenueTtm;
+
+  /// Fraction, and legitimately negative - a loss is a fact worth printing.
+  final double? netMargin;
+
+  /// Legitimately negative, and shown as such. A loss of $1.50 a share is
+  /// a true figure; the price/earnings ratio built from it is not. Hiding
+  /// it would also put a dash beside a negative net margin in the next
+  /// column, two fields disagreeing about whether the company made money.
+  final double? eps;
+
+  const MarketSnapshot({
+    required this.currency,
+    this.marketCap,
+    this.peRatio,
+    this.pbRatio,
+    this.dividendYield,
+    this.revenueTtm,
+    this.netMargin,
+    this.eps,
+  });
+
+  /// Nothing to show rather than a card of dashes.
+  bool get hasAnything =>
+      marketCap != null ||
+      peRatio != null ||
+      pbRatio != null ||
+      dividendYield != null ||
+      revenueTtm != null ||
+      netMargin != null ||
+      eps != null;
+
+  static MarketSnapshot? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    double? d(String key) => (json[key] as num?)?.toDouble();
+    final snapshot = MarketSnapshot(
+      currency: (json['currency'] as String?) ?? r'$',
+      marketCap: d('market_cap'),
+      peRatio: d('pe_ratio'),
+      pbRatio: d('pb_ratio'),
+      dividendYield: d('dividend_yield'),
+      revenueTtm: d('revenue_ttm'),
+      netMargin: d('net_margin'),
+      eps: d('eps'),
+    );
+    return snapshot.hasAnything ? snapshot : null;
+  }
+}
+
 class CapitalReturns {
   /// Median return on invested capital over the backend's ratio window.
   final double roic;
@@ -284,6 +357,10 @@ class ValuationSuccess extends ValuationResult {
   /// backend sent no grid worth drawing.
   final SensitivityGrid? sensitivity;
 
+  /// Current market multiples, for reference beside the figure. Null where
+  /// nothing could be computed.
+  final MarketSnapshot? snapshot;
+
   /// Why raising the growth assumption lowers this figure.
   ///
   /// Null for almost every company, and that is the point: it is set only
@@ -310,6 +387,7 @@ class ValuationSuccess extends ValuationResult {
     this.methodFitWarnings = const [],
     this.sensitivity,
     this.capitalReturns,
+    this.snapshot,
     this.growthCostNote,
     this.growthPath = const [],
   });

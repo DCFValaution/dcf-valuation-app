@@ -1106,6 +1106,16 @@ class _ValuationScreenState extends State<ValuationScreen> {
                                   : _baselineValue,
                               correctionNote: _correctionNote,
                             ),
+                            // Market multiples, under the figure they are
+                            // not part of. Both the DCF and the dividend
+                            // model carry one; the relative lens does not,
+                            // because that screen is already market
+                            // multiples and a second panel of them would
+                            // blur the one distinction it exists to draw.
+                            if (result.snapshot != null) ...[
+                              const SizedBox(height: AppSpacing.xl),
+                              MarketSnapshotCard(snapshot: result.snapshot!),
+                            ],
                             // Both methods have a workbook of their own now: a discounted
                             // cash flow model, or the dividend model for the companies
                             // valued on their dividends. The backend decides which to build

@@ -144,6 +144,9 @@ def test_the_standard_valuation_is_unchanged_and_never_fetches_peers(client, mon
         # And later again: an explanation, set only for the rare company
         # whose valuation falls as the growth assumption rises.
         "growth_cost_note",
+        # And later again: current market multiples, carried beside the
+        # figure for reference and forming no part of it.
+        "snapshot",
     }
     assert body["method_fit_warnings"] == []
 
