@@ -584,6 +584,38 @@ def _aligned_rows(income_frame, balance_frame, cashflow_frame,
 _MONEY_FIELDS_INCOME = (
     "revenue", "operatingIncome", "incomeBeforeTax", "incomeTaxExpense",
     "interestExpense",
+    # These three were missing, and their absence was not harmless. A
+    # converted company had its revenue restated into the trading currency
+    # while its net income stayed in the reporting one, so every ratio
+    # drawn across the two was wrong by the exchange rate: TSMC's net
+    # margin read 1475%, Alibaba's 69%.
+    #
+    # The damage reached further than a ratio on a screen. The dividend
+    # model divides net income by equity for return on equity, and equity
+    # was already converted - Mitsubishi UFJ's came out at 1726% against a
+    # true 11%. It divides dividends paid, also already converted, by the
+    # same net income for the payout ratio, which came out at 0.2% against
+    # 35%. Both feed dividend growth.
+    #
+    # dilutedEPS belongs here too. It is money per share, not a count, and
+    # a per-share figure in one currency beside a price in another is a
+    # price/earnings ratio that means nothing: Alibaba's was 2.5 rather
+    # than 16.6.
+    "netIncomeCommon", "dilutedEPS", "grossProfit",
+    # Found by the guard that now watches this list rather than by the bug
+    # they would have caused. Interest income is divided by revenue to tell
+    # a lender from a fee business, and read 97% of revenue for Toyota
+    # against a true 0.6%; it does not currently misclassify anything,
+    # because an industry gate runs first, but it is one reordering away
+    # from doing so. The insurance lines are only tested for being present
+    # at all, so scaling them changes nothing today and keeps them honest
+    # if that ever becomes a magnitude.
+    "interestIncome", "premiumsEarned", "policyholderBenefits",
+    # The income statement's own depreciation line. Nothing reads it today
+    # - the cash flow statement's copy is the one the model uses, and that
+    # one was already converted - but it is money on a statement being
+    # restated, and leaving it behind is how this list went wrong before.
+    "depreciationAndAmortization",
 )
 _MONEY_FIELDS_BALANCE = (
     "shortTermDebt", "longTermDebt", "cashAndCashEquivalents",
