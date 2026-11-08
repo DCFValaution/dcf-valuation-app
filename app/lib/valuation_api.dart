@@ -476,6 +476,9 @@ class ValuationSuccess extends ValuationResult {
       capitalReturns: CapitalReturns.fromJson(
         json['capital_returns'] as Map<String, dynamic>?,
       ),
+      snapshot: MarketSnapshot.fromJson(
+        json['snapshot'] as Map<String, dynamic>?,
+      ),
       growthCostNote:
           (json['growth_cost_note'] as String?)?.trim().isEmpty ?? true
           ? null

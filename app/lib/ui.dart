@@ -1095,7 +1095,7 @@ class MarketSnapshotCard extends StatelessWidget {
                 color: context.colors.textSecondary,
               ),
               const SizedBox(width: AppSpacing.md),
-              Text('Market snapshot', style: context.text.titleSmall),
+              Text('Company at a glance', style: context.text.titleSmall),
             ],
           ),
           const SizedBox(height: AppSpacing.xs),
