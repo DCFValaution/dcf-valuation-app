@@ -99,9 +99,17 @@ class FakeTicker:
         return self._cashflow
 
 
-def install(monkeypatch, ticker: FakeTicker):
+def install(monkeypatch, ticker: FakeTicker, ttm=None):
     # **kwargs absorbs the session= that market_data now passes.
     monkeypatch.setattr(M.yf, "Ticker", lambda symbol, **kwargs: ticker)
+    # A fake company has no trailing figures unless the test supplies them.
+    #
+    # Without this the trailing fetch is a second, unfaked route to the
+    # network: fetch_financials would hand back this fixture's statements
+    # with some real company's quarterly balance sheet attached. The
+    # placeholder ticker "GOOD" is Gladstone Commercial, and for a while the
+    # API tests were valuing it.
+    monkeypatch.setattr(M, "fetch_ttm_base", lambda symbol: ttm)
 
 
 @pytest.fixture(autouse=True)

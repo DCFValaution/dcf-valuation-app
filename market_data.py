@@ -203,6 +203,9 @@ _dividend_cache = _TTLCache(_BETA_TTL)
 # figures are cached on the same terms as the financials.
 _peer_cache = _TTLCache(_BETA_TTL)
 _figures_cache = _TTLCache(_FINANCIALS_TTL)
+# Trailing figures update once a quarter; they are cached on the same terms as
+# the annual statements they sit beside.
+_ttm_cache = _TTLCache(_FINANCIALS_TTL)
 
 
 def clear_caches() -> None:
@@ -217,6 +220,7 @@ def clear_caches() -> None:
     _dividend_cache.clear()
     _peer_cache.clear()
     _figures_cache.clear()
+    _ttm_cache.clear()
     _search_cache.clear()
 
 
@@ -242,6 +246,18 @@ class CompanyFinancials:
     reporting_currency: str = ""
     trading_currency: str = ""
     fx: dict | None = None
+
+    # Trailing-twelve-month and latest-quarter figures, where they could be
+    # fetched and trusted. None means the base year comes from the latest
+    # annual statements instead.
+    #
+    # Carried here rather than fetched where it is used, because
+    # base_year_from() is a pure function of this object and has to stay one:
+    # every test that fakes a company does it by faking fetch_financials, and
+    # a second I/O path further down would walk straight past that - reaching
+    # the network from an offline suite and, once, valuing the placeholder
+    # ticker "GOOD" with Gladstone Commercial's real revenue.
+    ttm: "TTMBase | None" = None
 
     @property
     def company_name(self) -> str:
@@ -2033,6 +2049,10 @@ def fetch_financials(ticker: str,
             reporting_currency=reporting,
             trading_currency=trading,
             fx=fx,
+            # Fetched here, with the rest of the I/O, so that the base year
+            # can be built from this object alone. A failure is not fatal:
+            # None simply means the latest annual statements are the base.
+            ttm=_usable_ttm(ticker, reporting),
         )
     except MarketDataError as e:
         # Cache the refusal briefly; transient problems get a short TTL so a
@@ -2065,11 +2085,332 @@ def fetch_financials(ticker: str,
     return financials
 
 
+# ---------------------------------------------------------------------------
+# The trailing-twelve-month base year
+# ---------------------------------------------------------------------------
+#
+# The latest complete fiscal year is audited and internally consistent, and it
+# is also up to eleven months old. NVIDIA's FY2026 revenue is $216bn against a
+# trailing twelve months of $303bn - a 40% understatement of the business the
+# model is about to project forward. The trailing figures close that gap.
+#
+# Three things make this safe rather than merely fresher, and all three are
+# load-bearing:
+#
+#   Currency. The trailing series arrive in the company's REPORTING currency
+#   while the annual statements have already been converted to the trading
+#   one. TSM's trailing revenue is 4.9 trillion TWD beside an annual $116bn
+#   USD. Reading one against the other is a 4,156% error, and it is the same
+#   error class the income-statement conversion bug was. Every monetary field
+#   goes through the identical scalar; share counts and ratios never do.
+#
+#   Debt definition. Yahoo's quarterlyTotalDebt INCLUDES capital lease
+#   obligations; the annual path deliberately excludes them. Taking the
+#   convenient field would quietly redefine debt mid-model - $98.8bn of it on
+#   AMZN, 12.8 percentage points of its per-share value. The components are
+#   summed instead, matching the annual convention exactly.
+#
+#   Vintage. The balance-sheet series do not all update together. A debt
+#   figure from one quarter against cash from another is not a balance sheet,
+#   so the required fields must share a quarter-end or the whole base falls
+#   back to the annual one.
+#
+# Fallback is per field wherever a field can stand alone. Alibaba publishes no
+# trailing capital expenditure at all, and losing its entire trailing base
+# over one display figure would be the wrong trade.
+
+_TTM_SERIES = {
+    "revenue": "trailingTotalRevenue",
+    "capex": "trailingCapitalExpenditure",
+    "shares_diluted": "trailingDilutedAverageShares",
+    "shares_ordinary": "quarterlyOrdinarySharesNumber",
+    "current_debt": "quarterlyCurrentDebt",
+    "long_term_debt": "quarterlyLongTermDebt",
+    "cash_and_short_term": "quarterlyCashCashEquivalentsAndShortTermInvestments",
+    "investments": "quarterlyInvestmentsAndAdvances",
+    "minority_interest": "quarterlyMinorityInterest",
+}
+
+# The balance sheet must be one snapshot. These three decide its date, and
+# nothing may be read from an older quarter than the newest of them.
+_TTM_BALANCE_FIELDS = ("current_debt", "long_term_debt", "cash_and_short_term")
+
+# One quarter of slack, in days, before a field counts as a different vintage.
+_TTM_MAX_LAG_DAYS = 100
+
+_TTM_LOOKBACK_SECONDS = 3 * 365 * 24 * 3600
+
+
+@dataclass(frozen=True)
+class TTMBase:
+    """Trailing-twelve-month and latest-quarter figures, in reporting currency.
+
+    `values` holds only the fields that were actually reported; a caller asks
+    with .get() and falls back per field. `notes` records every fallback, so
+    the provenance can say what was read and what was not.
+    """
+    values: dict[str, float]
+    as_of: dict[str, str]
+    period_end: str
+    currency: str | None
+    notes: list[str]
+
+
+def _ttm_rows(ticker: str) -> dict[str, dict]:
+    """Newest reported row of each trailing/quarterly series, by series name."""
+    now = int(time.time())
+    data = _get_json(_TIMESERIES_URL.format(ticker),
+                     {"symbol": ticker, "type": ",".join(_TTM_SERIES.values()),
+                      "period1": now - _TTM_LOOKBACK_SECONDS, "period2": now},
+                     "trailing financial figures", ticker)
+    latest: dict[str, dict] = {}
+    for item in ((data.get("timeseries") or {}).get("result") or []):
+        series = ((item.get("meta") or {}).get("type") or [None])[0]
+        rows = [row for row in (item.get(series) or []) if row and row.get("reportedValue")]
+        if series and rows:
+            latest[series] = rows[-1]
+    return latest
+
+
+def _days_between(later: str, earlier: str) -> int | None:
+    try:
+        a = date.fromisoformat(later)
+        b = date.fromisoformat(earlier)
+    except (TypeError, ValueError):
+        return None
+    return (a - b).days
+
+
+def fetch_ttm_base(ticker: str) -> TTMBase | None:
+    """
+    Trailing-twelve-month figures for *ticker*, or None where they cannot be
+    trusted as one coherent base year.
+
+    None is returned - and the annual base used instead - when the trailing
+    revenue is missing, when the balance-sheet fields that must share a
+    quarter-end do not, or when a figure is absent that the base cannot be
+    built without. Everything else degrades field by field.
+    """
+    ticker = _validate_ticker(ticker)
+    cached = _ttm_cache.get(ticker)
+    if cached is not None:
+        return cached or None
+
+    try:
+        latest = _ttm_rows(ticker)
+    except Exception as e:
+        logging.getLogger(__name__).info("%s: trailing figures unavailable: %r", ticker, e)
+        return None
+
+    values: dict[str, float] = {}
+    as_of: dict[str, str] = {}
+    currencies: set[str] = set()
+    for name, series in _TTM_SERIES.items():
+        row = latest.get(series)
+        if not row:
+            continue
+        raw = (row.get("reportedValue") or {}).get("raw")
+        if raw is None:
+            continue
+        try:
+            values[name] = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if row.get("asOfDate"):
+            as_of[name] = row["asOfDate"]
+        # Share counts carry a currency tag too, and it is meaningless on a
+        # count. Only the monetary series get a vote on what currency this is.
+        if name not in ("shares_diluted", "shares_ordinary") and row.get("currencyCode"):
+            currencies.add(row["currencyCode"])
+
+    notes: list[str] = []
+
+    if values.get("revenue") is None:
+        return None
+
+    # --- One balance sheet, not several ------------------------------------
+    balance_dates = [as_of[f] for f in _TTM_BALANCE_FIELDS if f in as_of]
+    if not balance_dates:
+        return None
+    period_end = max(balance_dates)
+    for field_name in _TTM_BALANCE_FIELDS:
+        if field_name not in values:
+            # Absent entirely is a different claim from stale, and it is
+            # handled by the caller as a nil component. Debt needs at least
+            # one of its two halves.
+            continue
+        lag = _days_between(period_end, as_of.get(field_name, period_end))
+        if lag is not None and lag > _TTM_MAX_LAG_DAYS:
+            notes.append(
+                f"{_TTM_SERIES[field_name]} last reported {as_of[field_name]}, "
+                f"{lag} days before the {period_end} balance sheet")
+            values.pop(field_name)
+            as_of.pop(field_name, None)
+
+    if "current_debt" not in values and "long_term_debt" not in values:
+        return None
+    if "cash_and_short_term" not in values:
+        return None
+
+    result = TTMBase(values=values, as_of=as_of, period_end=period_end,
+                     currency=(currencies.pop() if len(currencies) == 1 else None),
+                     notes=notes)
+    _ttm_cache.put(ticker, result)
+    return result
+
+
+def _usable_ttm(ticker: str, reporting_currency: str) -> TTMBase | None:
+    """The trailing base for *ticker*, or None to use the annual one.
+
+    The currency check is the gate. The trailing series arrive in whatever
+    currency the company reports in, and the scalar that converts the annual
+    statements is only the right scalar if that is the currency it was built
+    from. Where the two disagree there is no safe rate to apply, so the
+    annual base is used instead.
+    """
+    ttm = fetch_ttm_base(ticker)
+    if ttm is None:
+        return None
+    reporting = (reporting_currency or "").upper()
+    if ttm.currency and reporting and ttm.currency.upper() != reporting:
+        logging.getLogger(__name__).info(
+            "%s: trailing figures are in %s but statements report in %s; "
+            "using the annual base", ticker, ttm.currency, reporting)
+        return None
+    return ttm
+
+
+def _ttm_base_year_from(fin: CompanyFinancials,
+                        ttm: TTMBase) -> tuple[BaseYearData, dict]:
+    """Build the base year from trailing figures, falling back field by field.
+
+    Every monetary figure is multiplied by the same scalar the annual
+    statements were converted with - the one thing that must not vary between
+    fields - and no share count is touched by it.
+    """
+    ticker = fin.ticker
+    income = fin.income[0]
+    rate = float((fin.fx or {}).get("rate") or 1.0)
+    notes = list(ttm.notes)
+
+    def money(name: str) -> float | None:
+        raw = ttm.values.get(name)
+        return None if raw is None else float(raw) * rate / 1e6
+
+    price = fin.profile.get("price")
+    if price is None:
+        raise DataUnavailableError(
+            f"The market data provider did not return a current price for '{ticker}'.")
+    current_price = float(price)
+
+    revenue_mm = money("revenue")
+    if revenue_mm is None or revenue_mm <= 0:
+        raise DataUnavailableError(
+            f"The trailing revenue for '{ticker}' did not convert to a usable figure.")
+
+    # Current debt and long-term debt, summed - never Yahoo's TotalDebt, which
+    # folds capital leases in and would mean something different from the
+    # annual figure it replaces. That difference is $98.8bn on AMZN.
+    current_debt = money("current_debt")
+    long_term_debt = money("long_term_debt")
+    if current_debt is None:
+        notes.append("no current debt reported for the latest quarter, treated as nil")
+    if long_term_debt is None:
+        notes.append("no long-term debt reported for the latest quarter, treated as nil")
+    total_debt_mm = (current_debt or 0.0) + (long_term_debt or 0.0)
+
+    cash_mm = (money("cash_and_short_term") or 0.0) + (money("investments") or 0.0)
+    if ttm.values.get("investments") is None:
+        notes.append("no long-term investments reported for the latest quarter, "
+                     "treated as nil")
+
+    reported_minority = ttm.values.get("minority_interest")
+    if reported_minority is None:
+        minority_mm = 0.0
+        minority_source = ("no minority interest reported, treated as nil "
+                           "(inferred, not read)")
+    else:
+        minority_mm = float(reported_minority) * rate / 1e6
+        minority_source = (f"latest quarterly balance sheet ({ttm.period_end}): "
+                           "Minority Interest")
+
+    shares_raw = ttm.values.get("shares_diluted")
+    shares_source = ("trailing diluted average shares "
+                     f"({ttm.as_of.get('shares_diluted', ttm.period_end)})")
+    if not shares_raw or shares_raw <= 0:
+        shares_raw = ttm.values.get("shares_ordinary")
+        shares_source = ("latest quarterly ordinary shares outstanding "
+                         f"({ttm.as_of.get('shares_ordinary', ttm.period_end)}; "
+                         "point-in-time, no weighted average)")
+    if not shares_raw or shares_raw <= 0:
+        shares_mm, shares_source = _resolve_shares(fin, current_price)
+        notes.append("no trailing share count; used the annual statements")
+    else:
+        shares_mm = float(shares_raw) / 1e6
+
+    # Base-year capital expenditure, as actually spent rather than inferred
+    # from a ratio. Display only: the projection applies a percentage of each
+    # year's revenue, exactly as it did before.
+    capex_mm = money("capex")
+    if capex_mm is None:
+        notes.append("no trailing capital expenditure reported")
+    else:
+        capex_mm = abs(capex_mm)
+
+    base = BaseYearData(
+        revenue=revenue_mm,
+        total_debt=total_debt_mm,
+        cash=cash_mm,
+        shares=shares_mm,
+        current_price=current_price,
+        minority_interest=minority_mm,
+    )
+    revenue_as_of = ttm.as_of.get("revenue", ttm.period_end)
+    meta = {
+        "ticker": ticker,
+        "company_name": fin.company_name,
+        "exchange": fin.exchange,
+        "sector": fin.sector,
+        "industry": fin.industry,
+        "fiscal_year": income.get("fiscalYear", "?"),
+        "base_period": "ttm",
+        "base_label": f"TTM as of {revenue_as_of}",
+        "period_end": revenue_as_of,
+        "balance_sheet_as_of": ttm.period_end,
+        "base_capex": capex_mm,
+        "revenue_source": f"trailing twelve months to {revenue_as_of}: Total Revenue",
+        "debt_source": (f"latest quarterly balance sheet ({ttm.period_end}): "
+                        "Current Debt + Long Term Debt (excl. capital leases)"),
+        "cash_source": (f"latest quarterly balance sheet ({ttm.period_end}): "
+                        "Cash And Cash Equivalents And Short Term Investments + "
+                        "Investments And Advances"),
+        "shares_source": shares_source,
+        "minority_interest_source": minority_source,
+        "minority_interest_reported": reported_minority is not None,
+        "price_source": "market data provider quote (live)",
+        "currency": fin.trading_currency or None,
+        "reporting_currency": fin.reporting_currency or None,
+    }
+    if notes:
+        meta["base_notes"] = notes
+    if fin.fx and fin.fx.get("pair"):
+        meta["fx"] = dict(fin.fx)
+        meta["currency_source"] = (
+            f"trailing figures and statements converted from "
+            f"{fin.reporting_currency} to {fin.trading_currency} at "
+            f"{fin.fx['rate']:.6g} ({fin.fx['pair']}, {fin.fx['as_of']})")
+    return base, meta
+
+
 def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
-    """Map the most recent fiscal year of *fin* onto BaseYearData."""
+    """Map *fin* onto BaseYearData: the trailing twelve months where they are
+    trustworthy, the most recent fiscal year where they are not."""
     ticker = fin.ticker
     if not fin.income:
         raise TickerNotFoundError(f"No income statement available for '{ticker}'.")
+
+    if fin.ttm is not None:
+        return _ttm_base_year_from(fin, fin.ttm)
 
     income = fin.income[0]
     balance = fin.balance[0] if fin.balance else {}
@@ -2135,6 +2476,8 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
         "sector": fin.sector,
         "industry": fin.industry,
         "fiscal_year": fiscal_year,
+        "base_period": "annual",
+        "base_label": f"FY{fiscal_year}",
         "period_end": period_end,
         "revenue_source": "income statement: Total Revenue",
         "debt_source": "balance sheet: Current Debt + Long Term Debt "

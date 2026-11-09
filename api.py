@@ -496,6 +496,24 @@ class BaseYearOut(BaseModel):
     shares: float
     current_price: float
     fiscal_year: str
+
+    # What the base year actually is, as a reader should see it: "TTM as of
+    # 2026-09-30" where the trailing figures were usable, "FY2025" where the
+    # latest annual statements were used instead. `fiscal_year` stays beside
+    # it and stays the fiscal year, because the derived ratios - margin, tax,
+    # D&A, capex - are still medians over the annual statements, and prose
+    # elsewhere refers to them by it.
+    base_label: str = Field(
+        "", description='Base period as displayed, e.g. "TTM as of 2026-09-30"')
+    base_period: str = Field(
+        "annual", description='Either "ttm" or "annual"')
+    period_end: str = Field(
+        "", description="Period end the base figures are drawn from")
+    base_capex: float | None = Field(
+        None, description="$mm actually spent in the base period, where reported")
+    base_notes: list[str] = Field(
+        default_factory=list,
+        description="Any field that fell back, and why")
     # The on-device preview engine rebuilds the equity bridge to follow a
     # slider drag, so it needs every term of it. Without this the preview
     # would differ from the confirmed figure by the minority interest per
@@ -1158,6 +1176,12 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
             shares=report.base.shares,
             current_price=report.base.current_price,
             fiscal_year=report.fiscal_year,
+            base_label=str(report.meta.get("base_label")
+                           or f"FY{report.fiscal_year}"),
+            base_period=str(report.meta.get("base_period") or "annual"),
+            period_end=str(report.meta.get("period_end") or ""),
+            base_capex=report.meta.get("base_capex"),
+            base_notes=list(report.meta.get("base_notes") or []),
             minority_interest=report.base.minority_interest,
         ),
         valuation=ValuationOut(
