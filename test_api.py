@@ -8,6 +8,8 @@ analysis.fetch_financials and assumptions.fetch_risk_free_rate.
 Run with:  python -m pytest test_api.py -v
 """
 
+import math
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -472,3 +474,65 @@ def test_openapi_schema_builds(client):
     r = client.get("/openapi.json")
     assert r.status_code == 200
     assert "/valuation/{ticker}" in r.json()["paths"]
+
+
+# ---------------------------------------------------------------------------
+# Revenue growth: the outer guard
+# ---------------------------------------------------------------------------
+#
+# The app's slider stops at 25%, and typing reaches much further. These
+# bounds are the far wall, and the two sides must agree on where it is: a
+# value the app accepts and the API refuses is a 422 the user cannot act on.
+
+def _post(client, growth, **extra):
+    return client.post("/valuation", json={
+        "ticker": PROFITABLE,
+        "overrides": {"revenue_growth": growth, **extra},
+    })
+
+
+def test_revenue_growth_far_outside_the_slider_is_computed(client):
+    """Not refused, not clamped. The user asked for it and the model can
+    answer; the app says separately that the answer is unrealistic."""
+    for growth in (0.50, 2.50, 10.0, -0.10, -0.99):
+        r = _post(client, growth)
+        assert r.status_code == 200, (growth, r.text)
+        applied = {a["name"]: a["value"] for a in r.json()["assumptions"]}
+        assert applied["revenue_growth"] == pytest.approx(growth)
+
+
+def test_revenue_growth_below_the_floor_is_refused(client):
+    """Below -100% the revenue multiplier turns negative and the forecast
+    alternates sign year to year, which is broken rather than pessimistic."""
+    for growth in (-1.0, -1.5, -20.0):
+        assert _post(client, growth).status_code == 422, growth
+
+
+def test_revenue_growth_above_the_ceiling_is_refused(client):
+    for growth in (10.01, 1e6, 1e60):
+        assert _post(client, growth).status_code == 422, growth
+
+
+def test_an_extreme_growth_still_produces_a_finite_number(client):
+    """Everything downstream has to survive it too - the sensitivity grid
+    and the growth fade are both built from this rate."""
+    r = _post(client, 10.0, fade_enabled=True)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert math.isfinite(body["intrinsic_value_per_share"])
+    for row in body["sensitivity"]:
+        for cell in row:
+            # The grid carries its own axis labels as strings; the figures
+            # are what has to stay finite.
+            if isinstance(cell, (int, float)):
+                assert math.isfinite(cell)
+    for year in body["projection"]:
+        assert math.isfinite(year["revenue"])
+        assert year["revenue"] > 0
+
+
+def test_the_floor_is_the_last_value_inside_the_wall(client):
+    """-99% computes; -100% does not. The boundary is where the arithmetic
+    stops meaning anything, not where the figure stops being plausible."""
+    assert _post(client, -0.99).status_code == 200
+    assert _post(client, -1.0).status_code == 422

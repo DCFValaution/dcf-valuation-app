@@ -16,6 +16,27 @@ class AdjustableAssumption {
   final double min;
   final double max;
 
+  /// The outer limit on a typed value, where it is wider than the slider.
+  ///
+  /// The slider's own range is the plausible one - the zone an ordinary user
+  /// drags around in, and the one these bounds are chosen to look sensible
+  /// on screen. Typing is a deliberate act, and someone who types 50% growth
+  /// means it, so the typed range is held open to wherever the model still
+  /// produces a finite, meaningful number rather than to wherever the
+  /// figures stay believable. Everything between the two is accepted,
+  /// computed, and warned about.
+  ///
+  /// Null means the slider's own bound: for every assumption but revenue
+  /// growth, typing and dragging reach exactly as far as each other.
+  final double? typedMin;
+  final double? typedMax;
+
+  double get typedLow => typedMin ?? min;
+  double get typedHigh => typedMax ?? max;
+
+  /// Whether typing reaches past the slider at all.
+  bool get hasWiderTypedRange => typedLow < min || typedHigh > max;
+
   /// How far one notch of the slider moves the value, chosen per assumption.
   ///
   /// Discount rates and terminal growth step by 0.1%: the figure is most
@@ -37,6 +58,8 @@ class AdjustableAssumption {
     required this.max,
     required this.step,
     this.isPercent = true,
+    this.typedMin,
+    this.typedMax,
   });
 
   /// The same slider with bounds the backend supplied for this company.
@@ -60,6 +83,8 @@ class AdjustableAssumption {
       max: hi,
       step: step,
       isPercent: isPercent,
+      typedMin: typedMin,
+      typedMax: typedMax,
     );
   }
 
@@ -96,6 +121,13 @@ class AdjustableAssumption {
   String get _minText => isPercent ? formatPercent(min) : '${min.round()}';
   String get _maxText =>
       isPercent ? formatPercent(max) : '${max.round()} years';
+
+  /// The outer bounds, as the user types them.
+  String get _typedMinText =>
+      isPercent ? formatPercent(typedLow) : '${typedLow.round()}';
+  String get _typedMaxText => isPercent
+      ? formatPercent(typedHigh)
+      : '${typedHigh.round()} years';
 }
 
 const List<AdjustableAssumption> kAdjustable = [
@@ -106,6 +138,19 @@ const List<AdjustableAssumption> kAdjustable = [
     min: 0.0,
     max: 0.25,
     step: 0.0025,
+    // Typing reaches far past the slider, in both directions.
+    //
+    // The floor is the maths. Below -100% the revenue multiplier turns
+    // negative and the forecast alternates sign year to year - revenue of
+    // -$96bn, then +$19bn - which is not a shrinking company, it is a
+    // broken one. -99% is the last value just inside that wall.
+    //
+    // The ceiling is not the maths: the model stays finite out to growth of
+    // about 1e16 before a double overflows. It is where the answer stops
+    // being a number anyone can read. +1000% is already five times the most
+    // extravagant real company and leaves the per-share figure printable.
+    typedMin: -0.99,
+    typedMax: 10.0,
   ),
   AdjustableAssumption(
     name: 'operating_margin',
@@ -297,9 +342,14 @@ ExactValue parseExactValue({
   }
 
   const tolerance = 1e-9;
-  if (value < spec.min - tolerance || value > spec.max + tolerance) {
+  if (value < spec.typedLow - tolerance || value > spec.typedHigh + tolerance) {
     return ExactValue.rejected(
-      'Enter a value from ${spec._minText} to ${spec._maxText}.',
+      spec.hasWiderTypedRange
+          // The slider's range is not the limit here, so quoting it would
+          // refuse a value the app would in fact have computed.
+          ? 'Outside the computable range. Enter a value from '
+                '${spec._typedMinText} to ${spec._typedMaxText}.'
+          : 'Enter a value from ${spec._minText} to ${spec._maxText}.',
     );
   }
 
@@ -310,6 +360,31 @@ ExactValue parseExactValue({
   }
 
   return ExactValue.accepted(value);
+}
+
+/// What to say about a value typed outside the slider's plausible range.
+///
+/// Null for anything inside it, which is every value an ordinary user will
+/// ever hold: the slider cannot leave its own range, so this is only ever
+/// reached by someone who typed a figure deliberately.
+///
+/// It informs rather than blocks. The valuation is computed and shown
+/// exactly as it would be for any other input, because the user asked for
+/// this number and the model can answer; what the note adds is that the
+/// answer describes a company that probably does not exist. The tone is the
+/// app's own - a statement about the assumption, not a telling-off.
+String? outOfNormalRangeNote(AdjustableAssumption spec, double value) {
+  if (!spec.hasWiderTypedRange) return null;
+  const tolerance = 1e-9;
+  if (value > spec.max + tolerance) {
+    return 'Sustained growth this high is very unlikely for a real company — '
+        'this valuation is likely unrealistic.';
+  }
+  if (value < spec.min - tolerance) {
+    return 'This assumes the company shrinks every year — unusual; treat '
+        'this valuation with caution.';
+  }
+  return null;
 }
 
 /// The discount rate among [specs] - 'wacc' for a DCF, 'cost_of_equity' for a
@@ -684,6 +759,35 @@ class _SliderRow extends StatelessWidget {
               onChangeEnd: enabled ? (_) => onChangeEnd() : null,
             ),
           ),
+          // Sits under the slider it belongs to, so there is no question
+          // which assumption it is about. Informational colouring, not the
+          // red used for inputs the model refuses: this one computed.
+          ?switch (outOfNormalRangeNote(spec, value)) {
+            final String note => Padding(
+              key: ValueKey('out-of-range-${spec.name}'),
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 15,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      note,
+                      style: context.text.labelSmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _ => null,
+          },
         ],
       ),
     );
@@ -777,7 +881,12 @@ class _ExactValueDialogState extends State<_ExactValueDialog> {
         },
         decoration: InputDecoration(
           suffixText: spec.isPercent ? '%' : 'years',
-          helperText: 'From ${spec._minText} to ${spec._maxText}',
+          // The range typing can reach, which for revenue growth is far
+          // wider than the slider under it. Quoting the slider's bounds
+          // here would tell the user a value is unavailable when it is
+          // only unusual.
+          helperText:
+              'From ${spec._typedMinText} to ${spec._typedMaxText}',
           errorText: _error,
           errorMaxLines: 4,
         ),

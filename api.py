@@ -377,6 +377,11 @@ async def _rate_limit_middleware(request: Request, call_next):
 # Schemas
 # ---------------------------------------------------------------------------
 
+# Shared with the app's typed-entry guard; the two must not drift apart, or
+# a value the app accepts comes back a 422.
+REVENUE_GROWTH_OUTER = (-0.99, 10.0)
+
+
 class Overrides(BaseModel):
     """
     Assumption overrides. Any field left null keeps the derived or default
@@ -384,7 +389,20 @@ class Overrides(BaseModel):
     """
     model_config = {"extra": "forbid"}
 
-    revenue_growth: float | None = Field(None, description="Annual revenue growth, e.g. 0.06")
+    # The outer guard, matching the app's typed-entry range exactly. Wider
+    # than anything a slider can reach, because a typed value is deliberate
+    # and a shrinking company is real. The bounds are where the model stops
+    # producing a meaningful number, not where the number stops being
+    # plausible: below -100% the revenue multiplier turns negative and the
+    # forecast alternates sign year to year, so -0.99 is the last value
+    # inside the wall. The ceiling is a readability limit rather than an
+    # arithmetic one - the maths survives past 1e15 - and is set where the
+    # per-share figure is still something a person can read.
+    revenue_growth: float | None = Field(
+        None, ge=REVENUE_GROWTH_OUTER[0], le=REVENUE_GROWTH_OUTER[1],
+        description="Annual revenue growth, e.g. 0.06. Accepted well beyond "
+                    "the plausible range: values outside it are computed and "
+                    "flagged, not refused.")
     operating_margin: float | None = Field(None, description="EBIT as a share of revenue")
     tax_rate: float | None = Field(None, description="Effective tax rate on EBIT")
     da_pct: float | None = Field(None, description="D&A as a share of revenue")
