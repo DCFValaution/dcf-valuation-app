@@ -160,6 +160,24 @@ const List<AdjustableAssumption> kAdjustable = [
     max: 0.60,
     step: 0.0025,
   ),
+  // Capital spending, as a share of revenue, in the FIRST projected year.
+  // The projection glides from here to a normalized long-run level, so this
+  // is where the company is now rather than where the model assumes it
+  // settles - which is why the help line names the year.
+  //
+  // The slider stops at 60%, which covers every ordinary business and most
+  // extraordinary ones. Typing reaches 150%: Oracle's trailing intensity is
+  // 105% of revenue, and a ceiling that cannot express a real company's real
+  // spending is a quiet error rather than a safety rail.
+  AdjustableAssumption(
+    name: 'capex_pct',
+    label: 'Capital expenditure',
+    help: 'Share of revenue spent on capital in year 1',
+    min: 0.0,
+    max: 0.60,
+    step: 0.0025,
+    typedMax: 1.50,
+  ),
   AdjustableAssumption(
     name: 'wacc',
     label: 'WACC (discount rate)',

@@ -41,6 +41,15 @@ CASES: list[tuple[str, dict]] = [
     ("terminal growth near zero", {"terminal_growth": 0.001}),
     ("terminal growth close to WACC", {"wacc": 0.09, "terminal_growth": 0.085}),
     ("heavy capex", {"capex_pct": 0.35}),
+    # The capex fade is on by default, so every case above already exercises
+    # a glide. These move its two ends independently, and then flatten it.
+    ("capex ramping down hard", {"capex_pct": 0.40, "capex_terminal_pct": 0.05}),
+    ("capex ramping up", {"capex_pct": 0.05, "capex_terminal_pct": 0.30}),
+    ("capex flat by coincidence", {"capex_pct": 0.12, "capex_terminal_pct": 0.12}),
+    ("capex above revenue, as Oracle's is",
+     {"capex_pct": 1.05, "capex_terminal_pct": 0.40}),
+    ("capex fade over one year", {"capex_pct": 0.30, "capex_terminal_pct": 0.10,
+                                  "projection_years": 1}),
     ("no D&A", {"da_pct": 0.0}),
     ("negative NWC swing", {"nwc_pct": -0.10}),
     ("high tax", {"tax_rate": 0.34}),
@@ -48,7 +57,8 @@ CASES: list[tuple[str, dict]] = [
     ("long horizon", {"projection_years": 15}),
     ("everything moved", {
         "revenue_growth": 0.09, "operating_margin": 0.28, "tax_rate": 0.22,
-        "da_pct": 0.05, "capex_pct": 0.07, "nwc_pct": 0.04,
+        "da_pct": 0.05, "capex_pct": 0.07, "capex_terminal_pct": 0.03,
+        "nwc_pct": 0.04,
         "wacc": 0.11, "terminal_growth": 0.02, "projection_years": 7,
     }),
 ]

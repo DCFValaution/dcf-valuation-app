@@ -132,7 +132,12 @@ CLAMP_REVENUE_GROWTH = (0.00, 0.15)
 CLAMP_OPERATING_MARGIN = (-1.00, 0.60)
 CLAMP_TAX_RATE = (0.00, 0.35)
 CLAMP_DA_PCT = (0.00, 0.30)
-CLAMP_CAPEX_PCT = (0.00, 0.40)
+# Raised from 0.40, which was below what real companies spend. Intel's
+# three-year median is 45.1% and was being reported as 40.0%; Oracle's
+# trailing intensity is 105% of revenue. A ceiling that cuts off genuine
+# figures is not a safety rail, it is a quiet error - and an override already
+# bypasses it, so it was constraining the model and not the user.
+CLAMP_CAPEX_PCT = (0.00, 1.00)
 # Working capital as a share of revenue.
 #
 # Recalibrated when the derivation changed from a two-endpoint delta to a
@@ -392,6 +397,36 @@ def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
     return wacc, detail, components
 
 
+def _ratio_series(rows: list[dict], denominator_rows: list[dict],
+                  numerator: str, absolute: bool = False) -> list[float]:
+    """Each year's `numerator` over revenue, newest first."""
+    out = []
+    for row, den_row in zip(rows, denominator_rows):
+        den = num(den_row, "revenue")
+        if den <= 0:
+            continue
+        value = num(row, numerator)
+        out.append(abs(value) / den if absolute else value / den)
+    return out
+
+
+def _ttm_capex_ratio(fin: CompanyFinancials) -> float | None:
+    """Trailing capex as a share of trailing revenue, or None.
+
+    A ratio of two figures reported in the same currency, so it needs no
+    conversion: the scalar cancels. Reading it off the raw trailing values is
+    therefore both simpler and safer than converting first.
+    """
+    ttm = getattr(fin, "ttm", None)
+    if ttm is None:
+        return None
+    capex = ttm.values.get("capex")
+    revenue = ttm.values.get("revenue")
+    if capex is None or not revenue or revenue <= 0:
+        return None
+    return abs(float(capex)) / float(revenue)
+
+
 def derive_assumptions(fin: CompanyFinancials,
                        overrides: dict | None = None) -> DerivedAssumptions:
     """
@@ -531,12 +566,65 @@ def derive_assumptions(fin: CompanyFinancials,
         0.0, "no cash flow history",
     )
 
-    capex_value = median_ratio(cf_window, "capitalExpenditure", window, absolute=True)
-    capex_pct = derive(
-        "capex_pct", capex_value, CLAMP_CAPEX_PCT,
-        f"median capex / revenue over {len(cf_window)} years",
+    # --- Capex: where it is now, and where it settles ----------------------
+    #
+    # Two numbers rather than one. A three-year median applied flat to every
+    # projected year understates a company mid-buildout by construction - the
+    # median of a rising series is its middle year, a level already left
+    # behind - and that understatement is worth 71% of Alphabet's value and
+    # 114% of Meta's. Holding the current rate forever is the opposite error.
+    #
+    # So the projection starts at what the company is spending now and glides
+    # to a normalized level. See dcf.capex_path().
+    capex_ratios = _ratio_series(cf_window, window, "capitalExpenditure",
+                                 absolute=True)
+
+    # The anchor: the mean, not the median, of the recent past. For a series
+    # that trends, the mean sits closer to where the company is heading - it
+    # registers how far the level moved, where the median only reports which
+    # year was in the middle. On a flat series the two are the same number to
+    # within a rounding error, which is why this is a near no-op for the
+    # companies that are not ramping.
+    capex_terminal_value = (sum(capex_ratios) / len(capex_ratios)
+                            if capex_ratios else None)
+    capex_terminal_pct = derive(
+        "capex_terminal_pct", capex_terminal_value, CLAMP_CAPEX_PCT,
+        f"mean capex / revenue over {len(capex_ratios)} years",
         0.0, "no cash flow history",
     )
+
+    # The start: trailing-twelve-month intensity, the same figure the base
+    # year displays, so year one of the projection visibly IS the base year.
+    #
+    # It is a ratio of two figures converted by the same scalar, so no
+    # currency conversion is needed or wanted here - the rate cancels.
+    ttm_capex_ratio = _ttm_capex_ratio(fin)
+    if ttm_capex_ratio is not None:
+        capex_value = ttm_capex_ratio
+        # The whole glide in one line, because the number on screen is only
+        # the first year of it and a reader seeing 33.9% is entitled to know
+        # the forecast does not hold it there.
+        capex_detail = (
+            f"capex / revenue, trailing twelve months; fades from "
+            f"{ttm_capex_ratio:.1%} (current) to {capex_terminal_pct:.1%} "
+            f"(3-yr mean) over the forecast")
+    else:
+        # Alibaba reports no trailing capital expenditure. Falling back to the
+        # median keeps the old behaviour for the start as well as the anchor,
+        # which collapses the fade to a flat line - the honest outcome when
+        # there is nothing current to fade from.
+        capex_value = median_ratio(cf_window, "capitalExpenditure", window,
+                                   absolute=True)
+        capex_detail = (f"median capex / revenue over {len(cf_window)} years "
+                        "(no trailing figure reported)")
+    capex_pct = derive(
+        "capex_pct", capex_value, CLAMP_CAPEX_PCT, capex_detail,
+        0.0, "no cash flow history",
+    )
+    diagnostics["capex_by_year"] = [
+        (r.get("fiscalYear", "?"), ratio)
+        for r, ratio in zip(window, capex_ratios)
+    ]
 
     # --- Change in NWC as a share of revenue growth ------------------------
     # The working capital a business ties up, as the share of revenue it has
@@ -674,6 +762,7 @@ def derive_assumptions(fin: CompanyFinancials,
         tax_rate=tax_rate,
         da_pct=da_pct,
         capex_pct=capex_pct,
+        capex_terminal_pct=capex_terminal_pct,
         nwc_pct=nwc_pct,
         wacc=wacc,
         terminal_growth=terminal_growth,

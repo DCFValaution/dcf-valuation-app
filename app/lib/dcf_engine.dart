@@ -65,7 +65,14 @@ class DcfAssumptions {
   final double operatingMargin;
   final double taxRate;
   final double daPct;
+  /// Capex as a share of revenue in the FIRST projected year - what the
+  /// company spends now, not an average of what it used to.
   final double capexPct;
+
+  /// Capex as a share of revenue in the FINAL projected year, and the level
+  /// the perpetuity assumes. Null means no fade: [capexPct] is held flat,
+  /// which is what this engine did before the fade existed.
+  final double? capexTerminalPct;
   final double nwcPct;
   final double wacc;
   final double terminalGrowth;
@@ -87,6 +94,7 @@ class DcfAssumptions {
     required this.taxRate,
     required this.daPct,
     required this.capexPct,
+    this.capexTerminalPct,
     required this.nwcPct,
     required this.wacc,
     required this.terminalGrowth,
@@ -104,6 +112,8 @@ class DcfAssumptions {
     taxRate: m['tax_rate'] ?? 0,
     daPct: m['da_pct'] ?? 0,
     capexPct: m['capex_pct'] ?? 0,
+    // Absent means no fade, which is not the same as an anchor of zero.
+    capexTerminalPct: m['capex_terminal_pct'],
     nwcPct: m['nwc_pct'] ?? 0,
     wacc: m['wacc'] ?? 0,
     terminalGrowth: m['terminal_growth'] ?? 0,
@@ -121,6 +131,9 @@ class DcfAssumptions {
     'tax_rate': taxRate,
     'da_pct': daPct,
     'capex_pct': capexPct,
+    // Omitted rather than zeroed when there is no fade, so a round trip
+    // through the map cannot turn "hold it flat" into "fade to nothing".
+    'capex_terminal_pct': ?capexTerminalPct,
     'nwc_pct': nwcPct,
     'wacc': wacc,
     'terminal_growth': terminalGrowth,
@@ -178,6 +191,38 @@ List<double> growthPath(DcfAssumptions a) {
   return path;
 }
 
+/// Capital expenditure as a share of revenue, per projected year.
+///
+/// The twin of the backend's `capex_path`. It has to stay the twin: the
+/// preview this engine produces is shown while a slider is being dragged, and
+/// any difference between the two becomes a figure the backend then quietly
+/// corrects on the next confirmation.
+///
+/// Year one holds at [DcfAssumptions.capexPct] - the trailing intensity the
+/// base year displays - and the remaining years step to
+/// [DcfAssumptions.capexTerminalPct], landing on it exactly in the final year
+/// so the perpetuity begins from a normalized level.
+List<double> capexPath(DcfAssumptions a) {
+  final n = a.projectionYears;
+  final start = a.capexPct;
+  final terminal = a.capexTerminalPct;
+  if (terminal == null) return List<double>.filled(n, start);
+
+  // One held year, always - deliberately not fadeStartYear, which belongs to
+  // the growth fade. The two fades answer different questions and keep their
+  // own shape.
+  final steps = n - 1;
+  if (steps <= 0) return List<double>.filled(n, start);
+
+  final path = <double>[start];
+  for (var i = 1; i <= steps; i++) {
+    path.add(start + (terminal - start) * (i / steps));
+  }
+  // Pinned, for the same reason the growth fade pins its last year.
+  path[path.length - 1] = terminal;
+  return path;
+}
+
 class ProjectionYear {
   final int period;
   final double revenue;
@@ -189,6 +234,9 @@ class ProjectionYear {
   final double nopat;
   final double da;
   final double capex;
+
+  /// The share of revenue this year's capex actually was.
+  final double capexPct;
   final double deltaNwc;
   final double ufcf;
   final double discountFactor;
@@ -203,6 +251,7 @@ class ProjectionYear {
     required this.nopat,
     required this.da,
     required this.capex,
+    required this.capexPct,
     required this.deltaNwc,
     required this.ufcf,
     required this.discountFactor,
@@ -264,6 +313,9 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
 
   // One rate per projected year; all the same with the fade off.
   final growthByYear = growthPath(a);
+  // One capex intensity per projected year; all the same where there is no
+  // anchor to fade to.
+  final capexByYear = capexPath(a);
 
   final years = <ProjectionYear>[];
   var prevRevenue = base.revenue;
@@ -274,7 +326,8 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
     final tax = ebit * a.taxRate;
     final nopat = ebit - tax;
     final da = revenue * a.daPct;
-    final capex = revenue * a.capexPct;
+    final capexPct = capexByYear[t - 1];
+    final capex = revenue * capexPct;
     final deltaNwc = (revenue - prevRevenue) * a.nwcPct;
     final ufcf = nopat + da - capex - deltaNwc;
     final discountFactor = 1 / math.pow(1 + a.wacc, t).toDouble();
@@ -290,6 +343,7 @@ DcfResult runDcf(BaseYearData base, DcfAssumptions a) {
         nopat: nopat,
         da: da,
         capex: capex,
+        capexPct: capexPct,
         deltaNwc: deltaNwc,
         ufcf: ufcf,
         discountFactor: discountFactor,

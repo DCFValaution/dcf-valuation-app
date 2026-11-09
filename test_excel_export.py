@@ -147,12 +147,40 @@ def test_base_revenue_links_to_the_input_cell(sheet):
 
 @pytest.mark.parametrize("row,reference", [
     (E.R_EBIT, "$B$6"), (E.R_TAXES, "$B$7"), (E.R_DA_ADD, "$B$8"),
-    (E.R_CAPEX_LESS, "$B$9"), (E.R_NWC_LESS, "$B$10"),
+    (E.R_NWC_LESS, "$B$10"),
 ])
 def test_ufcf_lines_reference_their_assumption(sheet, row, reference):
     text = formula(sheet, row, 3)
     assert text.startswith("="), "must be a formula, not a value"
     assert reference in text, f"row {row} should be driven by {reference}"
+
+
+def test_capex_is_driven_by_its_own_year_not_one_shared_cell(sheet):
+    """Capex fades, so each year has its own intensity.
+
+    Pointing every year at the single assumption cell would make the workbook
+    recalculate to a different answer than the API returned the moment anyone
+    opened it - a spreadsheet that disagrees with the screen it came from.
+    """
+    for col, letter in ((3, "C"), (4, "D")):
+        text = formula(sheet, E.R_CAPEX_LESS, col)
+        assert text == f"=-{letter}{E.R_REVENUE}*{letter}{E.R_CAPEX_PCT}"
+        assert "$B$" not in text
+
+
+def test_the_capex_intensity_row_is_a_value_per_year(sheet):
+    for col in (3, 4):
+        assert not str(sheet.cell(row=E.R_CAPEX_PCT, column=col).value).startswith("=")
+
+
+def test_ufcf_adds_its_terms_and_not_the_intensity_row(sheet):
+    """The intensity row sits inside what used to be a contiguous block, so a
+    SUM over it would add a percentage to a pile of dollars."""
+    text = formula(sheet, E.R_UFCF, 3)
+    assert "SUM" not in text
+    assert f"C{E.R_CAPEX_PCT}" not in text
+    for row in (E.R_NOPAT, E.R_DA_ADD, E.R_CAPEX_LESS, E.R_NWC_LESS):
+        assert f"C{row}" in text
 
 
 def test_discount_factor_uses_wacc_and_period_row(sheet):

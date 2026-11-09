@@ -33,7 +33,9 @@ class Assumptions:
     operating_margin: float     # EBIT / Revenue, e.g. 0.32
     tax_rate: float             # e.g. 0.16
     da_pct: float               # D&A as % of revenue
-    capex_pct: float            # Capex as % of revenue
+    # Capex as % of revenue in the FIRST projected year - what the company is
+    # spending now, not an average of what it used to. See capex_path().
+    capex_pct: float
     nwc_pct: float              # Change in NWC as % of revenue *growth*
     wacc: float                 # discount rate
     terminal_growth: float      # Gordon-growth perpetuity rate (g)
@@ -54,6 +56,21 @@ class Assumptions:
     # from here to the final projected year.
     fade_start_year: int = 1
     fade_pattern: str = "linear"   # "linear" | "exponential"
+
+    # --- The capex fade ---------------------------------------------------
+    # Always on, unlike the growth fade, because there is no defensible flat
+    # default to fall back to. A company mid-buildout spending a third of its
+    # revenue on capital does not spend that forever, so holding the current
+    # rate projects the buildout into perpetuity - Alphabet at $4.47 a share.
+    # But holding a three-year median projects a buildout that is visibly
+    # happening as though it were not - Alphabet at $162.36, and the figure
+    # the base year now contradicts on screen. Both flat answers are wrong,
+    # in opposite directions; the truth is a path.
+    #
+    # None means no fade: capex_pct is held flat for every year, which is what
+    # the model did before and what a caller building assumptions by hand
+    # still gets.
+    capex_terminal_pct: float | None = None
 
 
 FADE_LINEAR = "linear"
@@ -112,6 +129,47 @@ def growth_path(assumptions: Assumptions) -> List[float]:
     return path
 
 
+def capex_path(assumptions: Assumptions) -> List[float]:
+    """Capital expenditure as a share of revenue, per projected year.
+
+    Year one holds at `capex_pct` - the trailing-twelve-month intensity, the
+    same figure the base year displays - and the remaining years step to
+    `capex_terminal_pct`, landing on it exactly in the final year so the
+    perpetuity that follows begins from a normalized level rather than from
+    the middle of a buildout.
+
+    The shape mirrors growth_path(): one held year, then equal steps, with the
+    last year pinned. It does not share growth_path's parameters, though -
+    see the note on the hold below.
+
+    With `capex_terminal_pct` unset this is the starting rate repeated, which
+    is exactly what the model did before the fade existed.
+    """
+    n = assumptions.projection_years
+    start = assumptions.capex_pct
+    terminal = assumptions.capex_terminal_pct
+    if terminal is None:
+        return [start] * n
+
+    # One held year, always - deliberately NOT fade_start_year, which belongs
+    # to the growth fade. Sharing it would mean that moving the growth glide
+    # out to year four quietly held capital spending up for three more years
+    # too, which is not a thing the user asked for and not a thing they would
+    # see. The two fades answer different questions and keep their own shape.
+    steps = n - 1
+    if steps <= 0:
+        return [start] * n
+
+    path = [start]
+    for i in range(1, steps + 1):
+        path.append(start + (terminal - start) * (i / steps))
+    # Pinned, for the same reason the growth fade pins its last year: the
+    # perpetuity is built from this year's cash flow, and a float's width
+    # between the final rate and the normalized one is a seam in the model.
+    path[-1] = terminal
+    return path
+
+
 @dataclass
 class ProjectionYear:
     period: int
@@ -125,6 +183,10 @@ class ProjectionYear:
     nopat: float
     da: float
     capex: float
+    # The share of revenue this year's capex actually was. Equal to the single
+    # assumption where there is no fade; where there is, this is the glide
+    # made visible, and the table and the workbook both read it.
+    capex_pct: float
     delta_nwc: float
     ufcf: float
     discount_factor: float
@@ -172,6 +234,9 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
     # One rate per projected year. With the fade off every entry is the same
     # starting rate, so this is the flat projection it has always been.
     growth_by_year = growth_path(assumptions)
+    # One capex intensity per projected year: the current rate gliding to the
+    # normalized one, or the flat rate repeated where no anchor was given.
+    capex_by_year = capex_path(assumptions)
 
     years = []
     prev_revenue = base.revenue
@@ -182,7 +247,8 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
         tax = ebit * assumptions.tax_rate
         nopat = ebit - tax
         da = revenue * assumptions.da_pct
-        capex = revenue * assumptions.capex_pct
+        capex_pct = capex_by_year[t - 1]
+        capex = revenue * capex_pct
         delta_nwc = (revenue - prev_revenue) * assumptions.nwc_pct
         ufcf = nopat + da - capex - delta_nwc
         discount_factor = 1 / (1 + wacc) ** t
@@ -197,6 +263,7 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
             nopat=nopat,
             da=da,
             capex=capex,
+            capex_pct=capex_pct,
             delta_nwc=delta_nwc,
             ufcf=ufcf,
             discount_factor=discount_factor,
@@ -257,6 +324,10 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
                 tax_rate=assumptions.tax_rate,
                 da_pct=assumptions.da_pct,
                 capex_pct=assumptions.capex_pct,
+                # Carried, or the centre cell loses the capex fade and stops
+                # reproducing the headline - which is the one thing this grid
+                # is required to do.
+                capex_terminal_pct=assumptions.capex_terminal_pct,
                 nwc_pct=assumptions.nwc_pct,
                 wacc=w,
                 terminal_growth=g_s,
@@ -344,12 +415,17 @@ def _equity_value_per_share(base: BaseYearData, assumptions: Assumptions) -> flo
     last_ufcf = 0.0
     last_df = 0.0
 
+    # The same capex glide run_dcf applies. Without it the centre cell of the
+    # sensitivity table would not reproduce the headline valuation, which is
+    # the one thing this inline copy of the bridge exists to guarantee.
+    capex_by_year = capex_path(assumptions)
+
     for t in range(1, n + 1):
         revenue = prev_revenue * (1 + assumptions.revenue_growth)
         ebit = revenue * assumptions.operating_margin
         nopat = ebit * (1 - assumptions.tax_rate)
         da = revenue * assumptions.da_pct
-        capex = revenue * assumptions.capex_pct
+        capex = revenue * capex_by_year[t - 1]
         delta_nwc = (revenue - prev_revenue) * assumptions.nwc_pct
         ufcf = nopat + da - capex - delta_nwc
         df = 1 / (1 + wacc) ** t

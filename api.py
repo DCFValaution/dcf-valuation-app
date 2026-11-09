@@ -106,6 +106,7 @@ from market_data import (DataUnavailableError, MarketDataError, RateLimitedError
 # drift between the two surfaces as a 400 rather than a wrong answer.
 ASSUMPTION_OVERRIDES = (
     "revenue_growth", "operating_margin", "tax_rate", "da_pct", "capex_pct",
+    "capex_terminal_pct",
     "nwc_pct", "wacc", "terminal_growth", "projection_years",
     "fade_enabled", "fade_start_year", "fade_pattern",
 )
@@ -406,7 +407,16 @@ class Overrides(BaseModel):
     operating_margin: float | None = Field(None, description="EBIT as a share of revenue")
     tax_rate: float | None = Field(None, description="Effective tax rate on EBIT")
     da_pct: float | None = Field(None, description="D&A as a share of revenue")
-    capex_pct: float | None = Field(None, description="Capex as a share of revenue")
+    capex_pct: float | None = Field(
+        None,
+        description="Capex as a share of revenue in the FIRST projected year - "
+                    "what the company spends now. Glides to capex_terminal_pct "
+                    "across the forecast.")
+    capex_terminal_pct: float | None = Field(
+        None,
+        description="Capex as a share of revenue in the FINAL projected year, "
+                    "and the level the perpetuity assumes. Derived as the "
+                    "3-year mean.")
     nwc_pct: float | None = Field(None, description="Change in NWC as a share of revenue growth")
     wacc: float | None = Field(None, description="Discount rate; overrides the CAPM build-up")
     terminal_growth: float | None = Field(None, description="Perpetual growth rate; must be below WACC")
@@ -483,6 +493,12 @@ class ProjectionYearOut(BaseModel):
     nopat: float
     da: float
     capex: float
+    capex_pct: float = Field(
+        0.0,
+        description="The share of revenue this year's capex was. Equal in "
+                    "every year only where the start and the anchor agree; "
+                    "otherwise this is the capex fade made visible.",
+    )
     delta_nwc: float
     ufcf: float
     discount_factor: float
@@ -1120,6 +1136,7 @@ class ErrorResponse(BaseModel):
 
 PERCENT_NAMES = {
     "revenue_growth", "operating_margin", "tax_rate", "da_pct", "capex_pct",
+    "capex_terminal_pct",
     "nwc_pct", "wacc", "terminal_growth", "risk_free_rate",
     "equity_risk_premium", "cost_of_debt", "dividend_growth", "cost_of_equity",
     "target_operating_margin", "speculative_revenue_growth",
@@ -1219,7 +1236,8 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
                 period=y.period, revenue=y.revenue,
                 revenue_growth=y.revenue_growth,
                 ebit=y.ebit, nopat=y.nopat,
-                da=y.da, capex=y.capex, delta_nwc=y.delta_nwc, ufcf=y.ufcf,
+                da=y.da, capex=y.capex, capex_pct=y.capex_pct,
+                delta_nwc=y.delta_nwc, ufcf=y.ufcf,
                 discount_factor=y.discount_factor, pv_ufcf=y.pv_ufcf,
             )
             for y in r.years

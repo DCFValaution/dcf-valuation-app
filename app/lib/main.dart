@@ -218,6 +218,26 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// Equity risk premium, carried only so the honesty note can be rebuilt.
   double? _equityRiskPremium;
 
+  /// The line under the capex slider describing where the glide ends.
+  ///
+  /// Null where there is nothing to say: no anchor, or an anchor so close to
+  /// the current rate that the fade is not a fact about this company. The
+  /// threshold is half a percentage point, which is where the glide stops
+  /// being visible in the figures it produces.
+  Widget? _capexFadeNote() {
+    final start = _slider['capex_pct'] ?? _fullAssumptions['capex_pct'];
+    final anchor = _fullAssumptions['capex_terminal_pct'];
+    if (start == null || anchor == null) return null;
+    if ((anchor - start).abs() < 0.005) return null;
+    final years = (_fullAssumptions['projection_years'] ?? 5).round();
+    final direction = anchor < start ? 'down to' : 'up to';
+    return _CapexFadeNote(
+      text: 'Capital spending glides $direction ${formatPercent(anchor)} of '
+          'revenue by year $years, the average of the last three years. The '
+          'perpetuity beyond that assumes the lower rate, not this one.',
+    );
+  }
+
   /// Locally computed result shown while dragging. Null when the displayed
   /// figure is the backend's own.
   DcfResult? _preview;
@@ -1169,13 +1189,22 @@ class _ValuationScreenState extends State<ValuationScreen> {
                                 // rather than in a general caveat area: the
                                 // user is looking at the growth slider at
                                 // the moment the figure moves the wrong way.
-                                noteFor: (name) =>
-                                    name == 'revenue_growth' &&
-                                        result.growthCostNote != null
-                                    ? _GrowthCostNote(
-                                        text: result.growthCostNote!,
-                                      )
-                                    : null,
+                                noteFor: (name) {
+                                  if (name == 'revenue_growth' &&
+                                      result.growthCostNote != null) {
+                                    return _GrowthCostNote(
+                                      text: result.growthCostNote!,
+                                    );
+                                  }
+                                  // The number on the capex row is only the
+                                  // first year of a glide. A reader seeing
+                                  // 33.9% is entitled to know the forecast
+                                  // does not hold it there.
+                                  if (name == 'capex_pct') {
+                                    return _capexFadeNote();
+                                  }
+                                  return null;
+                                },
                               ),
                             ],
                           ],
@@ -2250,6 +2279,39 @@ Future<void> _legalSheet(
 /// Toned as information rather than warning. Nothing is wrong - the model is
 /// describing a business that has to spend more to grow than growing earns
 /// it - and a red banner would say the opposite of what the words do.
+/// Quieter than the growth-cost note beside it: that one explains a figure
+/// moving the wrong way, this one just says what the forecast does next.
+class _CapexFadeNote extends StatelessWidget {
+  const _CapexFadeNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.timeline_rounded, size: 15, color: colors.textSecondary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: context.text.labelSmall?.copyWith(
+                color: colors.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
 class _GrowthCostNote extends StatelessWidget {
   const _GrowthCostNote({required this.text});
 

@@ -89,30 +89,36 @@ R_TAXES = 29
 R_NOPAT = 30
 R_DA_ADD = 31
 R_CAPEX_LESS = 32
-R_NWC_LESS = 33
-R_UFCF = 34
-R_DISCOUNT = 35
-R_PV_UFCF = 36
-R_EV_HEAD = 38
-R_PV_SUM = 39
-R_TV = 40
-R_PV_TV = 41
-R_EV = 42
-R_PLUS_CASH = 43
-R_LESS_DEBT = 44
-R_LESS_MINORITY = 45
-R_EQUITY = 46
-R_SHARES = 47
-R_INTRINSIC = 48
-R_PRICE = 49
-R_UPSIDE = 50
-R_TV_PCT = 51
-R_SENS_HEAD = 53
-R_SENS_LEGEND = 54
-R_SENS_COLS = 55
-R_SENS_FIRST = 56
-R_SENS_LAST = 60
-R_NOTES_HEAD = 62
+# The share of revenue each projected year's capex actually was. Written per
+# year rather than referenced from the single assumption cell, because the
+# capex fade means the years differ - and a workbook that pointed every year
+# at one cell would recalculate to a different answer than the API returned
+# the moment anyone opened it.
+R_CAPEX_PCT = 33
+R_NWC_LESS = 34
+R_UFCF = 35
+R_DISCOUNT = 36
+R_PV_UFCF = 37
+R_EV_HEAD = 39
+R_PV_SUM = 40
+R_TV = 41
+R_PV_TV = 42
+R_EV = 43
+R_PLUS_CASH = 44
+R_LESS_DEBT = 45
+R_LESS_MINORITY = 46
+R_EQUITY = 47
+R_SHARES = 48
+R_INTRINSIC = 49
+R_PRICE = 50
+R_UPSIDE = 51
+R_TV_PCT = 52
+R_SENS_HEAD = 54
+R_SENS_LEGEND = 55
+R_SENS_COLS = 56
+R_SENS_FIRST = 57
+R_SENS_LAST = 61
+R_NOTES_HEAD = 63
 
 SENSITIVITY_OFFSETS = (-0.01, -0.005, 0.0, 0.005, 0.01)
 
@@ -246,9 +252,14 @@ def build_workbook(report: ValuationReport) -> Workbook:
     for col in range(1, layout.last_col + 1):
         ws.cell(row=R_TITLE, column=col).fill = TITLE_FILL
 
-    fy_text = f"FY{report.fiscal_year}" if base_year else "the latest reported fiscal year"
+    # The base is the trailing twelve months where those were usable, and the
+    # workbook has to say which: a reader reconciling it against a 10-K needs
+    # to know whether to open the annual report or the latest 10-Q.
+    fy_text = (report.meta.get("base_label")
+               or (f"FY{report.fiscal_year}" if base_year
+                   else "the latest reported fiscal year"))
     _label(ws, R_SUBTITLE,
-           f"$ in millions except per-share data.  Base year: {fy_text}.  "
+           f"$ in millions except per-share data.  Base period: {fy_text}.  "
            "Every white cell is a formula - edit the shaded input cells and the "
            "whole model recalculates.",
            italic=True, color=GREY, size=9)
@@ -262,12 +273,16 @@ def build_workbook(report: ValuationReport) -> Workbook:
         (R_MARGIN, "Operating margin (EBIT % of revenue)", "operating_margin", PERCENT_2DP),
         (R_TAX, "Tax rate", "tax_rate", PERCENT_2DP),
         (R_DA, "Depreciation & amortisation (% of revenue)", "da_pct", PERCENT_2DP),
-        (R_CAPEX, "Capital expenditures (% of revenue)", "capex_pct", PERCENT_2DP),
+        (R_CAPEX, "Capital expenditures (% of revenue, year 1)", "capex_pct",
+         PERCENT_2DP),
         (R_NWC, "Change in net working capital (% of revenue growth)", "nwc_pct", PERCENT_2DP),
         (R_WACC, "WACC (discount rate)", "wacc", PERCENT_2DP),
         (R_TERMINAL, "Terminal growth rate (g)", "terminal_growth", PERCENT_2DP),
     ]
     fading = bool(getattr(a, "fade_enabled", False)) and len(result.years) > 1
+    # The base-year column is shown on the same basis as year one, which is
+    # the trailing intensity the fade starts from.
+    base_capex_pct = result.years[0].capex_pct if result.years else a.capex_pct
     for row, text, name, fmt in assumption_rows:
         if fading and name == "revenue_growth":
             # With a fade on, this cell is only where the glide starts, and
@@ -348,6 +363,8 @@ def build_workbook(report: ValuationReport) -> Workbook:
     _label(ws, R_NOPAT, "NOPAT (EBIT after tax)")
     _label(ws, R_DA_ADD, "Plus: depreciation & amortisation", indent=1)
     _label(ws, R_CAPEX_LESS, "Less: capital expenditures", indent=1)
+    _label(ws, R_CAPEX_PCT, "Capex (% of revenue, this year)", indent=1,
+           italic=True, color=GREY)
     _label(ws, R_NWC_LESS, "Less: change in net working capital", indent=1)
     _label(ws, R_UFCF, "Unlevered free cash flow", bold=True)
     _label(ws, R_DISCOUNT, "Discount factor @ WACC", indent=1, italic=True, color=GREY)
@@ -360,10 +377,11 @@ def build_workbook(report: ValuationReport) -> Workbook:
     _formula(ws, R_NOPAT, layout.base_col, f"={B}{R_EBIT}+{B}{R_TAXES}", CURRENCY)
     _formula(ws, R_DA_ADD, layout.base_col, f"={B}{R_REVENUE}*$B${R_DA}", CURRENCY)
     _formula(ws, R_CAPEX_LESS, layout.base_col, f"=-{B}{R_REVENUE}*$B${R_CAPEX}", CURRENCY)
+    _input(ws, R_CAPEX_PCT, base_capex_pct, PERCENT_2DP, column=layout.base_col)
     _style(ws.cell(row=R_NWC_LESS, column=layout.base_col, value=0), fmt=CURRENCY)
     _formula(ws, R_UFCF, layout.base_col,
-             f"=SUM({B}{R_NOPAT}:{B}{R_NWC_LESS})", CURRENCY,
-             bold=True, top_border=True)
+             f"={B}{R_NOPAT}+{B}{R_DA_ADD}+{B}{R_CAPEX_LESS}+{B}{R_NWC_LESS}",
+             CURRENCY, bold=True, top_border=True)
 
     for year_index, col in enumerate(layout.projection_cols):
         c = layout.letter(col)
@@ -386,11 +404,20 @@ def build_workbook(report: ValuationReport) -> Workbook:
         _formula(ws, R_TAXES, col, f"=-{c}{R_EBIT}*$B${R_TAX}", CURRENCY)
         _formula(ws, R_NOPAT, col, f"={c}{R_EBIT}+{c}{R_TAXES}", CURRENCY)
         _formula(ws, R_DA_ADD, col, f"={c}{R_REVENUE}*$B${R_DA}", CURRENCY)
-        _formula(ws, R_CAPEX_LESS, col, f"=-{c}{R_REVENUE}*$B${R_CAPEX}", CURRENCY)
+        # Each year carries its own intensity, and the cash line points at
+        # it. With no fade every one of them is the same number, and the
+        # workbook reads exactly as it did before.
+        _input(ws, R_CAPEX_PCT, result.years[year_index].capex_pct,
+               PERCENT_2DP, column=col)
+        _formula(ws, R_CAPEX_LESS, col, f"=-{c}{R_REVENUE}*{c}{R_CAPEX_PCT}", CURRENCY)
         _formula(ws, R_NWC_LESS, col,
                  f"=-({c}{R_REVENUE}-{prev}{R_REVENUE})*$B${R_NWC}", CURRENCY)
-        _formula(ws, R_UFCF, col, f"=SUM({c}{R_NOPAT}:{c}{R_NWC_LESS})", CURRENCY,
-                 bold=True, top_border=True)
+        # Named terms rather than a range: the capex-intensity row now sits
+        # inside what used to be a contiguous block, and SUM would have added
+        # a percentage to a pile of dollars.
+        _formula(ws, R_UFCF, col,
+                 f"={c}{R_NOPAT}+{c}{R_DA_ADD}+{c}{R_CAPEX_LESS}+{c}{R_NWC_LESS}",
+                 CURRENCY, bold=True, top_border=True)
         _formula(ws, R_DISCOUNT, col, f"=1/(1+$B${R_WACC})^{c}${R_PERIOD}", FACTOR)
         _formula(ws, R_PV_UFCF, col, f"={c}{R_UFCF}*{c}{R_DISCOUNT}", CURRENCY, bold=True)
 
