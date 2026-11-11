@@ -53,7 +53,7 @@ from statistics import median
 
 from dcf import FADE_EXPONENTIAL, FADE_LINEAR, Assumptions
 from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
-                         total_debt_of)
+                         reported, total_debt_of)
 
 # --- Global defaults ------------------------------------------------------
 DEFAULT_WACC = 0.085             # only used when WACC derivation fails
@@ -251,16 +251,29 @@ def _clamp(value: float, bounds: tuple[float, float]) -> tuple[float, bool]:
     return clamped, clamped != value
 
 
-def _net_working_capital(balance_row: dict) -> float:
+def _net_working_capital(balance_row: dict) -> float | None:
     """
     Non-cash, non-debt working capital.
 
     Cash and short-term investments are excluded because they are counted in
     the equity bridge, and short-term debt is excluded because it is financing,
     not operations. Including either would double-count.
+
+    The two structural terms have to be there. Banks and insurers do not
+    classify their balance sheets into current and non-current at all, and
+    reading those absences as zero produces a working capital of minus the
+    cash pile - a number with no meaning that the model would then project
+    forward. So this returns None rather than inventing one.
+
+    The three deductions are different: a company with no short-term
+    investments and no short-term debt reports neither, and nil is the
+    correct reading of that silence.
     """
-    current_assets = num(balance_row, "totalCurrentAssets")
-    current_liabilities = num(balance_row, "totalCurrentLiabilities")
+    current_assets = reported(balance_row, "totalCurrentAssets")
+    current_liabilities = reported(balance_row, "totalCurrentLiabilities")
+    if current_assets is None or current_liabilities is None:
+        return None
+
     cash = num(balance_row, "cashAndCashEquivalents")
     short_investments = num(balance_row, "shortTermInvestments")
     short_debt = num(balance_row, "shortTermDebt")
@@ -428,34 +441,27 @@ def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
     return wacc, detail, components
 
 
-def _reported(row: dict, name: str) -> float | None:
-    """The field as reported, or None where it was not reported at all.
-
-    `num` reads an absent field as zero, which is right for a quantity being
-    added up and wrong for one being read as evidence. A missing tax
-    provision is not a tax provision of nothing.
-    """
-    value = row.get(name)
-    if value is None:
-        return None
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if result != result else result  # NaN guard
-
-
 def _ratio_series(rows: list[dict], denominator_rows: list[dict],
-                  numerator: str, absolute: bool = False) -> list[float]:
-    """Each year's `numerator` over revenue, newest first."""
-    out = []
+                  numerator: str, absolute: bool = False
+                  ) -> tuple[list[float], int]:
+    """Each year's `numerator` over revenue, newest first, with a count of
+    the years dropped because the numerator was not reported.
+
+    A year with no figure is not a year of zero. It is dropped, and the
+    count comes back so the caller can say how many of the years it claims
+    to have measured it actually measured.
+    """
+    out, skipped = [], 0
     for row, den_row in zip(rows, denominator_rows):
         den = num(den_row, "revenue")
         if den <= 0:
             continue
-        value = num(row, numerator)
+        value = reported(row, numerator)
+        if value is None:
+            skipped += 1
+            continue
         out.append(abs(value) / den if absolute else value / den)
-    return out
+    return out, skipped
 
 
 def _ttm_capex_ratio(fin: CompanyFinancials) -> float | None:
@@ -571,25 +577,52 @@ def derive_assumptions(fin: CompanyFinancials,
     cf_window = cashflow[:RATIO_WINDOW]
 
     def median_ratio(rows: list[dict], numerator: str, denominator_rows: list[dict],
-                     denominator: str = "revenue", absolute: bool = False) -> float | None:
-        ratios = []
+                     denominator: str = "revenue", absolute: bool = False
+                     ) -> tuple[float | None, int, int]:
+        """(median, years measured, years skipped for want of a figure).
+
+        A year whose numerator was never reported is dropped rather than
+        scored as zero - the distinction that cost Amazon 70% of its value
+        through the tax rate, and that would cost more than twice that
+        through capital spending.
+        """
+        ratios, skipped = [], 0
         for row, den_row in zip(rows, denominator_rows):
             den = num(den_row, denominator)
             if den <= 0:
                 continue
-            value = num(row, numerator)
+            value = reported(row, numerator)
+            if value is None:
+                skipped += 1
+                continue
             ratios.append(abs(value) / den if absolute else value / den)
-        return median(ratios) if ratios else None
+        return (median(ratios) if ratios else None), len(ratios), skipped
+
+    def measured(detail: str, years: int, skipped: int) -> str:
+        """The detail line, with the years it could not measure named."""
+        if skipped:
+            return f"{detail}; {skipped} more reported no figure"
+        return detail
 
     # Operating margin
-    margin_value = median_ratio(window, "operatingIncome", window)
+    margin_value, margin_years, margin_skipped = median_ratio(
+        window, "operatingIncome", window)
     operating_margin = derive(
         "operating_margin", margin_value, CLAMP_OPERATING_MARGIN,
-        f"median operatingIncome / revenue over {len(window)} years",
-        0.0, "no usable revenue history",
+        measured(f"median operatingIncome / revenue over {margin_years} "
+                 f"years", margin_years, margin_skipped),
+        0.0,
+        # A zero margin is a company that earns nothing, which is a claim,
+        # and the old wording made it in the model's voice. Say instead
+        # which of the two absences caused it.
+        ("operating income not reported in any year; assumed nil"
+         if margin_skipped else "no usable revenue history; assumed nil"),
     )
     diagnostics["operating_margin_by_year"] = [
-        (r.get("fiscalYear"), (num(r, "operatingIncome") / num(r, "revenue")) if num(r, "revenue") > 0 else None)
+        (r.get("fiscalYear"),
+         (reported(r, "operatingIncome") / num(r, "revenue"))
+         if num(r, "revenue") > 0 and reported(r, "operatingIncome") is not None
+         else None)
         for r in income
     ]
 
@@ -621,7 +654,7 @@ def derive_assumptions(fin: CompanyFinancials,
         if pretax <= 0:
             continue          # a loss produces a benefit, not a rate
         profitable_years += 1
-        expense = _reported(row, "incomeTaxExpense")
+        expense = reported(row, "incomeTaxExpense")
         if expense is None:
             unreported_years += 1
             continue
@@ -630,7 +663,7 @@ def derive_assumptions(fin: CompanyFinancials,
     reported_rate = median(tax_ratios) if tax_ratios else None
     spread = max(tax_ratios) - min(tax_ratios) if len(tax_ratios) > 1 else 0.0
 
-    normalized = [r for r in (_reported(row, "effectiveTaxRate")
+    normalized = [r for r in (reported(row, "effectiveTaxRate")
                               for row in window) if r is not None]
     normalized_rate = median(normalized) if normalized else None
 
@@ -685,19 +718,21 @@ def derive_assumptions(fin: CompanyFinancials,
     )
     diagnostics["tax_rate_by_year"] = [
         (row.get("fiscalYear", "?"),
-         (_reported(row, "incomeTaxExpense") / num(row, "incomeBeforeTax")
+         (reported(row, "incomeTaxExpense") / num(row, "incomeBeforeTax")
           if num(row, "incomeBeforeTax") > 0
-          and _reported(row, "incomeTaxExpense") is not None else None),
-         _reported(row, "effectiveTaxRate"))
+          and reported(row, "incomeTaxExpense") is not None else None),
+         reported(row, "effectiveTaxRate"))
         for row in window
     ]
 
     # D&A and capex come from the cash flow statement, which reports them as
     # actual cash movements rather than accounting allocations.
-    da_value = median_ratio(cf_window, "depreciationAndAmortization", window)
+    da_value, da_years, da_skipped = median_ratio(
+        cf_window, "depreciationAndAmortization", window)
     da_pct = derive(
         "da_pct", da_value, CLAMP_DA_PCT,
-        f"median D&A / revenue over {len(cf_window)} years",
+        measured(f"median D&A / revenue over {da_years} years",
+                 da_years, da_skipped),
         0.0, "no cash flow history",
     )
 
@@ -711,8 +746,8 @@ def derive_assumptions(fin: CompanyFinancials,
     #
     # So the projection starts at what the company is spending now and glides
     # to a normalized level. See dcf.capex_path().
-    capex_ratios = _ratio_series(cf_window, window, "capitalExpenditure",
-                                 absolute=True)
+    capex_ratios, capex_skipped = _ratio_series(
+        cf_window, window, "capitalExpenditure", absolute=True)
 
     # The anchor: the mean, not the median, of the recent past. For a series
     # that trends, the mean sits closer to where the company is heading - it
@@ -722,10 +757,33 @@ def derive_assumptions(fin: CompanyFinancials,
     # companies that are not ramping.
     capex_terminal_value = (sum(capex_ratios) / len(capex_ratios)
                             if capex_ratios else None)
+
+    # If no year reported capital spending, the fallback cannot be nil.
+    # Nil capex is the single most value-inflating assumption available to
+    # this model - worth +111% on Alphabet, three times what a zero tax
+    # rate was worth - and a company that reported nothing is not a company
+    # that spent nothing. Depreciation is the standing proxy for the
+    # spending needed to keep the existing asset base intact, so a business
+    # whose capital spending did not arrive is modelled as replacing what
+    # it consumes and no more. It is a convention, it is named as one, and
+    # it is bounded by the company's own figures rather than by zero.
+    capex_missing_detail, capex_assumed = "", 0.0
+    if capex_terminal_value is None:
+        if da_value is not None:
+            capex_assumed = da_value
+            capex_missing_detail = (
+                f"no capital spending reported in {capex_skipped} year(s); "
+                f"assumed equal to depreciation at {da_value:.1%} of revenue")
+        else:
+            capex_missing_detail = (
+                "neither capital spending nor depreciation reported; "
+                "assumed nil, which flatters the valuation")
+
     capex_terminal_pct = derive(
         "capex_terminal_pct", capex_terminal_value, CLAMP_CAPEX_PCT,
-        f"mean capex / revenue over {len(capex_ratios)} years",
-        0.0, "no cash flow history",
+        measured(f"mean capex / revenue over {len(capex_ratios)} years",
+                 len(capex_ratios), capex_skipped),
+        capex_assumed, capex_missing_detail or "no cash flow history",
     )
 
     # The start: trailing-twelve-month intensity, the same figure the base
@@ -748,13 +806,14 @@ def derive_assumptions(fin: CompanyFinancials,
         # median keeps the old behaviour for the start as well as the anchor,
         # which collapses the fade to a flat line - the honest outcome when
         # there is nothing current to fade from.
-        capex_value = median_ratio(cf_window, "capitalExpenditure", window,
-                                   absolute=True)
-        capex_detail = (f"median capex / revenue over {len(cf_window)} years "
-                        "(no trailing figure reported)")
+        capex_value, capex_years, skipped = median_ratio(
+            cf_window, "capitalExpenditure", window, absolute=True)
+        capex_detail = measured(
+            f"median capex / revenue over {capex_years} years "
+            "(no trailing figure reported)", capex_years, skipped)
     capex_pct = derive(
         "capex_pct", capex_value, CLAMP_CAPEX_PCT, capex_detail,
-        0.0, "no cash flow history",
+        capex_assumed, capex_missing_detail or "no cash flow history",
     )
     diagnostics["capex_by_year"] = [
         (r.get("fiscalYear", "?"), ratio)
@@ -794,19 +853,33 @@ def derive_assumptions(fin: CompanyFinancials,
     # carry it. Where the ratio really is stable the two methods agree, and
     # most companies barely move.
     nwc_value, nwc_detail = None, ""
-    ratios = [
-        _net_working_capital(row) / revenue
-        for row, revenue in zip(balance, revenues)
-        if revenue > 0
-    ]
+    ratios, nwc_skipped = [], 0
+    for row, revenue in zip(balance, revenues):
+        if revenue <= 0:
+            continue
+        working_capital = _net_working_capital(row)
+        if working_capital is None:
+            # A balance sheet that does not split current from non-current,
+            # which is every bank and most insurers. Reading that as nil
+            # working capital would be a claim about the business drawn
+            # from the absence of a classification.
+            nwc_skipped += 1
+            continue
+        ratios.append(working_capital / revenue)
     if ratios:
         nwc_value = median(ratios)
-        nwc_detail = (f"median working capital as a share of revenue across "
-                      f"FY{years[-1]}-FY{years[0]} ({len(ratios)} years)")
+        nwc_detail = measured(
+            f"median working capital as a share of revenue across "
+            f"FY{years[-1]}-FY{years[0]} ({len(ratios)} years)",
+            len(ratios), nwc_skipped)
         diagnostics["nwc_ratios"] = ratios
     nwc_pct = derive(
         "nwc_pct", nwc_value, CLAMP_NWC_PCT, nwc_detail,
-        0.0, "no year had revenue to measure working capital against",
+        0.0,
+        ("no balance sheet reported current assets and liabilities; "
+         "working capital assumed to stay flat"
+         if nwc_skipped else
+         "no year had revenue to measure working capital against"),
     )
 
     # --- WACC: derived from CAPM + the company's own capital structure -----

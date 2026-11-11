@@ -292,6 +292,31 @@ def num(row: dict, name: str, default: float = 0.0) -> float:
     return default if result != result else result  # NaN guard
 
 
+def reported(row: dict, name: str, default=None) -> float | None:
+    """The field as reported, or None where it was not reported at all.
+
+    The companion to `num`, and the distinction between them is the whole
+    of a bug that was worth 70% of Amazon's value. `num` reads an absent
+    field as zero, which is right for a quantity being added up and wrong
+    for one being read as evidence: a missing tax provision is not a tax
+    provision of nothing, and a missing capital expenditure is not a
+    company that spent nothing.
+
+    Use `num` where zero is the correct reading of silence - an optional
+    deduction, a line that genuinely may not exist. Use this one wherever
+    the value is evidence for a derived ratio, and let the caller decide
+    between skipping the year, falling back, and saying so.
+    """
+    value = row.get(name)
+    if value is None:
+        return default
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    return default if result != result else result  # NaN guard
+
+
 def total_debt_of(balance_row: dict) -> float:
     """
     Interest-bearing debt, matching the base-year mapping.
@@ -299,8 +324,22 @@ def total_debt_of(balance_row: dict) -> float:
     Excludes capital leases, and stays consistent with base_year_from()
     because this figure is the denominator of the cost-of-debt calculation
     and the D in the WACC weighting.
+
+    Either line may legitimately be absent - plenty of companies carry no
+    short-term debt - so an absent line reads as nil here. What cannot be
+    read as nil is BOTH being absent, which is a balance sheet that did not
+    arrive rather than a company with no borrowings, and nets $0 of debt
+    into the equity bridge. debt_was_reported() answers that separately,
+    because this function has to keep returning a number for the
+    arithmetic around it.
     """
     return num(balance_row, "shortTermDebt") + num(balance_row, "longTermDebt")
+
+
+def debt_was_reported(balance_row: dict) -> bool:
+    """Whether either debt line was actually on the balance sheet."""
+    return (reported(balance_row, "shortTermDebt") is not None
+            or reported(balance_row, "longTermDebt") is not None)
 
 
 # ---------------------------------------------------------------------------
@@ -509,8 +548,17 @@ def _cashflow_row(frame, column: int) -> dict:
             column),
         # Yahoo reports capex as a negative outflow, as FMP did; the
         # derivation takes its absolute value.
+        #
+        # The chain reaches property companies, which do not file a capital
+        # expenditure line at all: Realty Income and Prologis report
+        # "Purchase Of Investment Properties" instead, and reading its
+        # absence as nil capex valued both as though they never spent
+        # anything on the portfolio. Gross purchases, not the net of
+        # purchases and sales - selling a building is a disposal, not
+        # negative capital spending.
         "capitalExpenditure": _frame_value(
-            frame, ("Capital Expenditure", "Purchase Of PPE"), column),
+            frame, ("Capital Expenditure", "Purchase Of PPE",
+                    "Purchase Of Investment Properties"), column),
         "changeInWorkingCapital": _frame_value(
             frame, ("Change In Working Capital",), column),
         # Both reported as negative outflows. Banks report a single "Cash
@@ -2448,6 +2496,20 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
     cash_mm = (num(balance, "cashAndCashEquivalents")
                + num(balance, "totalInvestments")) / 1e6
 
+    # Absent is treated as nil, as it is for minority interest below, and
+    # for the same reason: the arithmetic needs a number. But the two are
+    # not the same claim, and net debt of nil moves Alphabet's per-share
+    # figure by 7.5% in the direction that flatters it, so a reader is
+    # entitled to know which one was made.
+    annual_notes = []
+    if not debt_was_reported(balance):
+        annual_notes.append("no debt reported on the balance sheet, treated "
+                            "as nil (inferred, not read)")
+    if (reported(balance, "cashAndCashEquivalents") is None
+            and reported(balance, "totalInvestments") is None):
+        annual_notes.append("no cash reported on the balance sheet, treated "
+                            "as nil (inferred, not read)")
+
     balance_year = balance.get("fiscalYear", "?")
     if balance_year != fiscal_year:
         period_end = f"{period_end} (balance sheet FY{balance_year})"
@@ -2493,6 +2555,7 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
                        "(excl. capital leases)",
         "cash_source": "balance sheet: Cash And Cash Equivalents + "
                        "Other Short Term Investments + Investments And Advances",
+        "base_notes": annual_notes,
         "shares_source": shares_source,
         "minority_interest_source": minority_source,
         "minority_interest_reported": reported_minority is not None,

@@ -13,8 +13,20 @@ import api
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     api.reset_rate_limits()
+    # NOPE is a stand-in for an unknown ticker, and asking Yahoo whether it
+    # exists is a network round trip to learn something this test already
+    # knows. Refuse it here instead, so the 404 path - which is the one
+    # carrying the headers under test - runs offline.
+    import analysis
+    from market_data import TickerNotFoundError
+
+    def unknown(ticker, *args, **kwargs):
+        raise TickerNotFoundError(
+            f"No security found for {ticker!r} with the market data provider.")
+
+    monkeypatch.setattr(analysis, "fetch_financials", unknown)
     return TestClient(api.app)
 
 

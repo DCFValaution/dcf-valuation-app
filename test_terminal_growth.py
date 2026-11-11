@@ -208,9 +208,13 @@ def test_sliding_down_recovers_the_conservative_figure(monkeypatch, profitable):
     rest, not somewhere the user has been locked out of."""
     import analysis
     from assumptions import DEFAULT_TERMINAL_GROWTH
-    from test_api import PROFITABLE
+    from test_api import PROFITABLE, fake_fetch_financials
     monkeypatch.setattr(A, "fetch_risk_free_rate",
                         lambda tenor="year10": (0.047, "pinned for test"))
+    # The synthetic company, not whatever Yahoo serves for the ticker that
+    # names it. "GOOD" is Gladstone Commercial, a real REIT, and without
+    # this these two tests have been valuing it over the network.
+    monkeypatch.setattr(analysis, "fetch_financials", fake_fetch_financials)
 
     at_ceiling = analysis.value_company(PROFITABLE)
     dialled_down = analysis.value_company(
@@ -239,7 +243,8 @@ def test_the_sensitivity_centre_cell_still_matches_the_headline(
     import analysis
     monkeypatch.setattr(A, "fetch_risk_free_rate",
                         lambda tenor="year10": (0.047, "pinned for test"))
-    from test_api import PROFITABLE
+    from test_api import PROFITABLE, fake_fetch_financials
+    monkeypatch.setattr(analysis, "fetch_financials", fake_fetch_financials)
     report = analysis.value_company(PROFITABLE)
     result = report.result
     centre = len(result.sensitivity) // 2
