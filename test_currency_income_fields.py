@@ -90,6 +90,11 @@ def test_no_money_field_is_left_out_of_a_conversion_list():
     not_money = {
         "date", "fiscalYear",
         "weightedAverageShsOut", "weightedAverageShsOutDil",  # counts
+        # A ratio, and the one field here that would be silently wrong if
+        # it were converted: both its terms are already in one currency, so
+        # the rate cancels and multiplying by the scalar would invent a tax
+        # rate of 0.19 x the exchange rate.
+        "effectiveTaxRate",
     }
     from market_data import _balance_row, _cashflow_row, _income_row
     import inspect

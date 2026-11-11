@@ -105,6 +105,30 @@ DEFAULT_FADE_START_YEAR = 3
 DEFAULT_FADE_PATTERN = "linear"
 FALLBACK_TAX_RATE = 0.21         # US federal statutory, when no taxed year exists
 
+# When the reported provisions stop describing a rate and start describing
+# one-off events. Both must hold together: a low rate on a steady series is
+# a real tax position - Simon Property pays 0.85%, Frontline 1.5%, Realty
+# Income 7.1%, every one of them within three points year to year - while a
+# low rate on a series that swings by a full turn of revenue is an average
+# of unrelated accidents. Qualcomm is the case: -44.8%, +56.2%, +2.2%,
+# median 2.2%. The gap between the widest steady series (2.4 points) and
+# the narrowest lumpy one (89.5 points) is wide enough that the exact
+# thresholds are not load-bearing.
+TAX_IMPLAUSIBLY_LOW = 0.05
+TAX_VOLATILE_SPREAD = 0.25
+
+# The same test the other way up. A median above half of pre-tax income is
+# usually a real rate - BP pays 81.9% on the UK Energy Profits Levy and
+# Norway's 78% petroleum rate - but it is equally the shape a year of
+# impairments leaves behind, and nothing distinguishes the two from the
+# ratio alone. The published rate does: it strips unusual items, so where
+# the two disagree by a wide margin the reported figure is carrying
+# something that is not tax policy. Ordinary disagreement between the two
+# runs under five points across the companies measured (Exxon 4.7, 3M 3.6,
+# Rio Tinto 1.9); BP's is 57.
+TAX_IMPLAUSIBLY_HIGH = 0.50
+TAX_NORMALIZED_DISAGREEMENT = 0.15
+
 # --- WACC inputs ----------------------------------------------------------
 # The risk-free rate is fetched live from the Treasury curve; this static value
 # is only the fallback when that lookup is unavailable. It will drift out of
@@ -130,7 +154,14 @@ SANE_WACC = (0.04, 0.20)
 # --- Clamps: (floor, ceiling) --------------------------------------------
 CLAMP_REVENUE_GROWTH = (0.00, 0.15)
 CLAMP_OPERATING_MARGIN = (-1.00, 0.60)
-CLAMP_TAX_RATE = (0.00, 0.35)
+# Raised from 0.35, which was below what real companies pay. Chevron's
+# three-year median is 35.5%, Shell's 39.8%, and BP's is 81.9% - two years
+# at about 82% on the UK Energy Profits Levy and Norway's 78% petroleum
+# rate. A ceiling that cuts off genuine figures is not a safety rail, it is
+# a quiet error, and clamping a tax rate DOWN inflates the valuation. The
+# wall is at 100%, where the figure stops being a rate a company can pay
+# out of its pre-tax income.
+CLAMP_TAX_RATE = (0.00, 1.00)
 CLAMP_DA_PCT = (0.00, 0.30)
 # Raised from 0.40, which was below what real companies spend. Intel's
 # three-year median is 45.1% and was being reported as 40.0%; Oracle's
@@ -397,6 +428,23 @@ def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
     return wacc, detail, components
 
 
+def _reported(row: dict, name: str) -> float | None:
+    """The field as reported, or None where it was not reported at all.
+
+    `num` reads an absent field as zero, which is right for a quantity being
+    added up and wrong for one being read as evidence. A missing tax
+    provision is not a tax provision of nothing.
+    """
+    value = row.get(name)
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if result != result else result  # NaN guard
+
+
 def _ratio_series(rows: list[dict], denominator_rows: list[dict],
                   numerator: str, absolute: bool = False) -> list[float]:
     """Each year's `numerator` over revenue, newest first."""
@@ -545,17 +593,104 @@ def derive_assumptions(fin: CompanyFinancials,
         for r in income
     ]
 
-    # Effective tax rate - only years with positive pre-tax income are
-    # meaningful; a loss year produces a benefit, not a rate.
-    tax_ratios = [
-        num(r, "incomeTaxExpense") / num(r, "incomeBeforeTax")
-        for r in window if num(r, "incomeBeforeTax") > 0
-    ]
+    # --- Effective tax rate ------------------------------------------
+    #
+    # Three sources, tried in order of how directly they answer the
+    # question. The fall-through is about the quality of the data, never
+    # about the answer being inconvenient: a company that genuinely pays
+    # very little keeps its rate.
+    #
+    #   1. The reported provision over pre-tax income, across profitable
+    #      years that actually reported a provision.
+    #   2. Yahoo's own normalized effective rate, where the reported
+    #      figures are missing, negative, or measuring one-off items.
+    #   3. The US statutory rate, said out loud as a default.
+    #
+    # The first of those used to be the only one, and it read a year with
+    # no tax line as a year of no tax: `num` returns zero for an absent
+    # field, and Yahoo serves a datacentre IP a thinner income statement
+    # than it serves a laptop. Amazon came out of the deployed backend at
+    # $61.63 a share against $36.09 from the same code run locally. Zero
+    # tax is the single most value-inflating thing this model can assume,
+    # and it was being inferred from silence.
+    tax_ratios: list[float] = []
+    profitable_years = 0      # years that could have shown a rate
+    unreported_years = 0      # ...of which, none did
+    for row in window:
+        pretax = num(row, "incomeBeforeTax")
+        if pretax <= 0:
+            continue          # a loss produces a benefit, not a rate
+        profitable_years += 1
+        expense = _reported(row, "incomeTaxExpense")
+        if expense is None:
+            unreported_years += 1
+            continue
+        tax_ratios.append(expense / pretax)
+
+    reported_rate = median(tax_ratios) if tax_ratios else None
+    spread = max(tax_ratios) - min(tax_ratios) if len(tax_ratios) > 1 else 0.0
+
+    normalized = [r for r in (_reported(row, "effectiveTaxRate")
+                              for row in window) if r is not None]
+    normalized_rate = median(normalized) if normalized else None
+
+    # Why the reported figures cannot be used, in words, or "" if they can.
+    # The tests are symmetric: a median too low to be a rate, and a median
+    # too high to be one, each confirmed by a second signal before the
+    # reported figures are set aside. Neither fires on a number that is
+    # merely unusual - only on one the data cannot support.
+    if reported_rate is None:
+        rejected = (f"no tax figure reported in {profitable_years} "
+                    "profitable year(s)" if profitable_years
+                    else "no profitable year in the window")
+    elif reported_rate <= 0:
+        rejected = (f"the reported provisions median to {reported_rate:.1%}, "
+                    "which is a one-off benefit rather than a rate this "
+                    "company pays")
+    elif reported_rate < TAX_IMPLAUSIBLY_LOW and spread > TAX_VOLATILE_SPREAD:
+        rejected = (f"the reported provisions swing {spread:.0%} across the "
+                    f"window and median to {reported_rate:.1%}, which "
+                    "measures one-off items rather than a rate")
+    elif (reported_rate > TAX_IMPLAUSIBLY_HIGH
+          and normalized_rate is not None
+          and abs(reported_rate - normalized_rate)
+          > TAX_NORMALIZED_DISAGREEMENT):
+        rejected = (f"the reported provisions median to {reported_rate:.1%}, "
+                    "inflated by one-off levies and impairments, against a "
+                    f"published rate of {normalized_rate:.1%}")
+    else:
+        rejected = ""
+
+    if not rejected:
+        tax_value = reported_rate
+        tax_detail = (f"median effective rate over {len(tax_ratios)} "
+                      f"profitable year(s)")
+        if unreported_years:
+            # Said out loud, because a rate drawn from one year of three is
+            # a weaker number than the same rate drawn from three.
+            tax_detail += f"; {unreported_years} more reported no tax figure"
+    elif normalized_rate is not None:
+        tax_value = normalized_rate
+        tax_detail = (f"normalized effective rate as published, median over "
+                      f"{len(normalized)} year(s), because {rejected}")
+    else:
+        tax_value = None
+        tax_detail = ""
+
     tax_rate = derive(
-        "tax_rate", median(tax_ratios) if tax_ratios else None, CLAMP_TAX_RATE,
-        f"median effective rate over {len(tax_ratios)} profitable year(s)",
-        FALLBACK_TAX_RATE, "no profitable year in window; used US statutory rate",
+        "tax_rate", tax_value, CLAMP_TAX_RATE, tax_detail,
+        FALLBACK_TAX_RATE,
+        f"tax data unavailable ({rejected}, and no normalized rate was "
+        "published); used US statutory rate",
     )
+    diagnostics["tax_rate_by_year"] = [
+        (row.get("fiscalYear", "?"),
+         (_reported(row, "incomeTaxExpense") / num(row, "incomeBeforeTax")
+          if num(row, "incomeBeforeTax") > 0
+          and _reported(row, "incomeTaxExpense") is not None else None),
+         _reported(row, "effectiveTaxRate"))
+        for row in window
+    ]
 
     # D&A and capex come from the cash flow statement, which reports them as
     # actual cash movements rather than accounting allocations.

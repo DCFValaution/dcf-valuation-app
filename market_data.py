@@ -386,6 +386,15 @@ def _income_row(frame, column: int) -> dict:
         "operatingIncome": operating_income,
         "incomeBeforeTax": pretax,
         "incomeTaxExpense": _frame_value(frame, ("Tax Provision",), column),
+        # Yahoo's own normalized effective rate, carried as a second
+        # opinion on the line above. It agrees with the reported provision
+        # to about a basis point where both exist - Alphabet .1678/.1680,
+        # Coca-Cola .1788/.1788, TSMC .1697/.1697 - and stays sensible
+        # exactly where the raw provision does not: AMD's provision swings
+        # -2.5%, +19.2%, -70.3% across three profitable years while this
+        # row reads 25.6%, 19.0%, 25.8%. It is a rate, not money, so it is
+        # deliberately absent from _MONEY_FIELDS_INCOME.
+        "effectiveTaxRate": _frame_value(frame, ("Tax Rate For Calcs",), column),
         "interestExpense": abs(interest) if interest is not None else None,
         "weightedAverageShsOutDil": _frame_value(
             frame, ("Diluted Average Shares", "Basic Average Shares"), column),
