@@ -49,6 +49,7 @@ provenance, so a clamped value is never silently passed off as observed.
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 from statistics import median
 
 from dcf import FADE_EXPONENTIAL, FADE_LINEAR, Assumptions
@@ -140,9 +141,71 @@ RISK_FREE_TENOR = "year10"  # matched to a ~perpetual horizon, not a short bill
 # Held as a global default because credible ERP estimates come from academic
 # and practitioner surveys (Damodaran, Fernandez et al.), not from company
 # filings. Mainstream estimates for developed markets cluster around 4.5-6%.
-DEFAULT_EQUITY_RISK_PREMIUM = 0.055
+# Damodaran's implied equity risk premium: what the S&P 500's own price
+# and expected cash flows imply investors are demanding, rather than what
+# they demanded on average since 1928. Published monthly at
+# pages.stern.nyu.edu/~adamodar, and the headline measure of the five he
+# gives - trailing twelve month, with adjusted payout.
+#
+# Configured rather than fetched. A valuation that silently changes because
+# someone else's web page changed is not reproducible, and a scrape that
+# fails at the wrong moment would leave the model with no premium at all.
+# The cost is that this goes stale, which is why the date travels with it
+# and the app says so.
+#
+# It replaces a hard-coded 5.5%, which was a reasonable long-run average and
+# 1.09 points above what the market is actually pricing.
+DAMODARAN_IMPLIED_ERP = 0.0441
+DAMODARAN_ERP_AS_OF = date(2026, 11, 1)
+
+# He republishes at the start of each month, so a figure more than two
+# months old means an update was missed rather than merely not yet due.
+ERP_STALE_AFTER_DAYS = 60
+
+DEFAULT_EQUITY_RISK_PREMIUM = DAMODARAN_IMPLIED_ERP
+
+
+def _today() -> date:
+    """Indirection so a test can age the premium without waiting."""
+    return date.today()
+
+
+def erp_age_days(today: date | None = None) -> int:
+    """Days since the configured premium was published."""
+    return ((today or _today()) - DAMODARAN_ERP_AS_OF).days
+
+
+def erp_is_stale(today: date | None = None) -> bool:
+    return erp_age_days(today) > ERP_STALE_AFTER_DAYS
+
+
+def erp_detail(today: date | None = None) -> str:
+    """The provenance line, which says how old the figure is when it matters."""
+    text = (f"Damodaran implied ERP, "
+            f"{DAMODARAN_ERP_AS_OF:%B %Y}")
+    if erp_is_stale(today):
+        text += (f" - published {erp_age_days(today)} days ago and due an "
+                 "update; check pages.stern.nyu.edu/~adamodar")
+    return text
 
 DEFAULT_BETA = 1.0          # market beta, when the company's own is unusable
+
+# Blume's adjustment: betas revert toward the market over time, so a beta
+# measured on five years of history overstates how far from 1.0 the company
+# will be over the decades a terminal value spans. Two thirds measured, one
+# third market, which is the form Bloomberg and most practitioners use.
+#
+# It cuts both ways and that is the point: it pulls NVIDIA's 2.34 down and
+# Coca-Cola's 0.24 up, because neither extreme persists. A company at the
+# market beta is left exactly where it is - 0.67 x 1.0 + 0.33 = 1.0 - so
+# the fallback needs no special case.
+BLUME_WEIGHT = 0.67
+BLUME_MARKET_WEIGHT = 0.33
+
+
+def blume_adjusted(raw: float) -> float:
+    """Pull a measured beta toward the market, as betas themselves do."""
+    return BLUME_WEIGHT * raw + BLUME_MARKET_WEIGHT * DEFAULT_BETA
 DEFAULT_DEBT_SPREAD = 0.02  # over risk-free, when interest expense is unusable
 
 # Sanity bands. Outside these, an input is treated as bad data rather than as
@@ -332,8 +395,10 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
         rf = record_input("risk_free_rate", FALLBACK_RISK_FREE_RATE, "default",
                           "Treasury curve unavailable; used documented static fallback")
 
-    erp = record_input("equity_risk_premium", DEFAULT_EQUITY_RISK_PREMIUM, "default",
-                       "global default (developed-market survey estimates cluster 4.5-6%)")
+    # "published" rather than "default": it is a figure someone computed
+    # and dated, not a number this model picked for want of one.
+    erp = record_input("equity_risk_premium", DAMODARAN_IMPLIED_ERP,
+                       "published", erp_detail())
 
     # --- Beta --------------------------------------------------------------
     raw_beta = num(fin.profile, "beta")
@@ -342,7 +407,11 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
         # quote endpoint was unavailable; the profile records which, so the
         # report can say rather than imply.
         source = fin.profile.get("betaSource") or "quoted by the market data provider"
-        beta = record_input("beta", raw_beta, "derived", source)
+        # Both numbers, because the adjustment is a judgement and a reader
+        # who disagrees with it should be able to see what it did.
+        beta = record_input(
+            "beta", blume_adjusted(raw_beta), "derived",
+            f"Blume-adjusted from raw {raw_beta:.3g}; {source}")
     else:
         reason = (fin.profile.get("betaSource")
                   or "not reported by the quote endpoint") if raw_beta == 0 \

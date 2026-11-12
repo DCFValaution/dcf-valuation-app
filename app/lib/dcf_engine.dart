@@ -427,6 +427,7 @@ String buildHonestyNote({
   required double wacc,
   required double terminalGrowth,
   double? equityRiskPremium,
+  String? equityRiskPremiumAsOf,
 }) {
   // Python does company_name.rstrip('.') to avoid "Apple Inc..".
   final name = companyName.replaceAll(RegExp(r'\.+$'), '');
@@ -437,10 +438,12 @@ String buildHonestyNote({
   return '\$${formatMoney(intrinsicValuePerShare)} is the output of these '
       'assumptions, not a fact about $name. It assumes a WACC of '
       '${formatPercent2(wacc)}$erpText, and '
-      '${formatPercent2(terminalGrowth)} growth in perpetuity; the equity '
-      'risk premium in particular has no single correct value. Move any of '
-      'them and the figure moves materially - the sensitivity table shows by '
-      'how much.'
+      '${formatPercent2(terminalGrowth)} growth in perpetuity. The equity '
+      'risk premium is Damodaran\'s implied premium, computed from what the '
+      'S&P 500 costs today against the cash flows it is expected to produce '
+      '(${equityRiskPremiumAsOf ?? ''}); a different but defensible premium '
+      'moves the figure materially, and the sensitivity table shows by how '
+      'much.'
       // Mirrors the backend sentence exactly; the parity test is the guard.
       ' The growth in perpetuity defaults to the current risk-free rate, '
       'held below the discount rate, and that is as high as it can be set: '

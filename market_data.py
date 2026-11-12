@@ -63,7 +63,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Iterable, Sequence
 
 from dcf import BaseYearData
@@ -1529,8 +1529,27 @@ def _monthly_closes(symbol: str) -> list[tuple[int, float]]:
         quote = (indicators.get("quote") or [{}])[0]
         series = quote.get("close")
 
-    return [(t, float(v)) for t, v in zip(stamps, series or [])
+    bars = [(t, float(v)) for t, v in zip(stamps, series or [])
             if v is not None]
+
+    # Yahoo returns sixty monthly bars and then repeats the last one,
+    # stamped with the moment of the request and carrying the same close.
+    # That duplicate is not a month: it is a 0.000000% return, and a month
+    # of zero return that never happened belongs in neither series.
+    #
+    # It is dropped here rather than in fetch_beta, because every caller of
+    # this function wants months and none of them wants this. Today it
+    # changes no beta, and only by luck: the index's copy is stamped a few
+    # seconds apart from each company's, so fetch_beta's intersection of
+    # timestamps already discards it. Resting on that is resting on the
+    # clock - were the two ever stamped alike, the fake month would enter
+    # both series and shift NVDA's beta by 0.0015 with nothing to say so.
+    if len(bars) >= 2:
+        previous = datetime.fromtimestamp(bars[-2][0], timezone.utc)
+        last = datetime.fromtimestamp(bars[-1][0], timezone.utc)
+        if (previous.year, previous.month) == (last.year, last.month):
+            bars = bars[:-1]
+    return bars
 
 
 def _returns(closes: Sequence[tuple[int, float]]) -> dict[int, float]:

@@ -218,6 +218,9 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// Equity risk premium, carried only so the honesty note can be rebuilt.
   double? _equityRiskPremium;
 
+  /// ...and the month it was published, which the same sentence names.
+  String? _equityRiskPremiumAsOf;
+
   /// The line under the capex slider describing where the glide ends.
   ///
   /// Null where there is nothing to say: no anchor, or an anchor so close to
@@ -356,6 +359,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
           _fullAssumptions['terminal_growth'] ??
           0,
       equityRiskPremium: _equityRiskPremium,
+      equityRiskPremiumAsOf: _equityRiskPremiumAsOf,
     );
   }
 
@@ -524,6 +528,8 @@ class _ValuationScreenState extends State<ValuationScreen> {
           for (final a in result.assumptions) a.name: a.value,
         };
         _equityRiskPremium = result.assumption('equity_risk_premium')?.value;
+        _equityRiskPremiumAsOf =
+            result.assumption('equity_risk_premium')?.asOf;
         final specs = _specsFor(result.method, result.assumptions);
         _derived = {
           for (final spec in specs)

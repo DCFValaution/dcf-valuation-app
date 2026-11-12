@@ -110,6 +110,12 @@ def main() -> int:
             "company_name": body["company"]["company_name"],
             "base_year": body["base_year"],
             "assumptions": assumptions,
+            # The honesty note names the month the premium was published,
+            # so the Dart copy needs it to reproduce the sentence.
+            "erp_as_of": next(
+                (a.get("as_of") for a in body.get("global_levers", [])
+                 + body.get("assumptions", [])
+                 if a["name"] == "equity_risk_premium"), None),
             "expected": {
                 "intrinsic_value_per_share": body["intrinsic_value_per_share"],
                 "current_price": body["current_price"],

@@ -81,6 +81,7 @@ from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       speculative_disclaimer, speculative_estimate_available,
                       value_company, value_company_relatively,
                       value_company_hypothetically, value_company_speculatively)
+from assumptions import DAMODARAN_ERP_AS_OF, erp_is_stale
 from relative import MAX_PEERS
 from hypothetical import (HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
                           NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
@@ -466,6 +467,15 @@ class AssumptionOut(BaseModel):
         None, description="Lowest value this assumption may be set to, if company-specific")
     max_value: float | None = Field(
         None, description="Highest value this assumption may be set to, if company-specific")
+    # Only the equity risk premium carries these. It is the one input taken
+    # from a figure someone else publishes monthly, so it is the one that
+    # can quietly go out of date while everything around it stays live.
+    as_of: str | None = Field(
+        None, description="When this input was published, where it comes from "
+                          "a dated external source")
+    is_stale: bool = Field(
+        False, description="True when a dated input is old enough to need "
+                           "refreshing")
 
 
 class SensitivityOut(BaseModel):
@@ -1163,7 +1173,12 @@ def _assumption_list(store: dict) -> list[AssumptionOut]:
     return [
         AssumptionOut(name=name, value=prov.value, source=prov.source,
                       detail=prov.detail, is_percent=name in PERCENT_NAMES,
-                      min_value=prov.allowed_min, max_value=prov.allowed_max)
+                      min_value=prov.allowed_min, max_value=prov.allowed_max,
+                      as_of=(f"{DAMODARAN_ERP_AS_OF:%B %Y}"
+                             if name == "equity_risk_premium" else None),
+                      is_stale=(name == "equity_risk_premium"
+                                and prov.source != "override"
+                                and erp_is_stale()))
         for name, prov in store.items()
     ]
 

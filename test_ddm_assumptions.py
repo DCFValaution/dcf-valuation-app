@@ -286,7 +286,7 @@ def test_cost_of_equity_is_capm_on_exactly_the_dcfs_inputs():
     fin = bank(beta=1.2)
     derived = derive(fin=fin)
     assert derived.assumptions.cost_of_equity == pytest.approx(
-        0.045 + 1.2 * A.DEFAULT_EQUITY_RISK_PREMIUM)
+        0.045 + A.blume_adjusted(1.2) * A.DEFAULT_EQUITY_RISK_PREMIUM)
 
     # The same helper the DCF's WACC build-up calls, on the same company.
     def recorder(name, value, source, detail):
@@ -300,10 +300,32 @@ def test_cost_of_equity_is_capm_on_exactly_the_dcfs_inputs():
 
 
 def test_an_implausible_capm_result_falls_back_to_market_beta():
-    derived = derive(fin=bank(beta=3.9))      # 4.5% + 3.9 x 5.5% = 25.95%
+    """The guard still catches a cost of equity that cannot be right.
+
+    It can no longer be reached through beta - see the test below - so it
+    is provoked here through the premium, which a caller can set to
+    anything.
+    """
+    derived = derive(fin=bank(beta=3.9), overrides={"equity_risk_premium": 0.12})
     prov = derived.provenance["cost_of_equity"]
     assert prov.source == "default"
-    assert prov.value == pytest.approx(0.045 + A.DEFAULT_EQUITY_RISK_PREMIUM)
+    assert prov.value == pytest.approx(0.045 + 0.12)
+
+
+def test_no_believable_beta_can_produce_an_absurd_cost_of_equity():
+    """What the Blume adjustment bought.
+
+    Before it, a beta of 3.9 produced a 25.95% cost of equity and the guard
+    above had to catch it. Adjusted, the most extreme beta the model will
+    accept at all - 4.0, the top of SANE_BETA - comes out at 17.8%, inside
+    the plausible band. The guard is now a backstop for the premium and the
+    risk-free rate rather than for beta.
+    """
+    ceiling = 0.045 + A.blume_adjusted(A.SANE_BETA[1]) * A.DEFAULT_EQUITY_RISK_PREMIUM
+    assert ceiling < A.SANE_COST_OF_EQUITY[1] if hasattr(A, "SANE_COST_OF_EQUITY") \
+        else ceiling < 0.20
+    derived = derive(fin=bank(beta=A.SANE_BETA[1]))
+    assert derived.provenance["cost_of_equity"].source == "derived"
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +343,9 @@ def test_overrides_win_and_are_labelled():
 def test_overriding_a_capm_input_moves_the_cost_of_equity():
     base = derive().assumptions.cost_of_equity
     moved = derive(overrides={"equity_risk_premium": 0.045}).assumptions.cost_of_equity
-    assert moved == pytest.approx(base - 1.0 * 0.01)
+    # The default company's beta is 1.0, which the adjustment leaves alone,
+    # so the move is the change in the premium itself.
+    assert moved - base == pytest.approx(0.045 - A.DEFAULT_EQUITY_RISK_PREMIUM)
 
 
 def test_overriding_cost_of_equity_directly_wins_over_capm():

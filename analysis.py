@@ -17,7 +17,8 @@ attached, because a number on screen is what people remember.
 from dataclasses import dataclass, field
 from statistics import median
 
-from assumptions import DerivedAssumptions, derive_assumptions
+from assumptions import (DAMODARAN_ERP_AS_OF, DerivedAssumptions,
+                         derive_assumptions)
 from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
                             growth_below_terminal_warning, signed_pct,
@@ -939,8 +940,10 @@ def _ddm_honesty_note(report: DDMReport) -> str | None:
     return (
         f"${report.result.intrinsic_value_per_share:,.2f} is the output of these "
         f"assumptions, not a fact about {name}. It assumes a cost of equity of "
-        f"{a.cost_of_equity:.2%}{erp_text} and {growth}; the equity risk premium "
-        "in particular has no single correct value. It values only the dividends "
+        f"{a.cost_of_equity:.2%}{erp_text} and {growth}. The equity risk premium is "
+        f"Damodaran's implied premium for {DAMODARAN_ERP_AS_OF:%B %Y}, not a survey "
+        "average, and a different but defensible one moves the figure. It values "
+        "only the dividends "
         "paid, so cash returned through share buybacks is not counted. Move any "
         "of them and the figure moves materially - the sensitivity table shows "
         "by how much."
@@ -2030,9 +2033,11 @@ def honesty_note(report: "ValuationReport") -> str | None:
         f"${report.result.intrinsic_value_per_share:,.2f} is the output of these assumptions, "
         f"not a fact about {name}. It assumes a WACC of "
         f"{report.derived.assumptions.wacc:.2%}{erp_text}, and "
-        f"{report.derived.assumptions.terminal_growth:.2%} growth in perpetuity; the equity "
-        "risk premium in particular has no single correct value. Move any of them and the "
-        "figure moves materially - the sensitivity table shows by how much."
+        f"{report.derived.assumptions.terminal_growth:.2%} growth in perpetuity. The "
+        "equity risk premium is Damodaran's implied premium, computed from what the "
+        f"S&P 500 costs today against the cash flows it is expected to produce "
+        f"({DAMODARAN_ERP_AS_OF:%B %Y}); a different but defensible premium moves the "
+        "figure materially, and the sensitivity table shows by how much."
         # Said without branching on whether the cap bound, so the Dart copy
         # of this sentence can be produced from the same two numbers. It is
         # true either way: when the cap binds, the figure tracks WACC, which
@@ -2051,9 +2056,11 @@ def _global_assumptions_block(report: "ValuationReport") -> list[str]:
 
     An intrinsic value printed without this reads as a measurement. It is not
     one: it is the output of assumptions a reasonable person could set
-    differently, and the equity risk premium in particular has no correct
-    value - credible published estimates span roughly 4.5-6%, which moves the
-    result substantially on its own.
+    differently. The equity risk premium is the clearest case: this model
+    uses Damodaran's implied premium, computed from the index's own price,
+    where a long-run historical average would be more than a point higher
+    and equally defensible - a difference worth a fifth of the answer on a
+    high-beta company.
     """
     out = ["\nGLOBAL ASSUMPTIONS - the main levers to adjust"]
     combined = {**report.derived.wacc_inputs, **report.derived.provenance}

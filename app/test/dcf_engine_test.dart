@@ -399,6 +399,7 @@ void main() {
           wacc: assumptions['wacc']!,
           terminalGrowth: assumptions['terminal_growth']!,
           equityRiskPremium: assumptions['equity_risk_premium'],
+          equityRiskPremiumAsOf: c['erp_as_of'] as String?,
         );
 
         if (built != c['note']) {

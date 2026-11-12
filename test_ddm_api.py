@@ -209,21 +209,28 @@ def test_a_lossmaking_non_financial_is_still_refused_not_rerouted(client):
 def test_the_ddm_figure_is_the_engines_figure_and_the_textbook_one(client):
     body = client.get(f"/valuation/{BANK}").json()
 
+    r = next(a["value"] for a in body["assumptions"]
+             if a["name"] == "cost_of_equity")
+
     engine = run_ddm(DDMInputs(2.80, 50.0),
-                     DDMAssumptions(cost_of_equity=0.10, dividend_growth=0.07,
+                     DDMAssumptions(cost_of_equity=r, dividend_growth=0.07,
                                     high_growth_years=5, terminal_growth=0.025))
     dividends = [2.80 * 1.07 ** t for t in range(1, 6)]
-    textbook = (sum(d / 1.10 ** t for t, d in enumerate(dividends, 1))
-                + dividends[-1] * 1.025 / (0.10 - 0.025) / 1.10 ** 5)
+    textbook = (sum(d / (1 + r) ** t for t, d in enumerate(dividends, 1))
+                + dividends[-1] * 1.025 / (r - 0.025) / (1 + r) ** 5)
 
     assert body["intrinsic_value_per_share"] == pytest.approx(engine.intrinsic_value_per_share)
     assert body["intrinsic_value_per_share"] == pytest.approx(textbook)
 
 
 def test_a_ddm_result_carries_its_own_honesty_note(client):
-    note = client.get(f"/valuation/{BANK}").json()["note"]
+    body = client.get(f"/valuation/{BANK}").json()
+    note = body["note"]
+    r = next(a["value"] for a in body["assumptions"]
+             if a["name"] == "cost_of_equity")
     assert "not a fact about Test Bank Corp" in note
-    assert "cost of equity of 10.00%" in note
+    assert f"cost of equity of {r:.2%}" in note
+    assert "Damodaran" in note, "the premium names its source"
     assert "7.00% a year for 5 years" in note
     assert "buybacks is not counted" in note
 
@@ -519,9 +526,11 @@ def test_a_recurring_variable_dividend_is_valued_and_disclosed_honestly(client):
     assert base["special_dividends_excluded"] == []
     assert len(base["variable_dividends_included"]) == 4
 
-    # Regular growth is flat, so: 4.43 a year for 5 years at 10%, then 2.5%.
-    textbook = (sum(4.43 / 1.10 ** t for t in range(1, 6))
-                + 4.43 * 1.025 / (0.10 - 0.025) / 1.10 ** 5)
+    # Regular growth is flat, so: 4.43 a year for 5 years, then 2.5%.
+    r = next(a["value"] for a in body["assumptions"]
+             if a["name"] == "cost_of_equity")
+    textbook = (sum(4.43 / (1 + r) ** t for t in range(1, 6))
+                + 4.43 * 1.025 / (r - 0.025) / (1 + r) ** 5)
     assert body["intrinsic_value_per_share"] == pytest.approx(textbook)
 
     warning = next(w for w in body["warnings"] if "variable dividend" in w)

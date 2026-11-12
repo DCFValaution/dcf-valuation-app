@@ -10,7 +10,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -27,26 +27,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 187.52976757753677,
-        "current_price": 342.37,
-        "upside_downside": -0.45225993055017444,
-        "enterprise_value": 2714608.861484645,
-        "equity_value": 2771432.861484645,
-        "terminal_value": 3477802.1070713503,
-        "pv_terminal_value": 2094663.9559584802,
-        "pv_ufcf_sum": 619944.9055261648,
-        "tv_pct_of_ev": 0.7716264341717682
+        "intrinsic_value_per_share": 237.99256668262515,
+        "current_price": 348.51,
+        "upside_downside": -0.31711409519777006,
+        "enterprise_value": 3460379.8477602783,
+        "equity_value": 3517203.8477602783,
+        "terminal_value": 4448109.036002777,
+        "pv_terminal_value": 2821256.619425938,
+        "pv_ufcf_sum": 639123.2283343404,
+        "tv_pct_of_ev": 0.8153025805106306
       },
-      "note": "$187.53 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$237.99 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "high growth",
@@ -59,7 +60,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -76,26 +77,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 226.84120704729656,
-        "current_price": 342.37,
-        "upside_downside": -0.33743842320502215,
-        "enterprise_value": 3295578.0408641817,
-        "equity_value": 3352402.0408641817,
-        "terminal_value": 4297031.064828332,
-        "pv_terminal_value": 2588081.7286379123,
-        "pv_ufcf_sum": 707496.3122262695,
-        "tv_pct_of_ev": 0.7853195089136028
+        "intrinsic_value_per_share": 289.10861194905414,
+        "current_price": 348.51,
+        "upside_downside": -0.1704438554157581,
+        "enterprise_value": 4215804.916700038,
+        "equity_value": 4272628.916700038,
+        "terminal_value": 5495902.906201616,
+        "pv_terminal_value": 3485830.119797873,
+        "pv_ufcf_sum": 729974.7969021649,
+        "tv_pct_of_ev": 0.8268480607320037
       },
-      "note": "$226.84 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$289.11 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "zero growth",
@@ -108,7 +110,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -125,26 +127,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 131.3695593454963,
-        "current_price": 342.37,
-        "upside_downside": -0.6162936024023825,
-        "enterprise_value": 1884637.9794605726,
-        "equity_value": 1941461.9794605726,
-        "terminal_value": 2323054.617584863,
-        "pv_terminal_value": 1399164.9396278006,
-        "pv_ufcf_sum": 485473.039832772,
-        "tv_pct_of_ev": 0.7424051488277204
+        "intrinsic_value_per_share": 165.17467008674421,
+        "current_price": 348.51,
+        "upside_downside": -0.5260547184105356,
+        "enterprise_value": 2384231.1694093905,
+        "equity_value": 2441055.1694093905,
+        "terminal_value": 2971186.9501133785,
+        "pv_terminal_value": 1884504.3551567518,
+        "pv_ufcf_sum": 499726.8142526387,
+        "tv_pct_of_ev": 0.7904033716762336
       },
-      "note": "$131.37 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$165.17 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "low WACC",
@@ -157,7 +160,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -179,13 +182,14 @@
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
         "intrinsic_value_per_share": 758.2360421854902,
-        "current_price": 342.37,
-        "upside_downside": 1.214668464484301,
+        "current_price": 348.51,
+        "upside_downside": 1.1756507480000293,
         "enterprise_value": 11148865.161887709,
         "equity_value": 11205689.161887709,
         "terminal_value": 13303168.19854964,
@@ -193,7 +197,7 @@
         "pv_ufcf_sum": 725484.7813929964,
         "tv_pct_of_ev": 0.9349274772940066
       },
-      "note": "$758.24 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 5.00%, an equity risk premium of 5.50%, and 3.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$758.24 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 5.00%, an equity risk premium of 4.41%, and 3.50% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "high WACC",
@@ -206,7 +210,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -224,25 +228,26 @@
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
         "wacc": 0.18,
-        "terminal_growth": 0.04859000205993652,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 84.24264527450453,
-        "current_price": 342.37,
-        "upside_downside": -0.7539426781712635,
-        "enterprise_value": 1188166.8004905055,
-        "equity_value": 1244990.8004905055,
-        "terminal_value": 1538449.6787231192,
-        "pv_terminal_value": 672470.5332766635,
+        "intrinsic_value_per_share": 84.7304261449088,
+        "current_price": 348.51,
+        "upside_downside": -0.7568780633413423,
+        "enterprise_value": 1195375.5330075074,
+        "equity_value": 1252199.5330075074,
+        "terminal_value": 1554941.5124555866,
+        "pv_terminal_value": 679679.2657936653,
         "pv_ufcf_sum": 515696.26721384213,
-        "tv_pct_of_ev": 0.565973172284439
+        "tv_pct_of_ev": 0.5685905784633427
       },
-      "note": "$84.24 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 18.00%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$84.73 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 18.00%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "thin margin",
@@ -255,7 +260,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -272,26 +277,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 39.88086641406344,
-        "current_price": 342.37,
-        "upside_downside": -0.88351530094908,
-        "enterprise_value": 532560.528932004,
-        "equity_value": 589384.528932004,
-        "terminal_value": 675672.1468149619,
-        "pv_terminal_value": 406954.17634622497,
-        "pv_ufcf_sum": 125606.35258577898,
-        "tv_pct_of_ev": 0.764146334994691
+        "intrinsic_value_per_share": 49.69206814590105,
+        "current_price": 348.51,
+        "upside_downside": -0.8574156605380017,
+        "enterprise_value": 677556.6393709895,
+        "equity_value": 734380.6393709895,
+        "terminal_value": 864184.7031813784,
+        "pv_terminal_value": 548117.5921101187,
+        "pv_ufcf_sum": 129439.04726087078,
+        "tv_pct_of_ev": 0.8089620265826991
       },
-      "note": "$39.88 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$49.69 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "fat margin",
@@ -304,7 +310,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -321,26 +327,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 313.6007828850987,
-        "current_price": 342.37,
-        "upside_downside": -0.08402960865409155,
-        "enterprise_value": 4577765.624368424,
-        "equity_value": 4634589.624368424,
-        "terminal_value": 5870419.77187965,
-        "pv_terminal_value": 3535726.393833607,
-        "pv_ufcf_sum": 1042039.2305348163,
-        "tv_pct_of_ev": 0.77236946666998
+        "intrinsic_value_per_share": 398.77422402229865,
+        "current_price": 348.51,
+        "upside_downside": 0.14422605957447035,
+        "enterprise_value": 5836512.31158844,
+        "equity_value": 5893336.31158844,
+        "terminal_value": 7508267.126336384,
+        "pv_terminal_value": 4762191.789621739,
+        "pv_ufcf_sum": 1074320.5219667014,
+        "tv_pct_of_ev": 0.8159310792793789
       },
-      "note": "$313.60 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$398.77 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "terminal growth near zero",
@@ -353,7 +360,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -370,26 +377,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
+        "wacc": 0.09533399491088533,
         "terminal_growth": 0.001,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 120.19062532847654,
-        "current_price": 342.37,
-        "upside_downside": -0.6489452191241156,
-        "enterprise_value": 1719428.661007558,
-        "equity_value": 1776252.661007558,
-        "terminal_value": 1825489.4350126034,
-        "pv_terminal_value": 1099483.7554813933,
-        "pv_ufcf_sum": 619944.9055261648,
-        "tv_pct_of_ev": 0.6394471491693718
+        "intrinsic_value_per_share": 134.89355246927218,
+        "current_price": 348.51,
+        "upside_downside": -0.6129420892678196,
+        "enterprise_value": 1936717.7664354076,
+        "equity_value": 1993541.7664354076,
+        "terminal_value": 2045840.8321500528,
+        "pv_terminal_value": 1297594.538101067,
+        "pv_ufcf_sum": 639123.2283343404,
+        "tv_pct_of_ev": 0.6699967132998074
       },
-      "note": "$120.19 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 0.10% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$134.89 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 0.10% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "heavy capex",
@@ -402,7 +410,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -419,26 +427,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.35,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 162.1200193246547,
-        "current_price": 342.37,
-        "upside_downside": -0.5264771465821927,
-        "enterprise_value": 2339087.6190719022,
-        "equity_value": 2395911.6190719022,
-        "terminal_value": 3477802.1070713503,
-        "pv_terminal_value": 2094663.9559584802,
-        "pv_ufcf_sum": 244423.663113422,
-        "tv_pct_of_ev": 0.895504699729716
+        "intrinsic_value_per_share": 212.05763447435172,
+        "current_price": 348.51,
+        "upside_downside": -0.39153070364020626,
+        "enterprise_value": 3077097.1065140544,
+        "equity_value": 3133921.1065140544,
+        "terminal_value": 4448109.036002777,
+        "pv_terminal_value": 2821256.619425938,
+        "pv_ufcf_sum": 255840.48708811653,
+        "tv_pct_of_ev": 0.9168565442583806
       },
-      "note": "$162.12 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$212.06 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "capex ramping down hard",
@@ -452,7 +461,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -469,26 +478,27 @@
         "capex_terminal_pct": 0.05,
         "capex_pct": 0.4,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 143.44016131084626,
-        "current_price": 342.37,
-        "upside_downside": -0.581037587081677,
-        "enterprise_value": 2063024.9277131506,
-        "equity_value": 2119848.9277131506,
-        "terminal_value": 3159016.161563546,
-        "pv_terminal_value": 1902660.6707906383,
-        "pv_ufcf_sum": 160364.25692251232,
-        "tv_pct_of_ev": 0.9222674167586162
+        "intrinsic_value_per_share": 188.71411529434434,
+        "current_price": 348.51,
+        "upside_downside": -0.45851162005582524,
+        "enterprise_value": 2732111.8969983407,
+        "equity_value": 2788935.8969983407,
+        "terminal_value": 4040381.7987684417,
+        "pv_terminal_value": 2562651.635227682,
+        "pv_ufcf_sum": 169460.2617706586,
+        "tv_pct_of_ev": 0.9379746261648955
       },
-      "note": "$143.44 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$188.71 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "capex ramping up",
@@ -502,7 +512,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -519,26 +529,27 @@
         "capex_terminal_pct": 0.3,
         "capex_pct": 0.05,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 24.602439865399067,
-        "current_price": 342.37,
-        "upside_downside": -0.928140783756173,
-        "enterprise_value": 306766.3312655428,
-        "equity_value": 363590.3312655428,
-        "terminal_value": 29846.39582711539,
-        "pv_terminal_value": 17976.344722780854,
-        "pv_ufcf_sum": 288789.9865427619,
-        "tv_pct_of_ev": 0.05859947096743217
+        "intrinsic_value_per_share": 25.43195562608542,
+        "current_price": 348.51,
+        "upside_downside": -0.9270266115001422,
+        "enterprise_value": 319025.43694237916,
+        "equity_value": 375849.43694237916,
+        "terminal_value": 38173.541473440666,
+        "pv_terminal_value": 24211.941680650794,
+        "pv_ufcf_sum": 294813.49526172836,
+        "tv_pct_of_ev": 0.0758934519852216
       },
-      "note": "$24.60 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$25.43 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "capex flat by coincidence",
@@ -552,7 +563,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -569,26 +580,27 @@
         "capex_terminal_pct": 0.12,
         "capex_pct": 0.12,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 124.13211323871647,
-        "current_price": 342.37,
-        "upside_downside": -0.6374328555693651,
-        "enterprise_value": 1777678.4485409793,
-        "equity_value": 1834502.4485409793,
-        "terminal_value": 2282848.627157346,
-        "pv_terminal_value": 1374949.0594916386,
-        "pv_ufcf_sum": 402729.3890493407,
-        "tv_pct_of_ev": 0.7734520608156785
+        "intrinsic_value_per_share": 157.2502928276416,
+        "current_price": 348.51,
+        "upside_downside": -0.5487925946812384,
+        "enterprise_value": 2267119.737841076,
+        "equity_value": 2323943.737841076,
+        "terminal_value": 2919763.486725841,
+        "pv_terminal_value": 1851888.5210345131,
+        "pv_ufcf_sum": 415231.21680656297,
+        "tv_pct_of_ev": 0.8168463668346084
       },
-      "note": "$124.13 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$157.25 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "capex fade over one year",
@@ -603,7 +615,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -620,26 +632,27 @@
         "capex_terminal_pct": 0.1,
         "capex_pct": 0.3,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 1.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 5.276434059016745,
-        "current_price": 342.37,
-        "upside_downside": -0.9845885034932478,
-        "enterprise_value": 21154.4614011726,
-        "equity_value": 77978.4614011726,
-        "terminal_value": 22182.35672423242,
-        "pv_terminal_value": 20043.316471431255,
-        "pv_ufcf_sum": 1111.1449297413442,
-        "tv_pct_of_ev": 0.9474746764443857
+        "intrinsic_value_per_share": 5.673638563818843,
+        "current_price": 348.51,
+        "upside_downside": -0.9837202990909333,
+        "enterprise_value": 27024.599414771503,
+        "equity_value": 83848.59941477151,
+        "terminal_value": 28371.235150002423,
+        "pv_terminal_value": 25901.90323848267,
+        "pv_ufcf_sum": 1122.6961762888332,
+        "tv_pct_of_ev": 0.9584565099723487
       },
-      "note": "$5.28 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$5.67 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "no D&A",
@@ -652,7 +665,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -669,26 +682,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 168.99098116452106,
-        "current_price": 342.37,
-        "upside_downside": -0.5064083267677628,
-        "enterprise_value": 2440631.0149764447,
-        "equity_value": 2497455.0149764447,
-        "terminal_value": 3125966.8517775116,
-        "pv_terminal_value": 1882755.2259588712,
-        "pv_ufcf_sum": 557875.7890175737,
-        "tv_pct_of_ev": 0.7714214948534702
+        "intrinsic_value_per_share": 214.34956835125456,
+        "current_price": 348.51,
+        "upside_downside": -0.3849543245494977,
+        "enterprise_value": 3110968.746973333,
+        "equity_value": 3167792.746973333,
+        "terminal_value": 3998111.730211634,
+        "pv_terminal_value": 2535841.4312164406,
+        "pv_ufcf_sum": 575127.3157568926,
+        "tv_pct_of_ev": 0.8151291888366173
       },
-      "note": "$168.99 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$214.35 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "negative NWC swing",
@@ -701,7 +715,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -718,26 +732,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.1,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 186.37540065959016,
-        "current_price": 342.37,
-        "upside_downside": -0.45563162467625623,
-        "enterprise_value": 2697548.9010744384,
-        "equity_value": 2754372.9010744384,
-        "terminal_value": 3455894.147713592,
-        "pv_terminal_value": 2081468.8944217719,
-        "pv_ufcf_sum": 616080.0066526664,
-        "tv_pct_of_ev": 0.7716148884614175
+        "intrinsic_value_per_share": 236.5203724134448,
+        "current_price": 348.51,
+        "upside_downside": -0.3213383477850139,
+        "enterprise_value": 3438622.834840135,
+        "equity_value": 3495446.834840135,
+        "terminal_value": 4420088.755095624,
+        "pv_terminal_value": 2803484.4824689454,
+        "pv_ufcf_sum": 635138.3523711897,
+        "tv_pct_of_ev": 0.8152928125946334
       },
-      "note": "$186.38 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$236.52 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "high tax",
@@ -750,7 +765,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -767,26 +782,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.1066254699091487,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09524024541683833,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 5.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 151.91858008419777,
-        "current_price": 342.37,
-        "upside_downside": -0.5562736802751475,
-        "enterprise_value": 2188324.3332711477,
-        "equity_value": 2245148.3332711477,
-        "terminal_value": 2801906.2453237977,
-        "pv_terminal_value": 1688302.606792329,
-        "pv_ufcf_sum": 500021.72647881834,
-        "tv_pct_of_ev": 0.7715047450341254
+        "intrinsic_value_per_share": 192.6556676749843,
+        "current_price": 348.51,
+        "upside_downside": -0.44720189470894867,
+        "enterprise_value": 2790362.6373158856,
+        "equity_value": 2847186.6373158856,
+        "terminal_value": 3585143.0310686547,
+        "pv_terminal_value": 2274885.3676644587,
+        "pv_ufcf_sum": 515477.2696514268,
+        "tv_pct_of_ev": 0.815265133370881
       },
-      "note": "$151.92 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.66%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$192.66 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.52%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "short horizon",
@@ -799,7 +815,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -816,26 +832,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 1.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 174.03071975687462,
-        "current_price": 342.37,
-        "upside_downside": -0.49168817432346695,
-        "enterprise_value": 2515111.44188982,
-        "equity_value": 2571935.44188982,
-        "terminal_value": 2637320.712032216,
-        "pv_terminal_value": 2383004.39962613,
-        "pv_ufcf_sum": 132107.04226369035,
-        "tv_pct_of_ev": 0.9474746764443858
+        "intrinsic_value_per_share": 221.25544346184955,
+        "current_price": 348.51,
+        "upside_downside": -0.36513889569352515,
+        "enterprise_value": 3213028.1131531503,
+        "equity_value": 3269852.1131531503,
+        "terminal_value": 3373133.297658073,
+        "pv_terminal_value": 3079547.711775809,
+        "pv_ufcf_sum": 133480.40137734142,
+        "tv_pct_of_ev": 0.9584565099723487
       },
-      "note": "$174.03 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$221.26 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "long horizon",
@@ -848,7 +865,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -865,26 +882,27 @@
         "capex_terminal_pct": 0.024531108139415735,
         "capex_pct": 0.01888128244861476,
         "nwc_pct": -0.12447757140612517,
-        "wacc": 0.10672087405545135,
-        "terminal_growth": 0.04859000205993652,
+        "wacc": 0.09533399491088533,
+        "terminal_growth": 0.04982999801635742,
         "projection_years": 15.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
-        "intrinsic_value_per_share": 222.3841882870866,
-        "current_price": 342.37,
-        "upside_downside": -0.35045655785528346,
-        "enterprise_value": 3229709.4141609985,
-        "equity_value": 3286533.4141609985,
-        "terminal_value": 7303236.91796836,
-        "pv_terminal_value": 1595672.9008529629,
-        "pv_ufcf_sum": 1634036.5133080357,
-        "tv_pct_of_ev": 0.49406082598532497
+        "intrinsic_value_per_share": 284.67764837546696,
+        "current_price": 348.51,
+        "upside_downside": -0.18315787674538186,
+        "enterprise_value": 4150321.349933479,
+        "equity_value": 4207145.349933479,
+        "terminal_value": 9340840.314298442,
+        "pv_terminal_value": 2383347.9322883897,
+        "pv_ufcf_sum": 1766973.4176450896,
+        "tv_pct_of_ev": 0.5742562397792619
       },
-      "note": "$222.38 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.67%, an equity risk premium of 5.50%, and 4.86% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$284.68 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.53%, an equity risk premium of 4.41%, and 4.98% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     },
     {
       "label": "everything moved",
@@ -906,7 +924,7 @@
         "total_debt": 80111.0,
         "cash": 136935.0,
         "shares": 14778.629,
-        "current_price": 342.37,
+        "current_price": 348.51,
         "fiscal_year": "2026",
         "base_label": "TTM as of 2026-09-30",
         "base_period": "ttm",
@@ -928,13 +946,14 @@
         "projection_years": 7.0,
         "fade_enabled": 0.0,
         "fade_start_year": 3.0,
-        "risk_free_rate": 0.04859000205993652,
-        "equity_risk_premium": 0.055
+        "risk_free_rate": 0.04982999801635742,
+        "equity_risk_premium": 0.0441
       },
+      "erp_as_of": "November 2026",
       "expected": {
         "intrinsic_value_per_share": 125.14704321149537,
-        "current_price": 342.37,
-        "upside_downside": -0.6344684311957959,
+        "current_price": 348.51,
+        "upside_downside": -0.640908314792989,
         "enterprise_value": 1792677.7220696588,
         "equity_value": 1849501.7220696588,
         "terminal_value": 2332253.06785989,
@@ -942,7 +961,7 @@
         "pv_ufcf_sum": 669328.4156090638,
         "tv_pct_of_ev": 0.6266320446955075
       },
-      "note": "$125.15 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 11.00%, an equity risk premium of 5.50%, and 2.00% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
+      "note": "$125.15 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 11.00%, an equity risk premium of 4.41%, and 2.00% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the current risk-free rate, held below the discount rate, and that is as high as it can be set: it can be moved down but not up."
     }
   ]
 }

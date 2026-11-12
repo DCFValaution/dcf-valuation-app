@@ -125,6 +125,13 @@ class Assumption {
   final double? minValue;
   final double? maxValue;
 
+  /// When a dated external figure was published, and whether it is old
+  /// enough to need refreshing. Only the equity risk premium carries
+  /// these: it is the one input taken from someone else's monthly
+  /// publication, so it is the one that can go out of date on its own.
+  final String? asOf;
+  final bool isStale;
+
   const Assumption({
     required this.name,
     required this.value,
@@ -133,6 +140,8 @@ class Assumption {
     required this.isPercent,
     this.minValue,
     this.maxValue,
+    this.asOf,
+    this.isStale = false,
   });
 
   bool get isOverridden => source == 'override';
@@ -145,6 +154,8 @@ class Assumption {
     isPercent: json['is_percent'] as bool? ?? false,
     minValue: (json['min_value'] as num?)?.toDouble(),
     maxValue: (json['max_value'] as num?)?.toDouble(),
+    asOf: json['as_of'] as String?,
+    isStale: json['is_stale'] as bool? ?? false,
   );
 }
 
