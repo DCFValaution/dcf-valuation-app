@@ -47,3 +47,70 @@ the missing `Tax Provision` row that cost Amazon 70% of its value had to be
 inferred from a local/production diff rather than observed. Dumping
 `income_stmt.index` would turn the next one of those from detective work
 into a lookup.
+
+## Route REITs to the dividend discount model
+
+Realty Income and Prologis are refused today, and correctly: once their
+real property spending was read, an unlevered free cash flow model shows
+them never generating cash, because their growth is funded externally. But
+a REIT must distribute most of its taxable income to keep its status, which
+makes its dividend about as close to a contractual cash flow as equity
+offers. The DDM path already exists for banks; pointing REITs at it would
+turn two refusals into figures.
+
+## Analyst estimates, for a second version
+
+Every forecast in the model is derived from the filings, which is the
+point, but a reader comparing it against the street has to go elsewhere.
+Alpha Vantage's free tier (25 calls a day) is a candidate source. Check the
+licensing before displaying any of it: redistributing someone else's
+estimates is a different question from consuming them.
+
+## Play Store release
+
+Needs a Google Play Developer account ($25, one-off), an App Bundle (.aab)
+rather than the APK built today, the data-safety form completed, and a
+privacy policy at a public URL. None of it is code; all of it gates
+release.
+
+## Monetization, after the Play Store release
+
+Free tier limited in some way - the Excel export, or roughly five
+valuations a week - with the rest paid. Deliberately sequenced after the
+store release rather than before it, so the first public version is not
+also the first paid one.
+
+## An always-on server
+
+Render's free tier sleeps after fifteen minutes, so the first request after
+a quiet spell pays a cold start of several seconds, which reads as the app
+being broken. Starter is $7 a month. Worth settling before anyone is
+invited to use it.
+
+## Captive finance arms distort the bridge
+
+Deere and companies like it run a lending business inside the group. Its
+borrowings are inventory for that business rather than leverage on the
+industrial one, so debt, WACC weights and free cash flow all read wrong
+when the two are consolidated. Decide between refusing them, as banks are
+refused, and separating the finance arm. They are valued today with no
+special handling.
+
+## Warnings should not be drowned out by the headline
+
+The model says plainly when it is unsure, and the figure is rendered large
+and bold directly above it. Check, before any public release, that someone
+scanning the screen sees the caveat and not only the number.
+
+## Cosmetic copy typos
+
+Small wording and punctuation errors across the app, noticed in passing and
+not collected. Worth one pass with fresh eyes before the store listing.
+
+## Refresh the equity risk premium monthly
+
+`DAMODARAN_IMPLIED_ERP` and `DAMODARAN_ERP_AS_OF` in `assumptions.py` are
+configured rather than fetched, deliberately. Damodaran republishes at the
+start of each month; the figure is flagged stale after sixty days, so the
+current one starts warning around **31 December 2026**. Updating it is two
+lines and a before/after.
