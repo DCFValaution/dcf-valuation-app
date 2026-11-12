@@ -36,7 +36,9 @@ from dcf import SENSITIVITY_GROWTH_STEP, SENSITIVITY_OFFSETS
 # ---------------------------------------------------------------------------
 
 def test_it_tracks_the_risk_free_rate_when_there_is_room():
-    assert derived_terminal_growth(0.047, 0.11) == 0.047
+    """Room means below both other limits: a 3% rate, a WACC well clear of
+    it, and long-run growth above it."""
+    assert derived_terminal_growth(0.030, 0.11) == 0.030
 
 
 def test_it_caps_below_wacc_when_there_is_not():
@@ -67,11 +69,24 @@ def test_the_whole_sensitivity_row_stays_below_wacc(wacc):
 
 
 def test_the_cap_is_what_binds_not_the_rate(monkeypatch):
-    """At a high enough rate every company is capped, and none breaks."""
+    """At a high enough rate every company is capped, and none breaks.
+
+    Which cap binds depends on the company: long-run growth for one whose
+    WACC leaves room above it, the discount rate for one whose does not.
+    """
     for wacc in (0.04, 0.06, 0.09, 0.15):
         g = derived_terminal_growth(0.50, wacc)
-        assert g == pytest.approx(wacc - TERMINAL_GROWTH_SAFETY_MARGIN)
+        assert g == pytest.approx(min(A.LONG_RUN_NOMINAL_GROWTH,
+                                      wacc - TERMINAL_GROWTH_SAFETY_MARGIN))
         assert g < wacc
+
+
+def test_long_run_growth_binds_where_the_rate_environment_is_high():
+    """The limit this rule gained. A 5.07% ten-year is above the 4.0% the
+    Fed projects for long-run nominal growth, so for any company with room
+    above it the economy is what holds the figure down, not the rate."""
+    assert derived_terminal_growth(0.0507, 0.1335) == pytest.approx(
+        A.LONG_RUN_NOMINAL_GROWTH)
 
 
 def test_a_negative_rate_is_passed_through_rather_than_floored():
@@ -107,7 +122,13 @@ def test_the_detail_says_when_the_cap_bound(monkeypatch, profitable):
     """A reader should be able to tell which of the two produced the figure."""
     derived = derive(monkeypatch, 0.50, profitable)
     prov = derived.provenance["terminal_growth"]
-    assert "which is WACC less" in prov.detail
+    # At a 50% rate the rate is never the binding limit; which of the other
+    # two binds depends on this company's WACC, and the detail says which.
+    binding = derived.diagnostics["terminal_growth_binding"]
+    assert binding in ("long_run_growth", "wacc_margin")
+    assert ("outgrows its own economy" in prov.detail
+            if binding == "long_run_growth"
+            else "below this company" in prov.detail)
     assert derived.diagnostics["terminal_growth_capped"] is True
     assert derived.assumptions.terminal_growth < derived.assumptions.wacc
 
@@ -143,12 +164,12 @@ def test_the_ceiling_is_the_rate_where_there_is_room(monkeypatch, profitable):
     assert derived.diagnostics["terminal_growth_capped"] is False
 
 
-def test_the_ceiling_is_wacc_less_the_margin_where_there_is_not(
+def test_the_ceiling_is_the_lowest_of_the_three_limits(
         monkeypatch, profitable):
     derived = derive(monkeypatch, 0.50, profitable)
     wacc = derived.assumptions.wacc
     assert derived.provenance["terminal_growth"].allowed_max == pytest.approx(
-        wacc - TERMINAL_GROWTH_SAFETY_MARGIN)
+        min(A.LONG_RUN_NOMINAL_GROWTH, wacc - TERMINAL_GROWTH_SAFETY_MARGIN))
     assert derived.diagnostics["terminal_growth_capped"] is True
 
 

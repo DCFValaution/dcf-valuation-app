@@ -58,7 +58,16 @@ from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
 
 # --- Global defaults ------------------------------------------------------
 DEFAULT_WACC = 0.085             # only used when WACC derivation fails
-DEFAULT_TERMINAL_GROWTH = 0.025  # ~long-run nominal GDP growth; the fallback
+# NOT long-run nominal GDP growth, whatever this comment used to say - the
+# Fed's own longer-run projections put that at about 4.0% (see
+# LONG_RUN_NOMINAL_GROWTH below). This is a conservative stand-in growth
+# rate used in five unrelated places: the DCF's revenue-growth fallback
+# when history is too thin to measure, the DCF's terminal ceiling when no
+# risk-free rate can be had, the dividend model's growth fallback and its
+# terminal growth, and the speculative model's growth floor and terminal
+# growth. Those are different questions with different right answers, and
+# they share a number only by history. Changing it moves all five.
+DEFAULT_TERMINAL_GROWTH = 0.025
 DEFAULT_PROJECTION_YEARS = 5
 
 # How far below the discount rate the derived terminal growth is held.
@@ -75,7 +84,46 @@ DEFAULT_PROJECTION_YEARS = 5
 # table whose own cells are undefined is a poor way to show how sensitive a
 # figure is. At 1.5 the grid's highest growth still clears WACC by half a
 # point.
-TERMINAL_GROWTH_SAFETY_MARGIN = 0.015
+# Long-run US nominal growth: real GDP plus inflation, both taken from the
+# FOMC's own longer-run medians rather than estimated here.
+#
+#   Change in real GDP, longer run   2.0%   (central tendency 2.0-2.2%)
+#   PCE inflation, longer run        2.0%   (central tendency 2.0%)
+#
+# Summary of Economic Projections, 16 September 2026, table 1:
+# federalreserve.gov/monetarypolicy/fomcprojtabl20260916.htm
+#
+# It matters because a company cannot outgrow its economy forever - at a
+# growth rate above this one it eventually becomes the economy - and with
+# the ten-year Treasury at 5.07%, the old ceiling of "the risk-free rate"
+# was above it for every company. The same projections put the longer-run
+# federal funds rate at 3.2%, so today's ten-year is above where the Fed
+# expects even the policy rate to settle.
+#
+# Configured, not fetched, for the reason the equity risk premium is: a
+# valuation that changes because someone else's page changed is not
+# reproducible.
+LONG_RUN_NOMINAL_GROWTH = 0.040
+LONG_RUN_GROWTH_AS_OF = date(2026, 9, 16)
+
+# The SEP is published quarterly, so a figure older than this means one was
+# missed rather than merely not yet due.
+SEP_STALE_AFTER_DAYS = 100
+
+# How far terminal growth is held below the discount rate.
+#
+# Raised from 1.5%, which held the line but not much more: the Gordon
+# denominator is (WACC - g), so at a 1.6-point spread - Exxon's, Johnson &
+# Johnson's - a half-point error in either input moves the terminal value
+# by about a fifth, and the terminal value was already nine tenths of the
+# answer.
+#
+# Three points is a modelling judgement rather than a published standard,
+# and is described as one wherever it appears. It is wide enough that an
+# ordinary error in WACC does not dominate the result, and narrow enough
+# that it only binds for companies whose cost of capital is genuinely close
+# to the economy's growth rate.
+TERMINAL_GROWTH_SAFETY_MARGIN = 0.030
 
 # How far outside its stated range a supplied value may fall before it is
 # refused. One basis point: wide enough to absorb a client that rounds the
@@ -84,20 +132,52 @@ TERMINAL_GROWTH_SAFETY_MARGIN = 0.015
 _RANGE_TOLERANCE = 1e-4
 
 
-def derived_terminal_growth(risk_free_rate: float, wacc: float) -> float:
-    """Long-run growth that tracks the rate environment but stays usable.
+def terminal_growth_ceiling(risk_free_rate: float, wacc: float) -> float:
+    """The highest long-run growth this company can be given, and why.
 
-    Normally the risk-free rate: the long-run nominal growth a company is
-    assumed to settle into is taken to move with the rate environment rather
-    than sitting at a constant chosen years ago.
+    Three limits, whichever binds first:
 
-    The cap is what makes that safe. For a company whose cost of capital is
-    close to the risk-free rate - a regulated utility, a low-beta staple -
-    the uncapped figure would sit a whisker below WACC and the perpetuity
-    would blow up. Such a company gets WACC less the margin instead, which
-    is lower than the risk-free rate by construction.
+      the risk-free rate       the rate environment, as before
+      long-run nominal growth  no company outgrows its economy forever
+      WACC less the margin     the perpetuity has to mean something
+
+    The second is new and binds most often today, because a 5.07% ten-year
+    is above the 4.0% the Fed projects for long-run nominal growth. The
+    third binds for companies whose cost of capital is close to that growth
+    rate - a low-beta staple, a utility - where the first two would leave a
+    denominator too thin to carry nine tenths of the valuation.
     """
-    return min(risk_free_rate, wacc - TERMINAL_GROWTH_SAFETY_MARGIN)
+    return min(risk_free_rate, LONG_RUN_NOMINAL_GROWTH,
+               wacc - TERMINAL_GROWTH_SAFETY_MARGIN)
+
+
+def derived_terminal_growth(risk_free_rate: float, wacc: float) -> float:
+    """Kept as the old name for the ceiling."""
+    return terminal_growth_ceiling(risk_free_rate, wacc)
+
+
+def _today_for_sep() -> date:
+    return _today()
+
+
+def sep_age_days(today: date | None = None) -> int:
+    """Days since the projections the growth ceiling is taken from."""
+    return ((today or _today()) - LONG_RUN_GROWTH_AS_OF).days
+
+
+def sep_is_stale(today: date | None = None) -> bool:
+    return sep_age_days(today) > SEP_STALE_AFTER_DAYS
+
+
+def long_run_growth_source(today: date | None = None) -> str:
+    """Where the figure came from, and whether it is due a refresh."""
+    text = (f"long-run US nominal growth (Fed SEP, "
+            f"{LONG_RUN_GROWTH_AS_OF:%b %Y}: 2.0% real GDP + 2.0% PCE "
+            f"inflation)")
+    if sep_is_stale(today):
+        text += (f" - those projections are {sep_age_days(today)} days old "
+                 "and a newer set is due")
+    return text
 
 # The growth fade is opt-in and off by default, so a valuation nobody has
 # touched is the flat projection it has always been.
@@ -981,33 +1061,51 @@ def derive_assumptions(fin: CompanyFinancials,
     wacc_ceiling = max(wacc - TERMINAL_GROWTH_SAFETY_MARGIN, 0.0)
 
     if rf_for_growth is None:
-        ceiling = min(DEFAULT_TERMINAL_GROWTH, wacc_ceiling)
+        ceiling = min(LONG_RUN_NOMINAL_GROWTH, wacc_ceiling)
         terminal_growth = record(
             "terminal_growth", ceiling, "default",
-            "no risk-free rate available; the ceiling falls back to the "
-            "global default (~long-run nominal GDP growth), held below WACC; "
-            "adjustable downward",
+            f"no risk-free rate available; the ceiling is "
+            f"{long_run_growth_source()}, held at least "
+            f"{TERMINAL_GROWTH_SAFETY_MARGIN * 100:.0f} percentage points "
+            "below WACC; adjustable "
+            "downward to 0%",
             allowed_min=0.0, allowed_max=ceiling)
-        diagnostics["terminal_growth_capped"] = ceiling < DEFAULT_TERMINAL_GROWTH
-        diagnostics["terminal_growth_uncapped"] = DEFAULT_TERMINAL_GROWTH
+        diagnostics["terminal_growth_capped"] = ceiling < LONG_RUN_NOMINAL_GROWTH
+        diagnostics["terminal_growth_uncapped"] = LONG_RUN_NOMINAL_GROWTH
     else:
         uncapped = float(rf_for_growth)
-        ceiling = derived_terminal_growth(uncapped, wacc)
-        ceiling = max(ceiling, 0.0)
+        ceiling = max(terminal_growth_ceiling(uncapped, wacc), 0.0)
         capped = ceiling < uncapped
-        detail = (
-            f"defaults to the ceiling, which is WACC less "
-            f"{TERMINAL_GROWTH_SAFETY_MARGIN:.1%} rather than the risk-free "
-            f"rate of {uncapped:.2%}, because that rate is too close to this "
-            f"company's WACC of {wacc:.2%} for the perpetuity to mean "
-            "anything; adjustable downward to 0%"
-            if capped else
-            "defaults to the current risk-free rate (US 10-year Treasury), "
-            "which is the ceiling; adjustable downward to 0%")
+
+        # Which of the three limits produced the number, said plainly. A
+        # reader who wants to argue with the figure needs to know which
+        # argument to have.
+        if ceiling >= uncapped - 1e-12:
+            why = ("defaults to the current risk-free rate (US 10-year "
+                   "Treasury), which is the lowest of the three limits here")
+        elif ceiling >= LONG_RUN_NOMINAL_GROWTH - 1e-12:
+            why = (f"held at {long_run_growth_source()} rather than at the "
+                   f"{uncapped:.2%} risk-free rate, because no company "
+                   "outgrows its own economy in perpetuity")
+        else:
+            why = (f"held {TERMINAL_GROWTH_SAFETY_MARGIN * 100:.0f} "
+                   "percentage points below this "
+                   f"company's {wacc:.2%} discount rate, which binds before "
+                   f"either the {uncapped:.2%} risk-free rate or long-run "
+                   "growth; that minimum spread is a modelling judgement "
+                   "rather than a published standard, chosen so an ordinary "
+                   "error in the discount rate cannot dominate a terminal "
+                   "value that is most of the answer")
+        detail = f"{why}; adjustable downward to 0%"
+
         terminal_growth = record("terminal_growth", ceiling, "derived", detail,
                                  allowed_min=0.0, allowed_max=ceiling)
         diagnostics["terminal_growth_capped"] = capped
         diagnostics["terminal_growth_uncapped"] = uncapped
+        diagnostics["terminal_growth_binding"] = (
+            "risk_free_rate" if ceiling >= uncapped - 1e-12
+            else "long_run_growth"
+            if ceiling >= LONG_RUN_NOMINAL_GROWTH - 1e-12 else "wacc_margin")
 
     diagnostics["terminal_growth_ceiling"] = ceiling
 

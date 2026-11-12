@@ -445,7 +445,8 @@ String buildHonestyNote({
       'moves the figure materially, and the sensitivity table shows by how '
       'much.'
       // Mirrors the backend sentence exactly; the parity test is the guard.
-      ' The growth in perpetuity defaults to the current risk-free rate, '
-      'held below the discount rate, and that is as high as it can be set: '
-      'it can be moved down but not up.';
+      ' The growth in perpetuity defaults to the lowest of the risk-free '
+      'rate, long-run US nominal growth and the discount rate less three '
+      'points, and that is as high as it can be set: it can be moved down '
+      'but not up.';
 }

@@ -2042,9 +2042,10 @@ def honesty_note(report: "ValuationReport") -> str | None:
         # of this sentence can be produced from the same two numbers. It is
         # true either way: when the cap binds, the figure tracks WACC, which
         # is itself built on the same risk-free rate.
-        + " The growth in perpetuity defaults to the current risk-free rate, "
-        "held below the discount rate, and that is as high as it can be set: "
-        "it can be moved down but not up."
+        + " The growth in perpetuity defaults to the lowest of the "
+        "risk-free rate, long-run US nominal growth and the discount rate "
+        "less three points, and that is as high as it can be set: it can be "
+        "moved down but not up."
         + fx_text
     )
 

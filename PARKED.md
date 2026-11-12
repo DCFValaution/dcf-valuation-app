@@ -4,29 +4,6 @@ Things found while working on something else, judged real but out of scope
 at the time. Each says what was observed and why it was left, so picking one
 up does not mean rediscovering it.
 
-## Terminal growth sits too close to WACC for low-WACC companies
-
-The low-beta names come out with a WACC only 1.7-2 percentage points above
-their terminal growth, which makes the Gordon perpetuity enormous and the
-whole valuation hostage to the gap. Measured 12 November 2026:
-
-| | WACC | terminal growth | spread |
-| --- | --- | --- | --- |
-| XOM | 6.67% | 4.98% | 1.69pp |
-| JNJ | 6.66% | 4.98% | 1.68pp |
-| KO | 6.73% | 4.98% | 1.75pp |
-| PG | 6.98% | 4.98% | 2.00pp |
-
-The 1.5pp ceiling holds in every case, so nothing is broken - but a ceiling
-that binds is not the same as a spread that is sensible, and these clear it
-by a quarter of a point. Terminal growth defaults to the risk-free rate,
-which at 4.98% is high against any plausible long-run real growth plus
-inflation.
-
-Worth investigating: a minimum spread wider than 1.5pp, a long-run growth
-default below the risk-free rate, or both. Both change every valuation, so
-it needs the same before/after treatment the beta and ERP change got.
-
 ## The web security headers have never applied
 
 `render.yaml` declares them, but the static site is not Blueprint-managed,
@@ -102,10 +79,28 @@ The model says plainly when it is unsure, and the figure is rendered large
 and bold directly above it. Check, before any public release, that someone
 scanning the screen sees the caveat and not only the number.
 
+One case deserves its own flag: a terminal value above about 100% of
+enterprise value. Tesla is at 109%, which means the explicitly projected
+years contribute negative value and the entire figure rests on the terminal
+assumption - the one part of the model nobody can check. It is not an error
+and the number is computed correctly, but a reader is entitled to be told
+that the forecast they can see is not what produced the answer.
+
 ## Cosmetic copy typos
 
 Small wording and punctuation errors across the app, noticed in passing and
 not collected. Worth one pass with fresh eyes before the store listing.
+
+## Refresh the long-run growth ceiling quarterly
+
+`LONG_RUN_NOMINAL_GROWTH` and `LONG_RUN_GROWTH_AS_OF` in `assumptions.py`
+hold 4.0% as of 16 September 2026 - the FOMC's longer-run medians for real
+GDP (2.0%) and PCE inflation (2.0%), from the Summary of Economic
+Projections. The SEP is published quarterly and the figure is flagged stale
+after a hundred days, so the current one starts warning around **25
+December 2026**. The **next SEP is December 2026**. Updating it is two lines
+and a before/after; it is the ceiling on terminal growth for most
+companies, so it moves every valuation.
 
 ## Refresh the equity risk premium monthly
 

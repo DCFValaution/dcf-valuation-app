@@ -168,23 +168,49 @@ def test_sensitivity_grid_centres_on_derived_wacc_and_growth():
 
 
 def test_sensitivity_marks_undefined_cells_when_growth_meets_wacc():
-    """A low WACC makes the top-left of the grid degenerate (g >= WACC)."""
+    """Gordon growth needs WACC > g; a cell where it does not hold is None.
+
+    Built directly rather than through derive_assumptions, because the
+    derivation can no longer produce such a centre - see the test below.
+    The guard lives in dcf.py and is worth testing on its own terms.
+    """
+    from dataclasses import replace
     from dcf import BaseYearData, run_dcf
 
-    fin = make_fin()
-    # The centre has to be an assumption set the API would actually accept:
-    # terminal growth is now held 1.5 points below WACC, so a 3% WACC puts
-    # the ceiling at 1.5%. The grid still walks g up and WACC down from
-    # there, which is what makes its far corner degenerate - the centre never
-    # had to be degenerate itself for that to happen.
-    d = derive_assumptions(fin, overrides={"wacc": 0.03, "terminal_growth": 0.015})
+    d = derive_assumptions(make_fin(), overrides={"wacc": 0.06})
+    degenerate = replace(d.assumptions, wacc=0.03, terminal_growth=0.025)
     base = BaseYearData(revenue=10_000, total_debt=1_000, cash=1_000,
                         shares=1_000, current_price=100.0)
-    r = run_dcf(base, d.assumptions)
+    r = run_dcf(base, degenerate)
 
     assert r.sensitivity[0][3] is None, "g at or above WACC must be undefined"
     assert r.sensitivity[0][4] is None
-    assert r.sensitivity[4][0] is not None, "the low-g, high-WACC corner holds"
+
+
+def test_a_derived_centre_can_no_longer_produce_a_degenerate_grid():
+    """What the three-point margin bought, beyond the headline.
+
+    The grid walks WACC down a point and growth up a point from the centre.
+    At the old 1.5-point margin that was enough to cross into g >= WACC, so
+    a reader dragging toward the corner met blank cells on an otherwise
+    ordinary company. Three points leaves a point of room at the worst
+    corner, so every cell is defined.
+    """
+    from dcf import (BaseYearData, SENSITIVITY_GROWTH_STEP,
+                     SENSITIVITY_OFFSETS, SENSITIVITY_WACC_STEP, run_dcf)
+    import assumptions as A
+
+    worst = (A.TERMINAL_GROWTH_SAFETY_MARGIN
+             + min(SENSITIVITY_OFFSETS) * SENSITIVITY_WACC_STEP
+             - max(SENSITIVITY_OFFSETS) * SENSITIVITY_GROWTH_STEP)
+    assert worst > 0, "the grid's far corner must stay defined"
+
+    base = BaseYearData(revenue=10_000, total_debt=1_000, cash=1_000,
+                        shares=1_000, current_price=100.0)
+    for wacc in (0.045, 0.06, 0.09, 0.15):
+        d = derive_assumptions(make_fin(), overrides={"wacc": wacc})
+        r = run_dcf(base, d.assumptions)
+        assert all(cell is not None for row in r.sensitivity for cell in row),             f"wacc={wacc}"
 
 
 def test_unknown_override_is_rejected_and_lists_valid_names():

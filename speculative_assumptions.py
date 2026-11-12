@@ -243,7 +243,7 @@ def derive_speculative_assumptions(fin: CompanyFinancials, base: BaseYearData,
         wacc = record("wacc", dcf_wacc.value, dcf_wacc.source, dcf_wacc.detail)
 
     terminal = record("terminal_growth", DEFAULT_TERMINAL_GROWTH, "default",
-                      "global default (~long-run nominal GDP growth), shared with the DCF")
+                      "conservative long-run default; adjustable")
     projection = record("projection_years", DEFAULT_PROJECTION_YEARS, "default",
                         "years of mature-company forecast after profitability, before "
                         "the terminal value")

@@ -498,8 +498,7 @@ def derive_ddm_assumptions(fin: CompanyFinancials, dividends: DividendRecord,
 
     # --- Global defaults ---------------------------------------------------
     terminal_growth = record("terminal_growth", DEFAULT_TERMINAL_GROWTH, "default",
-                             "global default (~long-run nominal GDP growth), "
-                             "shared with the DCF")
+                             "conservative long-run default; adjustable")
     high_growth_years = record("high_growth_years", DEFAULT_PROJECTION_YEARS, "default",
                                "modelling convention, matching the DCF's forecast horizon")
 
