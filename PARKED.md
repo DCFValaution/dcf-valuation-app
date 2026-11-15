@@ -86,6 +86,17 @@ assumption - the one part of the model nobody can check. It is not an error
 and the number is computed correctly, but a reader is entitled to be told
 that the forecast they can see is not what produced the answer.
 
+## The caveat block does not use the width it has
+
+At phone width the badge, the one-line qualifier, the split bar and the
+callout stack, which is the right shape for a narrow column. At 1280px they
+still stack, so a single sentence runs the full width of the window and the
+split bar is a thin line stretched across it.
+
+The design this was built from put the callout in a side column at wide
+widths, with the figure and its qualifier on the left. Worth doing; it was
+left out to keep the first version of the tiers to one shape.
+
 ## Cosmetic copy typos
 
 Small wording and punctuation errors across the app, noticed in passing and

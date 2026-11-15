@@ -147,6 +147,10 @@ def test_the_standard_valuation_is_unchanged_and_never_fetches_peers(client, mon
         # And later again: current market multiples, carried beside the
         # figure for reference and forming no part of it.
         "snapshot",
+        # And later still: the same caveats as `warnings`, plus the base-year
+        # notes, each carrying the severity the model assigned, so the app
+        # does not have to infer one from where it happens to render.
+        "warning_items",
     }
     assert body["method_fit_warnings"] == []
 

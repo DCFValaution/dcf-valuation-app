@@ -82,6 +82,8 @@ from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       value_company, value_company_relatively,
                       value_company_hypothetically, value_company_speculatively)
 from assumptions import DAMODARAN_ERP_AS_OF, erp_is_stale
+from analysis import (SEVERITY_CAUTION, SEVERITY_INFO, SEVERITY_SERIOUS,
+                      severity_of)
 from relative import MAX_PEERS
 from hypothetical import (HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
                           NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
@@ -453,6 +455,26 @@ class ValuationRequest(BaseModel):
     overrides: Overrides = Field(default_factory=Overrides)
 
 
+class WarningOut(BaseModel):
+    """A warning and how loudly to say it.
+
+    The severity is decided in the model and only rendered by the client,
+    so the two cannot drift into disagreeing about what matters. `warnings`
+    remains a plain list of strings beside this for anything reading the
+    older shape.
+    """
+    text: str = Field(..., description="The full sentence")
+    severity: str = Field(
+        ..., description="info | caution | serious")
+    kind: str = Field(
+        "", description="Machine-readable cause, e.g. terminal_value_over_100")
+    headline: str = Field(
+        "", description="The short form, for placing under the figure")
+    detail: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Figures behind the warning, where it has any")
+
+
 class AssumptionOut(BaseModel):
     name: str
     value: float
@@ -661,6 +683,11 @@ class ValuationResponse(BaseModel):
                     "broken. Null for every other company - it is an explanation of "
                     "one company's economics, not a general caveat.")
     warnings: list[str]
+    warning_items: list[WarningOut] = Field(
+        default_factory=list,
+        description="The same caveats plus the base-year notes, each with the "
+                    "severity the model assigned. Clients should render from "
+                    "this; `warnings` is the older flat shape.")
     method_fit_warnings: list[str] = Field(
         default_factory=list,
         description="Doubts about whether this valuation method fits the company at "
@@ -792,6 +819,10 @@ class DDMValuationResponse(BaseModel):
     sensitivity: DDMSensitivityOut
     projection: list[DividendYearOut]
     warnings: list[str]
+    warning_items: list[WarningOut] = Field(
+        default_factory=list,
+        description="The same caveats, each with the severity the "
+                    "model assigned.")
 
 
 # A successful valuation from either method, told apart by `method`. A client
@@ -1169,6 +1200,43 @@ def _capital_returns_out(cr) -> "CapitalReturnsOut | None":
     )
 
 
+def _warning_items(report) -> list[WarningOut]:
+    """Every caveat, in one list, ordered loudest first.
+
+    Three sources that used to be rendered in three different places and
+    at three different volumes decided by position: doubts about method
+    fit, the warnings proper, and the base-year notes that were not shown
+    at all.
+    """
+    items: list[WarningOut] = []
+
+    for text in getattr(report.suitability, "method_fit", []) or []:
+        items.append(WarningOut(
+            text=str(text), severity=SEVERITY_SERIOUS, kind="method_fit",
+            headline=str(text)))
+
+    for w in report.suitability.warnings:
+        items.append(WarningOut(
+            text=str(w), severity=severity_of(w),
+            kind=getattr(w, "kind", ""),
+            headline=getattr(w, "headline", "") or str(w),
+            detail=getattr(w, "detail", {}) or {}))
+
+    # Shown for the first time. "Treated as nil" is a claim the model made
+    # on the reader's behalf, and it was only ever visible in the API.
+    for note in ((getattr(report, "meta", None) or {}).get("base_notes") or []):
+        items.append(WarningOut(
+            text=str(note), severity=SEVERITY_INFO, kind="base_year",
+            headline=str(note)))
+
+    order = {SEVERITY_SERIOUS: 0, SEVERITY_CAUTION: 1, SEVERITY_INFO: 2}
+    method_first = {"method_fit", "dividends_only", "negative_equity",
+                    "terminal_value_over_100"}
+    items.sort(key=lambda i: (order.get(i.severity, 1),
+                              0 if i.kind in method_first else 1))
+    return items
+
+
 def _assumption_list(store: dict) -> list[AssumptionOut]:
     return [
         AssumptionOut(name=name, value=prov.value, source=prov.source,
@@ -1258,6 +1326,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
             for y in r.years
         ],
         warnings=report.suitability.warnings,
+        warning_items=_warning_items(report),
         method_fit_warnings=report.suitability.method_fit,
     )
 
@@ -1325,6 +1394,7 @@ def _serialise_ddm(report: DDMReport) -> DDMValuationResponse:
             for y in r.years
         ],
         warnings=report.suitability.warnings,
+        warning_items=_warning_items(report),
     )
 
 

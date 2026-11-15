@@ -2211,6 +2211,35 @@ _TTM_SERIES = {
 # nothing may be read from an older quarter than the newest of them.
 _TTM_BALANCE_FIELDS = ("current_debt", "long_term_debt", "cash_and_short_term")
 
+# What to call each of these in a sentence meant for someone who does not
+# know the provider's field names. These notes appear on screen; the first
+# draft of them read "quarterlyCurrentDebt last reported 2025-03-31, 548
+# days before the 2026-09-30 balance sheet", which is true, precise, and
+# written for whoever wrote the fetcher.
+_PLAIN_FIELD = {
+    "current_debt": "short-term debt",
+    "long_term_debt": "long-term debt",
+    "cash_and_short_term": "cash",
+    "investments": "long-term investments",
+    "shares_diluted": "its share count",
+    "shares_ordinary": "its share count",
+    "capex": "capital spending",
+    "minority_interest": "minority interest",
+    "revenue": "revenue",
+}
+
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December")
+
+
+def _month_year(iso_date: str) -> str:
+    """"2025-03-31" -> "March 2025". A reader does not need the day."""
+    try:
+        year, month, _ = str(iso_date).split("-")[:3]
+        return f"{_MONTHS[int(month) - 1]} {year}"
+    except Exception:
+        return str(iso_date)
+
 # One quarter of slack, in days, before a field counts as a different vintage.
 _TTM_MAX_LAG_DAYS = 100
 
@@ -2230,6 +2259,10 @@ class TTMBase:
     period_end: str
     currency: str | None
     notes: list[str]
+    # Fields dropped for being older than the balance sheet, and the date
+    # each was last reported. Kept as data so the sentence about it can be
+    # written once, beside the sentence about what was used instead.
+    stale: dict[str, str] = field(default_factory=dict)
 
 
 def _ttm_rows(ticker: str) -> dict[str, dict]:
@@ -2300,6 +2333,7 @@ def fetch_ttm_base(ticker: str) -> TTMBase | None:
             currencies.add(row["currencyCode"])
 
     notes: list[str] = []
+    stale: dict[str, str] = {}
 
     if values.get("revenue") is None:
         return None
@@ -2317,9 +2351,11 @@ def fetch_ttm_base(ticker: str) -> TTMBase | None:
             continue
         lag = _days_between(period_end, as_of.get(field_name, period_end))
         if lag is not None and lag > _TTM_MAX_LAG_DAYS:
-            notes.append(
-                f"{_TTM_SERIES[field_name]} last reported {as_of[field_name]}, "
-                f"{lag} days before the {period_end} balance sheet")
+            # Recorded as a date rather than written up here. The same fact
+            # produces a second note further down - the field is dropped,
+            # so it then reads as nil - and two notes about one fact is one
+            # too many. The sentence is written once, where both are known.
+            stale[field_name] = as_of[field_name]
             values.pop(field_name)
             as_of.pop(field_name, None)
 
@@ -2330,7 +2366,7 @@ def fetch_ttm_base(ticker: str) -> TTMBase | None:
 
     result = TTMBase(values=values, as_of=as_of, period_end=period_end,
                      currency=(currencies.pop() if len(currencies) == 1 else None),
-                     notes=notes)
+                     notes=notes, stale=stale)
     _ttm_cache.put(ticker, result)
     return result
 
@@ -2354,6 +2390,34 @@ def _usable_ttm(ticker: str, reporting_currency: str) -> TTMBase | None:
             "using the annual base", ticker, ttm.currency, reporting)
         return None
     return ttm
+
+
+def _short_name(fin: CompanyFinancials) -> str:
+    """The company, as a person would say it: "Alphabet", not "Alphabet Inc."."""
+    name = (fin.company_name or fin.ticker or "This company").strip()
+    for suffix in (" Incorporated", ", Inc.", " Inc.", " Inc", " Corporation",
+                   " Corp.", " Corp", " Company", " Co.", " plc", " PLC",
+                   " Limited", " Ltd.", " Ltd", " S.A.", " SA", " N.V.",
+                   " NV", " AG", " SE", " Holdings", " Group", " p.l.c."):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)].strip()
+    return name.rstrip(",.") or fin.ticker
+
+
+def _missing_note(fin: CompanyFinancials, ttm: "TTMBase", field_name: str) -> str:
+    """One sentence for a figure that is not there and is read as zero.
+
+    Where the figure was dropped for being stale, that is the same fact and
+    goes in the same sentence: the reader does not need two notes to learn
+    that one number is missing.
+    """
+    thing = _PLAIN_FIELD.get(field_name, field_name.replace("_", " "))
+    since = (ttm.stale or {}).get(field_name)
+    when = f" (last reported {_month_year(since)})" if since else ""
+    # "investments" takes a plural verb; everything else here is singular.
+    it = "they're" if field_name == "investments" else "it's"
+    return (f"{_short_name(fin)}'s latest filing doesn't report {thing}"
+            f"{when}, so {it} counted as zero.")
 
 
 def _ttm_base_year_from(fin: CompanyFinancials,
@@ -2390,15 +2454,14 @@ def _ttm_base_year_from(fin: CompanyFinancials,
     current_debt = money("current_debt")
     long_term_debt = money("long_term_debt")
     if current_debt is None:
-        notes.append("no current debt reported for the latest quarter, treated as nil")
+        notes.append(_missing_note(fin, ttm, "current_debt"))
     if long_term_debt is None:
-        notes.append("no long-term debt reported for the latest quarter, treated as nil")
+        notes.append(_missing_note(fin, ttm, "long_term_debt"))
     total_debt_mm = (current_debt or 0.0) + (long_term_debt or 0.0)
 
     cash_mm = (money("cash_and_short_term") or 0.0) + (money("investments") or 0.0)
     if ttm.values.get("investments") is None:
-        notes.append("no long-term investments reported for the latest quarter, "
-                     "treated as nil")
+        notes.append(_missing_note(fin, ttm, "investments"))
 
     reported_minority = ttm.values.get("minority_interest")
     if reported_minority is None:
@@ -2420,7 +2483,9 @@ def _ttm_base_year_from(fin: CompanyFinancials,
                          "point-in-time, no weighted average)")
     if not shares_raw or shares_raw <= 0:
         shares_mm, shares_source = _resolve_shares(fin, current_price)
-        notes.append("no trailing share count; used the annual statements")
+        notes.append(
+            f"{_short_name(fin)}'s share count comes from the annual "
+            "accounts rather than the latest quarter.")
     else:
         shares_mm = float(shares_raw) / 1e6
 
@@ -2429,7 +2494,9 @@ def _ttm_base_year_from(fin: CompanyFinancials,
     # year's revenue, exactly as it did before.
     capex_mm = money("capex")
     if capex_mm is None:
-        notes.append("no trailing capital expenditure reported")
+        notes.append(
+            f"{_short_name(fin)} doesn't report capital spending for the "
+            "last twelve months, so it isn't shown.")
     else:
         capex_mm = abs(capex_mm)
 
@@ -2522,12 +2589,14 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
     # entitled to know which one was made.
     annual_notes = []
     if not debt_was_reported(balance):
-        annual_notes.append("no debt reported on the balance sheet, treated "
-                            "as nil (inferred, not read)")
+        annual_notes.append(
+            f"{_short_name(fin)}'s balance sheet doesn't report any debt, "
+            "so it's counted as zero.")
     if (reported(balance, "cashAndCashEquivalents") is None
             and reported(balance, "totalInvestments") is None):
-        annual_notes.append("no cash reported on the balance sheet, treated "
-                            "as nil (inferred, not read)")
+        annual_notes.append(
+            f"{_short_name(fin)}'s balance sheet doesn't report any cash, "
+            "so it's counted as zero.")
 
     balance_year = balance.get("fiscalYear", "?")
     if balance_year != fiscal_year:

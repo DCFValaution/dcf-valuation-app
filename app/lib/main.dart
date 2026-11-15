@@ -1743,11 +1743,15 @@ class _SuccessCard extends StatelessWidget {
           ),
         ),
 
-        // A doubt about the method itself, not about an assumption: pinned
-        // directly under the figure it qualifies, so the number and its
-        // upside or downside are never on screen without it. Robinhood is the
-        // case - valued with a DCF, with lending income the data cannot see.
-        if (result.methodFitWarnings.isNotEmpty) ...[
+        // Everything the model wants to say about its own figure, in the
+        // order it decided. The loudest one sits here, under the number,
+        // where someone about to act on it has to pass through it to reach
+        // the market price. The rest fold away behind a count.
+        if (_loudCaveats(result).isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          _CaveatHeader(caveats: _loudCaveats(result)),
+        ] else if (result.methodFitWarnings.isNotEmpty) ...[
+          // An older backend that sends no severities.
           const SizedBox(height: AppSpacing.md),
           _MethodFitWarning(warnings: result.methodFitWarnings),
         ],
@@ -1835,11 +1839,18 @@ class _SuccessCard extends StatelessWidget {
           ),
         ],
 
-        // What the model cannot see - for a bank, the cash returned through
-        // buybacks that a dividend model counts for nothing. This is the
-        // backend telling the user where its own figure is weak, so it sits
-        // with the figure rather than being dropped.
-        if (result.warnings.isNotEmpty) ...[
+        // Only the quiet tier remains down here: things that qualify an
+        // input rather than the answer, including the base-year notes that
+        // were never shown at all. Everything louder has moved up to the
+        // figure it is about.
+        if (_quietCaveats(result).isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          NoteList(
+            title: 'Worth knowing',
+            quiet: true,
+            notes: [for (final c in _quietCaveats(result)) c.text],
+          ),
+        ] else if (result.caveats.isEmpty && result.warnings.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
           NoteList(title: 'Keep in mind', notes: result.warnings),
         ],
@@ -1862,6 +1873,213 @@ class _SuccessCard extends StatelessWidget {
 /// describe the company, which qualifies the implied upside or downside too,
 /// so it sits under the figure with a heading of its own and amber rather
 /// than red: a warning to read, not a loss.
+/// Caveats that belong beside the figure: everything but the quiet tier.
+List<Caveat> _loudCaveats(ValuationSuccess r) =>
+    [for (final c in r.caveats) if (c.severity != Severity.info) c];
+
+/// Caveats that qualify an input rather than the answer.
+List<Caveat> _quietCaveats(ValuationSuccess r) =>
+    [for (final c in r.caveats) if (c.severity == Severity.info) c];
+
+/// The badge, the one-line qualifier, and whatever else the loudest caveat
+/// has to show.
+///
+/// One qualifier only. A reader who meets three sentences between the
+/// figure and the price reads none of them, so the rest fold behind a
+/// count and open on a tap. The backend decides the order; this only
+/// renders it.
+class _CaveatHeader extends StatefulWidget {
+  const _CaveatHeader({required this.caveats});
+
+  final List<Caveat> caveats;
+
+  @override
+  State<_CaveatHeader> createState() => _CaveatHeaderState();
+}
+
+class _CaveatHeaderState extends State<_CaveatHeader> {
+  bool _expanded = false;
+
+  static String _badgeText(Caveat c) => switch (c.kind) {
+    'terminal_value_over_100' => 'Rests on one assumption',
+    'terminal_value_high' => 'Leans on the perpetuity',
+    'dividends_only' => 'Misses most cash returned',
+    'negative_equity' => 'A measure of distress',
+    'method_fit' => 'The method may not fit',
+    _ => 'Read with care',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final top = widget.caveats.first;
+    final rest = widget.caveats.skip(1).toList();
+    final serious = top.severity == Severity.serious;
+    final ink = serious ? colors.negative : colors.caution;
+    final surface = serious ? colors.negativeSurface : colors.cautionSurface;
+    final icon = serious
+        ? Icons.error_outline_rounded
+        : Icons.warning_amber_rounded;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // The badge names the doubt in three words, for the reader who is
+        // scanning rather than reading.
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(AppRadius.chip),
+            border: Border.all(color: ink.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: ink),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                _badgeText(top).toUpperCase(),
+                style: context.text.labelSmall?.copyWith(
+                  color: ink,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+
+        // The qualifier: one sentence, in the tier's colour, between the
+        // figure and the price.
+        Text(
+          top.headline,
+          style: context.text.bodyMedium?.copyWith(color: ink, height: 1.45),
+        ),
+
+        if (top.isTerminalValue) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _TerminalValueBar(caveat: top, ink: ink),
+        ],
+
+        const SizedBox(height: AppSpacing.sm),
+        Callout(
+          tone: serious ? Tone.negative : Tone.caution,
+          text: top.text,
+        ),
+
+        if (rest.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          // Folded rather than dropped: the count says how much is behind
+          // it, so nobody has to guess whether it is worth opening.
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(AppRadius.chip),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 18,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    _expanded
+                        ? 'Show less'
+                        : '+${rest.length} more '
+                              '${rest.length == 1 ? "caveat" : "caveats"}',
+                    style: context.text.labelMedium?.copyWith(
+                      color: colors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            for (final c in rest) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Callout(
+                tone: c.severity == Severity.serious
+                    ? Tone.negative
+                    : Tone.caution,
+                text: c.text,
+              ),
+            ],
+        ],
+      ],
+    );
+  }
+}
+
+/// A share, to the nearest point. Two decimals on a split that is only
+/// ever a rough proportion reads as precision the figure does not have.
+String _wholePercent(double v) => '${(v * 100).round()}%';
+
+/// Where the value came from: the explicitly forecast years against the
+/// perpetuity beyond them.
+///
+/// Drawn rather than described because the point is a proportion, and a
+/// proportion is the one thing a sentence conveys badly. Where the forecast
+/// years are worth less than nothing the bar is entirely terminal, which is
+/// the honest picture.
+class _TerminalValueBar extends StatelessWidget {
+  const _TerminalValueBar({required this.caveat, required this.ink});
+
+  final Caveat caveat;
+  final Color ink;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final share = (caveat.tvShare ?? 0).clamp(0.0, 1.0);
+    final forecast = 1.0 - (caveat.tvShare ?? 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 7,
+            child: Row(
+              children: [
+                if (forecast > 0)
+                  Expanded(
+                    flex: (forecast * 1000).round(),
+                    child: ColoredBox(color: colors.textSecondary),
+                  ),
+                Expanded(
+                  flex: (share * 1000).round().clamp(1, 1000),
+                  child: ColoredBox(color: ink),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'forecast years ${_wholePercent(forecast)}  '
+          '\u00b7  terminal ${_wholePercent(caveat.tvShare ?? 0)}',
+          style: context.text.labelSmall?.copyWith(
+            color: colors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _MethodFitWarning extends StatelessWidget {
   const _MethodFitWarning({required this.warnings});
 

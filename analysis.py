@@ -271,7 +271,14 @@ def classify_financial(fin: CompanyFinancials) -> FinancialClassification:
 
 
 MIN_HISTORY_YEARS = 2
-HIGH_TV_SHARE = 0.90  # terminal value share of EV above which we warn
+# Terminal value as a share of enterprise value. Above the first, most of
+# the answer comes from the perpetuity and a reader should know before
+# acting on it. Above the second the explicitly forecast years are worth
+# less than nothing, so the figure rests entirely on the one part of the
+# model nobody can check - that is a different claim, and gets a different
+# tier.
+HIGH_TV_SHARE = 0.85
+TV_EXCEEDS_FORECAST = 1.00
 
 
 @dataclass
@@ -323,6 +330,72 @@ class ValuationReport:
     @property
     def method(self) -> str:
         return "dcf"
+
+
+# Severity, decided here and nowhere else. The app used to make this
+# judgement by position - whatever landed in the bottom list was a
+# footnote - which meant the sentence saying 109% of Tesla's value rests on
+# an unverifiable assumption sat below the sensitivity table, while a
+# doubt about method fit was pinned under the figure. Both are the model
+# telling you not to trust the number as read; only one of them looked
+# like it.
+SEVERITY_INFO = "info"          # true, worth recording, qualifies an input
+SEVERITY_CAUTION = "caution"    # sound arithmetic on assumptions worth checking
+SEVERITY_SERIOUS = "serious"    # the figure does not mean what it appears to
+
+SEVERITY_ORDER = {SEVERITY_SERIOUS: 0, SEVERITY_CAUTION: 1, SEVERITY_INFO: 2}
+
+
+class Warning(str):
+    """A warning, and how loudly to say it.
+
+    A str subclass rather than a dataclass, because fourteen places already
+    treat these as strings - four spreadsheet exporters, two report
+    formatters, the API - and every one of them should keep working
+    untouched. The severity rides along for the callers that want it.
+    """
+
+    severity: str
+    kind: str
+    detail: dict
+    headline: str
+
+    def __new__(cls, text: str, severity: str = SEVERITY_CAUTION,
+                kind: str = "", detail: dict | None = None,
+                headline: str = ""):
+        w = super().__new__(cls, text)
+        w.severity = severity
+        w.kind = kind
+        w.detail = dict(detail or {})
+        # The short form that sits under the figure. Falls back to the full
+        # text, which is always true if sometimes long.
+        w.headline = headline or text
+        return w
+
+
+def severity_of(warning) -> str:
+    """The severity of a warning, for the ones built before this existed."""
+    return getattr(warning, "severity", SEVERITY_CAUTION)
+
+
+def most_severe(warnings: list) -> "Warning | None":
+    """The one that belongs under the headline.
+
+    Ties go to the more fundamental complaint: a problem with the method
+    outranks a problem with an input, because no amount of adjusting the
+    inputs answers it.
+    """
+    if not warnings:
+        return None
+    return min(warnings, key=lambda w: (SEVERITY_ORDER.get(severity_of(w), 1),
+                                        0 if getattr(w, "kind", "") in
+                                        _METHOD_KINDS else 1))
+
+
+# Complaints about what the model can see at all, rather than about the
+# numbers fed into it.
+_METHOD_KINDS = {"method_fit", "dividends_only", "negative_equity",
+                 "terminal_value_over_100"}
 
 
 def growth_cost_note(report: "ValuationReport") -> str | None:
@@ -624,25 +697,59 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
         result = run_dcf(base, a)
 
         if result.intrinsic_value_per_share <= 0:
-            warnings.append(
-                "Equity value came out negative - debt exceeds the value of the "
-                "business plus its cash. Treat the per-share figure as an "
-                "indication of distress, not a price target."
-            )
-        if result.tv_pct_of_ev > HIGH_TV_SHARE:
-            warnings.append(
-                f"Terminal value is {result.tv_pct_of_ev:.0%} of enterprise value. "
-                "Almost all the valuation rests on the perpetuity assumption "
-                "rather than the explicit forecast, so the result is highly "
-                "sensitive to WACC and terminal growth."
-            )
+            warnings.append(Warning(
+                "Equity value came out negative - debt exceeds the value of "
+                "the business plus its cash. Treat the per-share figure as an "
+                "indication of distress, not a price target.",
+                severity=SEVERITY_SERIOUS, kind="negative_equity",
+                headline="Debt exceeds the whole business. This is a measure "
+                         "of distress, not a price."))
+
+        if result.tv_pct_of_ev > TV_EXCEEDS_FORECAST:
+            warnings.append(Warning(
+                f"Terminal value is {result.tv_pct_of_ev:.0%} of enterprise "
+                f"value. The explicit forecast contributes "
+                f"{_money(result.pv_ufcf_sum * 1e6)} and the perpetuity "
+                f"{_money(result.pv_terminal_value * 1e6)}, so the part of "
+                "the model you can check is not what produced the answer.",
+                severity=SEVERITY_SERIOUS, kind="terminal_value_over_100",
+                detail={"tv_pct": result.tv_pct_of_ev,
+                        "pv_explicit": result.pv_ufcf_sum,
+                        "pv_terminal": result.pv_terminal_value},
+                headline=(f"The {a.projection_years} forecast years are worth "
+                          "less than nothing. Every dollar of this figure "
+                          "comes from the perpetuity beyond them.")))
+        elif result.tv_pct_of_ev > HIGH_TV_SHARE:
+            warnings.append(Warning(
+                f"Terminal value is {result.tv_pct_of_ev:.0%} of enterprise "
+                f"value. The forecast years contribute "
+                f"{_money(result.pv_ufcf_sum * 1e6)} and the perpetuity "
+                f"{_money(result.pv_terminal_value * 1e6)}; move WACC or "
+                "long-run growth a little and the figure moves a lot.",
+                severity=SEVERITY_CAUTION, kind="terminal_value_high",
+                detail={"tv_pct": result.tv_pct_of_ev,
+                        "pv_explicit": result.pv_ufcf_sum,
+                        "pv_terminal": result.pv_terminal_value},
+                headline=(f"{result.tv_pct_of_ev:.0%} of the value sits "
+                          "beyond the forecast years.")))
         if a.revenue_growth <= a.terminal_growth:
-            warnings.append(growth_below_terminal_warning(
-                fin.company_name, a.revenue_growth, a.terminal_growth, a.projection_years))
+            warnings.append(Warning(
+                growth_below_terminal_warning(
+                    fin.company_name, a.revenue_growth, a.terminal_growth,
+                    a.projection_years),
+                severity=SEVERITY_CAUTION, kind="growth_below_terminal",
+                headline=(f"The forecast grows more slowly "
+                          f"({a.revenue_growth:.1%}) than the perpetuity "
+                          f"after it ({a.terminal_growth:.1%}).")))
 
     for prov in derived.provenance.values():
         if prov.source == "derived (clamped)":
-            warnings.append(clamp_warning(prov, fin.company_name))
+            # An input was pulled to the edge of its range. True, worth
+            # recording, and a statement about one assumption rather than
+            # about the answer.
+            warnings.append(Warning(
+                clamp_warning(prov, fin.company_name),
+                severity=SEVERITY_INFO, kind="clamped"))
 
     return Suitability(suitable=not reasons, reasons=reasons, warnings=warnings,
                        codes=codes, method_fit=method_fit)
@@ -837,11 +944,14 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
             "business is not generating."
         )
     elif payout is not None and payout >= HIGH_PAYOUT_RATIO and dividends.payments:
-        warnings.append(
+        warnings.append(Warning(
             f"{name} paid out {payout:.0%} of its {fiscal_year} earnings as "
             "dividends, leaving little retained to fund growth. Growth at the "
-            "assumed rate depends on earnings rising, not on the payout."
-        )
+            "assumed rate depends on earnings rising, not on the payout.",
+            severity=SEVERITY_CAUTION, kind="high_payout",
+            headline=(f"{payout:.0%} of earnings already goes out as "
+                      "dividends, leaving little to fund the assumed "
+                      "growth.")))
 
     # --- Blocking: the perpetuity formula breaks down ------------------------
     if a.terminal_growth >= a.cost_of_equity:
@@ -855,32 +965,51 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
     if not reasons:
         result = run_ddm(inputs, a)
         if result.tv_pct_of_value > HIGH_TV_SHARE:
-            warnings.append(
+            warnings.append(Warning(
                 f"The terminal value is {result.tv_pct_of_value:.0%} of the "
-                "valuation. Almost all of it rests on the perpetuity assumption, "
-                "so the result is highly sensitive to the cost of equity and "
-                "terminal growth."
-            )
+                "valuation. Almost all of it rests on the perpetuity "
+                "assumption, so the result is highly sensitive to the cost "
+                "of equity and terminal growth.",
+                severity=(SEVERITY_SERIOUS
+                          if result.tv_pct_of_value > TV_EXCEEDS_FORECAST
+                          else SEVERITY_CAUTION),
+                kind=("terminal_value_over_100"
+                      if result.tv_pct_of_value > TV_EXCEEDS_FORECAST
+                      else "terminal_value_high"),
+                detail={"tv_pct": result.tv_pct_of_value},
+                headline=(f"{result.tv_pct_of_value:.0%} of the value sits "
+                          "beyond the explicitly forecast dividends.")))
 
     buybacks, paid = d.get("latest_buybacks"), d.get("latest_dividends_paid")
     if buybacks and paid and buybacks > paid:
-        warnings.append(
+        # Not a caveat about an input: the model structurally cannot see
+        # the larger of the two numbers, so the gap to the market price is
+        # partly the method rather than the company.
+        warnings.append(Warning(
             f"{name} returned ${buybacks / 1e9:,.1f}bn through share buybacks "
-            f"against ${paid / 1e9:,.1f}bn in dividends in its {fiscal_year} financial year. A "
-            "dividend discount model counts only dividends, so it does not see "
-            "most of the cash this company returns to shareholders and is likely "
-            "to understate its value on that basis."
-        )
+            f"against ${paid / 1e9:,.1f}bn in dividends in its {fiscal_year} "
+            "financial year. A dividend discount model counts only dividends, "
+            "so it does not see most of the cash this company returns to "
+            "shareholders and is likely to understate its value on that basis.",
+            severity=SEVERITY_SERIOUS, kind="dividends_only",
+            detail={"buybacks": buybacks, "dividends": paid},
+            headline=("This model counts dividends only, and this company "
+                      f"returns ${buybacks / 1e9:,.1f}bn through buybacks "
+                      f"against ${paid / 1e9:,.1f}bn of dividends. It is "
+                      "likely to understate.")))
 
     history = d.get("dividend_history_used") or []
     cut_years = [year for (_, before), (year, after) in zip(history, history[1:])
                  if after < before * (1 - DIVIDEND_CUT_TOLERANCE)]
     if cut_years:
-        warnings.append(
-            f"The dividend per share fell in {', '.join(str(y) for y in cut_years)}. "
-            "The growth rate spans that cut, and a company that has cut its "
-            "dividend once can do so again."
-        )
+        warnings.append(Warning(
+            f"The dividend per share fell in "
+            f"{', '.join(str(y) for y in cut_years)}. The growth rate spans "
+            "that cut, and a company that has cut its dividend once can do "
+            "so again.",
+            severity=SEVERITY_CAUTION, kind="dividend_cut",
+            headline=("The dividend has been cut before, and the growth rate "
+                      "spans that cut.")))
 
     if dividends.variable_dividends:
         variable = [net for _, _, net in dividends.variable_dividends]
@@ -914,9 +1043,12 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
 
     for assumption, prov in derived.provenance.items():
         if prov.source == "derived (clamped)":
-            warnings.append(clamp_warning(prov, name))
+            warnings.append(Warning(clamp_warning(prov, name),
+                                    severity=SEVERITY_INFO, kind="clamped"))
         elif assumption == "dividend_growth" and prov.source == "default":
-            warnings.append(dividend_growth_default_warning(prov, name))
+            warnings.append(Warning(
+                dividend_growth_default_warning(prov, name),
+                severity=SEVERITY_INFO, kind="defaulted"))
 
     return Suitability(suitable=not reasons, reasons=reasons, warnings=warnings)
 

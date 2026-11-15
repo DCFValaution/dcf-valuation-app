@@ -188,6 +188,10 @@ def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
         # And later again: current market multiples, carried beside the
         # figure for reference and forming no part of it.
         "snapshot",
+        # And later still: the same caveats as `warnings`, plus the base-year
+        # notes, each carrying the severity the model assigned, so the app
+        # does not have to infer one from where it happens to render.
+        "warning_items",
     }
     assert body["method_fit_warnings"] == []
 

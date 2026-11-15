@@ -234,11 +234,22 @@ class NoteList extends StatelessWidget {
     required this.title,
     required this.notes,
     this.tone = Tone.caution,
+    this.quiet = false,
   });
 
   final String title;
   final List<String> notes;
   final Tone tone;
+
+  /// Render as a footnote rather than a warning: a neutral icon, no count,
+  /// and the title in the secondary colour.
+  ///
+  /// The tier this serves records things the model did that a reader is
+  /// entitled to know - a figure read as zero, an input held at the edge of
+  /// its range. None of it says the answer is wrong, and a warning triangle
+  /// beside it would claim otherwise. It must never look more urgent than a
+  /// caution sitting above it.
+  final bool quiet;
 
   @override
   Widget build(BuildContext context) {
@@ -256,10 +267,24 @@ class NoteList extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, size: 18, color: fg),
+              Icon(
+                quiet ? Icons.info_outline_rounded : Icons.warning_amber_rounded,
+                size: quiet ? 16 : 18,
+                color: quiet ? context.colors.textSecondary : fg,
+              ),
               const SizedBox(width: AppSpacing.sm),
-              Expanded(child: Text(title, style: context.text.titleSmall)),
-              if (notes.length > 1) Pill(label: '${notes.length}', tone: tone),
+              Expanded(
+                child: Text(
+                  title,
+                  style: quiet
+                      ? context.text.labelLarge?.copyWith(
+                          color: context.colors.textSecondary,
+                        )
+                      : context.text.titleSmall,
+                ),
+              ),
+              if (!quiet && notes.length > 1)
+                Pill(label: '${notes.length}', tone: tone),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -274,7 +299,7 @@ class NoteList extends StatelessWidget {
                     width: 5,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: fg,
+                      color: quiet ? context.colors.textSecondary : fg,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -282,7 +307,9 @@ class NoteList extends StatelessWidget {
                     child: Text(
                       tidyBackendMessage(note),
                       style: context.text.bodySmall?.copyWith(
-                        color: context.scheme.onSurface,
+                        color: quiet
+                            ? context.colors.textSecondary
+                            : context.scheme.onSurface,
                       ),
                     ),
                   ),

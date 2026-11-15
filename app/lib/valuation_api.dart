@@ -108,6 +108,64 @@ class DividendBasis {
 /// "default" or "override". It matters as much as the number: a figure read
 /// off the company's filings and a global placeholder deserve different
 /// weight, and the backend is careful to distinguish them.
+/// How loudly a caveat should be said, decided by the backend.
+///
+/// The app used to infer this from where it rendered: whatever landed in
+/// the bottom list read as a footnote, which put "109% of this value rests
+/// on an assumption nobody can check" below the sensitivity table. The
+/// severity now travels with the sentence, so the two cannot disagree.
+enum Severity { info, caution, serious }
+
+Severity _severityFrom(String? raw) => switch (raw) {
+  'serious' => Severity.serious,
+  'info' => Severity.info,
+  _ => Severity.caution,
+};
+
+class Caveat {
+  const Caveat({
+    required this.text,
+    required this.severity,
+    this.kind = '',
+    this.headline = '',
+    this.detail = const {},
+  });
+
+  /// The full sentence, for the list.
+  final String text;
+
+  final Severity severity;
+
+  /// Machine-readable cause, e.g. `terminal_value_over_100`. Used only to
+  /// decide whether a caveat draws the split bar - never to decide how
+  /// loudly to say it.
+  final String kind;
+
+  /// The short form that sits under the figure.
+  final String headline;
+
+  /// The figures behind it, where it has any.
+  final Map<String, dynamic> detail;
+
+  bool get isTerminalValue => kind.startsWith('terminal_value');
+
+  double? get tvShare => (detail['tv_pct'] as num?)?.toDouble();
+  double? get pvExplicit => (detail['pv_explicit'] as num?)?.toDouble();
+  double? get pvTerminal => (detail['pv_terminal'] as num?)?.toDouble();
+
+  factory Caveat.fromJson(Map<String, dynamic> json) {
+    final text = json['text'] as String? ?? '';
+    final headline = json['headline'] as String? ?? '';
+    return Caveat(
+      text: text,
+      severity: _severityFrom(json['severity'] as String?),
+      kind: json['kind'] as String? ?? '',
+      headline: headline.isEmpty ? text : headline,
+      detail: (json['detail'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+}
+
 class Assumption {
   final String name;
   final double value;
@@ -354,6 +412,11 @@ class ValuationSuccess extends ValuationResult {
   /// answer, not an aside.
   final List<String> warnings;
 
+  /// The same caveats plus the base-year notes, each carrying the severity
+  /// the model gave it. Rendered in preference to [warnings], which stays
+  /// for an older backend that does not send these.
+  final List<Caveat> caveats;
+
   /// Doubts about whether the method fits this company at all - not caveats
   /// about an assumption. Robinhood is the case: valued with a DCF, but part of
   /// its revenue comes from lending the data does not show. Shown pinned beside
@@ -403,6 +466,7 @@ class ValuationSuccess extends ValuationResult {
     this.dividendBasis,
     this.whyNotDcf = '',
     this.warnings = const [],
+    this.caveats = const [],
     this.methodFitWarnings = const [],
     this.sensitivity,
     this.capitalReturns,
@@ -476,6 +540,9 @@ class ValuationSuccess extends ValuationResult {
           ? null
           : DividendBasis.fromJson(dividends),
       whyNotDcf: json['why_not_dcf'] as String? ?? '',
+      caveats: (json['warning_items'] as List<dynamic>? ?? const [])
+          .map((w) => Caveat.fromJson(w as Map<String, dynamic>))
+          .toList(),
       warnings: (json['warnings'] as List<dynamic>? ?? const [])
           .map((w) => w.toString())
           .toList(),

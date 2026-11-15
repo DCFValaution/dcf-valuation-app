@@ -201,7 +201,7 @@ class TestDebtIsLeaseFree:
         values = {k: v for k, v in FULL.items() if k != "current_debt"}
         base, meta = M.base_year_from(company(ttm(values)))
         assert base.total_debt == pytest.approx(45_000.0)
-        assert any("current debt" in note for note in meta["base_notes"])
+        assert any("short-term debt" in note for note in meta["base_notes"])
 
 
 class TestPerFieldFallback:
@@ -213,7 +213,7 @@ class TestPerFieldFallback:
         assert base.revenue == pytest.approx(400_000.0)
         assert meta["base_period"] == "ttm"
         assert meta["base_capex"] is None
-        assert any("capital expenditure" in note for note in meta["base_notes"])
+        assert any("capital spending" in note for note in meta["base_notes"])
 
     def test_capex_is_reported_as_a_positive_amount_spent(self):
         _, meta = M.base_year_from(company(ttm()))
@@ -271,14 +271,37 @@ class TestVintage:
         assert result.notes == []
         assert "current_debt" in result.values
 
-    def test_a_stale_component_is_dropped_with_a_note(self, monkeypatch):
+    def test_a_stale_component_is_dropped_and_the_date_remembered(
+            self, monkeypatch):
         """Alphabet's case: quarterlyCurrentDebt last reported 2025-03-31,
-        548 days before the balance sheet it would have been read against."""
+        548 days before the balance sheet it would have been read against.
+
+        The date is kept as data rather than written up here. Dropping the
+        field produces a second fact further down - that the figure is read
+        as nil - and the two are one fact to a reader, so the sentence is
+        written once, where both are known.
+        """
         result = self._fetch(monkeypatch,
                              self._rows(current_debt="2025-03-31"))
         assert result.period_end == QE
         assert "current_debt" not in result.values
-        assert any("2025-03-31" in note for note in result.notes)
+        assert result.stale["current_debt"] == "2025-03-31"
+        assert result.notes == [], "no prose about it at this level"
+
+    def test_the_stale_date_reaches_the_reader_in_one_sentence(
+            self, monkeypatch):
+        """What the reader is actually shown. Two notes about one missing
+        number was the thing being fixed."""
+        result = self._fetch(monkeypatch,
+                             self._rows(current_debt="2025-03-31"))
+        _, meta = M.base_year_from(company(result))
+        notes = meta["base_notes"]
+        about_debt = [n for n in notes if "short-term debt" in n]
+        assert len(about_debt) == 1, notes
+        assert "March 2025" in about_debt[0]
+        assert "2025-03-31" not in about_debt[0], "no raw dates on screen"
+        assert "quarterlyCurrentDebt" not in about_debt[0], "no field names"
+        assert "548" not in about_debt[0], "no day counts"
 
     def test_one_quarter_of_slack_is_tolerated(self, monkeypatch):
         """Reporting calendars are not perfectly aligned, and refusing over a

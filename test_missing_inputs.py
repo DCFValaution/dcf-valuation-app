@@ -245,14 +245,14 @@ class TestTheBridge:
         fin = make_fin(short_debt=OMITTED, long_debt=OMITTED)
         _, meta = base_year_from(fin)
         notes = " ".join(meta.get("base_notes") or [])
-        assert "no debt reported" in notes
-        assert "inferred, not read" in notes
+        assert "doesn't report any debt" in notes
+        assert "counted as zero" in notes
 
     def test_the_base_year_says_when_it_inferred_cash(self):
         fin = make_fin(cash=OMITTED, investments=OMITTED)
         _, meta = base_year_from(fin)
         notes = " ".join(meta.get("base_notes") or [])
-        assert "no cash reported" in notes
+        assert "report any cash" in notes
 
     def test_a_complete_balance_sheet_says_nothing(self):
         _, meta = base_year_from(make_fin())
