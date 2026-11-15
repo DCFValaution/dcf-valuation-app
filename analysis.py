@@ -744,9 +744,41 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                           f"after it ({a.terminal_growth:.1%}).")))
 
     for prov in derived.provenance.values():
-        if prov.source == "derived (clamped)":
-            # An input was pulled to the edge of its range. True, worth
-            # recording, and a statement about one assumption rather than
+        if prov.source != "derived (clamped)":
+            continue
+        if prov.name == "revenue_growth":
+            # The one clamp that belongs beside the figure. Every other one
+            # trims an input the reader never questioned; this one overrules
+            # the company's own reported history - the forecast grows at a
+            # rate the company did not achieve - and the headline figure is
+            # built on the replacement. A reader comparing it to the market
+            # price should meet that before they act on it.
+            raw, limit = prov.raw, prov.limit
+            if raw is not None and limit is not None and raw > limit:
+                headline = (
+                    f"The forecast grows at {limit:.1%} a year rather than "
+                    f"the {raw:.1%} this company has managed, which the "
+                    "model treats as too fast to keep up.")
+            elif raw is not None and limit is not None:
+                # The clamp runs the other way here: revenue shrank, and
+                # the forecast holds it flat rather than projecting the
+                # decline forever. Saying "too fast" about a company going
+                # backwards would be nonsense.
+                headline = (
+                    f"Revenue has been shrinking {abs(raw):.1%} a year. The "
+                    f"forecast assumes {limit:.1%} instead rather than "
+                    "projecting the decline indefinitely.")
+            else:
+                headline = ("The forecast uses a growth rate the model "
+                            "adjusted, not the one the company has managed.")
+            warnings.append(Warning(
+                clamp_warning(prov, fin.company_name),
+                severity=SEVERITY_CAUTION, kind="growth_clamped",
+                detail={"raw": raw, "limit": limit},
+                headline=headline))
+        else:
+            # The rest trim one input to the edge of its range. True, worth
+            # recording, and a statement about an assumption rather than
             # about the answer.
             warnings.append(Warning(
                 clamp_warning(prov, fin.company_name),

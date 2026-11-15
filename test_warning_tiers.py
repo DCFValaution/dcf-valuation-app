@@ -313,3 +313,62 @@ class TestTheListTheApiBuilds:
                     headline="the short one", detail={"tv_pct": 1.09})]))
         assert items[0].headline == "the short one"
         assert items[0].detail["tv_pct"] == pytest.approx(1.09)
+
+
+# --- The one clamp that is not a footnote -----------------------------
+
+class TestTheGrowthClampIsLouder:
+    """Every other clamp trims an input nobody questioned. This one
+    overrules the company's own reported history, and the headline figure
+    is built on the replacement."""
+
+    def _clamped_growth(self, monkeypatch, cagr):
+        import assumptions as Asm
+        from market_data import base_year_from
+        monkeypatch.setattr(Asm, "fetch_risk_free_rate",
+                            lambda tenor="year10": (0.0507, "pinned"))
+        fin = _fin()
+        # Rewrite the revenue history to the requested compound rate.
+        newest = 10_000e6
+        for i, row in enumerate(fin.income):
+            row["revenue"] = newest / ((1 + cagr) ** i)
+        base, _ = base_year_from(fin)
+        ws = A.assess_suitability(fin, Asm.derive_assumptions(fin), base).warnings
+        return [w for w in ws if getattr(w, "kind", "") == "growth_clamped"]
+
+    def test_growth_held_down_is_a_caution(self, monkeypatch):
+        got = self._clamped_growth(monkeypatch, 0.60)
+        assert got, "a 60% CAGR should be clamped"
+        assert severity_of(got[0]) == SEVERITY_CAUTION
+        assert "too fast to keep up" in got[0].headline
+
+    def test_growth_held_up_says_so_the_right_way_round(self, monkeypatch):
+        """Exxon's case. The clamp runs the other way - revenue shrank and
+        the forecast holds it flat - so "too fast" would be nonsense."""
+        got = self._clamped_growth(monkeypatch, -0.30)
+        assert got, "a -30% CAGR should be clamped"
+        assert severity_of(got[0]) == SEVERITY_CAUTION
+        assert "shrinking" in got[0].headline
+        assert "too fast" not in got[0].headline
+
+    def test_the_headline_names_both_rates(self, monkeypatch):
+        got = self._clamped_growth(monkeypatch, 0.60)
+        assert "%" in got[0].headline
+        assert got[0].detail["raw"] is not None
+        assert got[0].detail["limit"] is not None
+
+    def test_every_other_clamp_stays_quiet(self, monkeypatch):
+        """Only revenue growth was promoted. A clamped margin or D&A is
+        still a footnote."""
+        import assumptions as Asm
+        from market_data import base_year_from
+        monkeypatch.setattr(Asm, "fetch_risk_free_rate",
+                            lambda tenor="year10": (0.0507, "pinned"))
+        fin = _fin()
+        for row in fin.cashflow:
+            row["depreciationAndAmortization"] = 9_000e6   # past its ceiling
+        base, _ = base_year_from(fin)
+        ws = A.assess_suitability(fin, Asm.derive_assumptions(fin), base).warnings
+        plain = [w for w in ws if getattr(w, "kind", "") == "clamped"]
+        assert plain, "the D&A clamp should still warn"
+        assert all(severity_of(w) == SEVERITY_INFO for w in plain)

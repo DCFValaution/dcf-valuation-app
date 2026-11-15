@@ -1907,6 +1907,10 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
     'dividends_only' => 'Misses most cash returned',
     'negative_equity' => 'A measure of distress',
     'method_fit' => 'The method may not fit',
+    // Both directions of the clamp: held down for a company growing faster
+    // than the model will project, held up for one going backwards.
+    'growth_clamped' => 'Growth rate overridden',
+    'growth_below_terminal' => 'Growth below the perpetuity',
     _ => 'Read with care',
   };
 

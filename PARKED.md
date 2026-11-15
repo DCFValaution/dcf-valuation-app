@@ -97,6 +97,17 @@ The design this was built from put the callout in a side column at wide
 widths, with the figure and its qualifier on the left. Worth doing; it was
 left out to keep the first version of the tiers to one shape.
 
+## The honesty note still says WACC
+
+Everything else a reader meets now says "the discount rate"; the honesty
+note says "It assumes a WACC of 11.86%". Left alone deliberately - the
+sentence is duplicated character for character in Dart so it can update
+mid-drag, so changing it means editing both and regenerating the parity
+fixtures, which is more than a word swap deserves on its own.
+
+Consider "a discount rate (WACC) of X%" the next time that note is edited
+in lockstep for some other reason.
+
 ## Cosmetic copy typos
 
 Small wording and punctuation errors across the app, noticed in passing and
