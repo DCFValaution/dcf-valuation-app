@@ -672,10 +672,10 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
     if a.terminal_growth >= a.wacc:
         codes.append("growth_exceeds_wacc")
         reasons.append(
-            f"Terminal growth ({a.terminal_growth:.1%}) is not below WACC "
-            f"({a.wacc:.1%}). A company cannot grow faster than its discount rate "
-            "forever - the maths gives an infinite or negative value - so terminal "
-            "growth must be set below WACC."
+            f"Terminal growth ({a.terminal_growth:.1%}) is not below the "
+            f"discount rate ({a.wacc:.1%}). A company cannot grow faster than "
+            "its discount rate forever - the maths gives an infinite or "
+            "negative value - so terminal growth must be set below it."
         )
 
     # --- Blocking: the projection never produces cash ----------------------
@@ -724,8 +724,9 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                 f"Terminal value is {result.tv_pct_of_ev:.0%} of enterprise "
                 f"value. The forecast years contribute "
                 f"{_money(result.pv_ufcf_sum * 1e6)} and the perpetuity "
-                f"{_money(result.pv_terminal_value * 1e6)}; move WACC or "
-                "long-run growth a little and the figure moves a lot.",
+                f"{_money(result.pv_terminal_value * 1e6)}; move the "
+                "discount rate or long-run growth a little and the figure "
+                "moves a lot.",
                 severity=SEVERITY_CAUTION, kind="terminal_value_high",
                 detail={"tv_pct": result.tv_pct_of_ev,
                         "pv_explicit": result.pv_ufcf_sum,
@@ -1282,9 +1283,10 @@ def assess_speculative_suitability(fin: CompanyFinancials,
             "A path that ends in losses is not a path to profitability.")
     if a.terminal_growth >= a.wacc:
         reasons.append(
-            f"Terminal growth ({a.terminal_growth:.1%}) is not below WACC ({a.wacc:.1%}). The "
-            "Gordon growth formula requires WACC > g; otherwise terminal value is infinite or "
-            "negative.")
+            f"Terminal growth ({a.terminal_growth:.1%}) is not below the "
+            f"discount rate ({a.wacc:.1%}). The perpetuity formula needs the "
+            "discount rate to be the larger of the two; otherwise the "
+            "terminal value is infinite or negative.")
 
     # --- Warnings: what getting there would take ---------------------------------
     if not reasons:

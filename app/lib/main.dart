@@ -1867,8 +1867,9 @@ class _SuccessCard extends StatelessWidget {
 
 /// Doubts about whether the method fits this company at all.
 ///
-/// Deliberately not one of the "Keep in mind" bullets. Those are caveats about
-/// an assumption - growth capped, a tax credit ignored - and a reader can
+/// Deliberately not one of the "Worth knowing" bullets. Those are the quiet
+/// tier - caveats about an assumption, growth capped or a tax credit
+/// ignored - and a reader can
 /// weigh them against the figure. This says the figure itself may not
 /// describe the company, which qualifies the implied upside or downside too,
 /// so it sits under the figure with a heading of its own and amber rather
@@ -2022,60 +2023,69 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
   }
 }
 
-/// A share, to the nearest point. Two decimals on a split that is only
-/// ever a rough proportion reads as precision the figure does not have.
-String _wholePercent(double v) => '${(v * 100).round()}%';
-
 /// Where the value came from: the explicitly forecast years against the
 /// perpetuity beyond them.
 ///
 /// Drawn rather than described because the point is a proportion, and a
-/// proportion is the one thing a sentence conveys badly. Where the forecast
-/// years are worth less than nothing the bar is entirely terminal, which is
-/// the honest picture.
+/// proportion is the one thing a sentence conveys badly. It carries no
+/// caption: the qualifier above and the callout below both give the
+/// percentage, and a third copy under a bar is the figure shouting.
+///
+/// Where the forecast years are worth less than nothing there is no
+/// proportion to draw - the terminal value is more than the whole - so the
+/// bar fills completely in the serious colour. That is the honest picture
+/// rather than a segment of negative width.
 class _TerminalValueBar extends StatelessWidget {
   const _TerminalValueBar({required this.caveat, required this.ink});
 
   final Caveat caveat;
   final Color ink;
 
+  static const double _height = 10;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final share = (caveat.tvShare ?? 0).clamp(0.0, 1.0);
-    final forecast = 1.0 - (caveat.tvShare ?? 0);
+    final share = caveat.tvShare ?? 0;
+    final forecast = 1.0 - share;
+    final terminalPercent = (share * 100).round();
+    final forecastPercent = (forecast * 100).round();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: SizedBox(
-            height: 7,
-            child: Row(
-              children: [
-                if (forecast > 0)
-                  Expanded(
-                    flex: (forecast * 1000).round(),
-                    child: ColoredBox(color: colors.textSecondary),
-                  ),
-                Expanded(
-                  flex: (share * 1000).round().clamp(1, 1000),
-                  child: ColoredBox(color: ink),
+    return Semantics(
+      label: forecast <= 0
+          ? 'The forecast years contribute nothing; the terminal value is '
+                '$terminalPercent per cent of enterprise value.'
+          : 'The forecast years are $forecastPercent per cent of enterprise '
+                'value and the terminal value $terminalPercent per cent.',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_height / 2),
+        child: SizedBox(
+          height: _height,
+          width: double.infinity,
+          child: forecast <= 0
+              ? ColoredBox(color: ink)
+              : Row(
+                  // Without this the row centres its children, which hands
+                  // each segment a loose height and a ColoredBox with no
+                  // child of its own then collapses to nothing. The bar was
+                  // drawing its divider and neither of its two halves.
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: (forecast * 1000).round().clamp(1, 1000),
+                      child: ColoredBox(color: colors.textSecondary),
+                    ),
+                    // A hairline between the two, so they read as two
+                    // quantities rather than one bar that changes colour.
+                    Container(width: 2, color: context.scheme.surface),
+                    Expanded(
+                      flex: (share * 1000).round().clamp(1, 1000),
+                      child: ColoredBox(color: ink),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
         ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'forecast years ${_wholePercent(forecast)}  '
-          '\u00b7  terminal ${_wholePercent(caveat.tvShare ?? 0)}',
-          style: context.text.labelSmall?.copyWith(
-            color: colors.textSecondary,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

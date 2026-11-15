@@ -337,7 +337,7 @@ def test_where_even_a_speculative_path_is_meaningless_it_is_refused(client, tick
 
 @pytest.mark.parametrize("overrides, phrase", [
     ({"target_operating_margin": 0.0}, "not a path to profitability"),
-    ({"terminal_growth": 0.12, "wacc": 0.11}, "is not below WACC"),
+    ({"terminal_growth": 0.12, "wacc": 0.11}, "is not below the discount rate"),
 ])
 def test_overrides_that_break_the_model_are_refused_not_crashed(client, overrides, phrase):
     r = client.post("/valuation/speculative", json={"ticker": GROWER, "overrides": overrides})

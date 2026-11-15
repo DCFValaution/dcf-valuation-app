@@ -2496,7 +2496,8 @@ def _ttm_base_year_from(fin: CompanyFinancials,
     if capex_mm is None:
         notes.append(
             f"{_short_name(fin)} doesn't report capital spending for the "
-            "last twelve months, so it isn't shown.")
+            "last twelve months, so the forecast uses its annual accounts "
+            "instead.")
     else:
         capex_mm = abs(capex_mm)
 

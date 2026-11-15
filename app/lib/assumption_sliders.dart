@@ -189,7 +189,7 @@ const List<AdjustableAssumption> kAdjustable = [
   AdjustableAssumption(
     name: 'terminal_growth',
     label: 'Terminal growth',
-    help: 'Perpetual growth; must stay below WACC',
+    help: 'Perpetual growth; must stay below the discount rate',
     min: 0.0,
     max: 0.06,
     step: 0.001,
