@@ -369,7 +369,7 @@ def test_a_defaulted_beta_is_a_caution(monkeypatch):
         0.0515,
         rec("equity_risk_premium", 0.0441, "published", "pinned"),
         rec("beta", Asm.DEFAULT_BETA, "default",
-            "beta reported 0.0720447, outside plausible range; used market "
+            "beta measured 0.0720447, outside plausible range; used market "
             "beta of 1.0")))
     got = _of_kind(ws, "beta_default")
     assert severity_of(got) == SEVERITY_CAUTION
@@ -476,3 +476,33 @@ def test_a_generic_cost_of_equity_is_serious_too():
                    "cost_of_equity_default")
     assert severity_of(got) == A.SEVERITY_SERIOUS
     assert "says little about this company" in got.headline
+
+
+def test_the_beta_message_does_not_blame_the_provider_for_our_own_figure():
+    """The rejected beta is one this model regressed, not one it was given.
+
+    LMT and SHEL both reach the default on a beta of about 0.07, and both
+    of those figures came out of our own five-year regression. The message
+    used to call them "reported", which reads as the data provider's fault
+    and sends anyone debugging it to the wrong place.
+    """
+    import assumptions as Asm
+    from market_data import CompanyFinancials
+
+    recorded = {}
+
+    def record(name, value, source, detail, **kw):
+        recorded[name] = (value, source, detail)
+        return value
+
+    fin = CompanyFinancials(
+        ticker="LMT",
+        profile={"beta": 0.0698,
+                 "betaSource": "computed from 59 monthly returns vs ^GSPC"},
+        income=[{}], balance=[{}], cashflow=[{}])
+    Asm._capm_inputs(fin, record)
+
+    _, source, detail = recorded["beta"]
+    assert source == "default"
+    assert "measured 0.0698" in detail
+    assert "reported" not in detail

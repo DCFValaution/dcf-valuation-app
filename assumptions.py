@@ -544,9 +544,15 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
             "beta", blume_adjusted(raw_beta), "derived",
             f"Blume-adjusted from raw {raw_beta:.3g}; {source}")
     else:
+        # "measured", not "reported". The figure in this branch is almost
+        # always one this model computed itself - a regression of the
+        # company's own five years of monthly returns against the S&P 500 -
+        # and calling it "reported" blamed the data provider for our own
+        # arithmetic. The quoted figure is reached only when that regression
+        # could not run at all, and betaSource says so when it did.
         reason = (fin.profile.get("betaSource")
                   or "not reported by the quote endpoint") if raw_beta == 0 \
-            else f"reported {raw_beta:g}, outside plausible range"
+            else f"measured {raw_beta:g}, outside plausible range"
         beta = record_input("beta", DEFAULT_BETA, "default",
                             f"beta {reason}; used market beta of 1.0")
 
