@@ -17,9 +17,11 @@ attached, because a number on screen is what people remember.
 from dataclasses import dataclass, field
 from statistics import median
 
-from assumptions import (DAMODARAN_ERP_AS_OF, DerivedAssumptions,
-                         derive_assumptions, risk_free_as_of_text,
-                         risk_free_is_stale)
+from assumptions import (DAMODARAN_ERP_AS_OF, DAMODARAN_IMPLIED_ERP,
+                         LONG_RUN_GROWTH_AS_OF, LONG_RUN_NOMINAL_GROWTH,
+                         DerivedAssumptions, derive_assumptions,
+                         erp_age_days, erp_is_stale, risk_free_as_of_text,
+                         risk_free_is_stale, sep_age_days, sep_is_stale)
 from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
                             growth_below_terminal_warning, signed_pct,
@@ -396,7 +398,136 @@ def most_severe(warnings: list) -> "Warning | None":
 # Complaints about what the model can see at all, rather than about the
 # numbers fed into it.
 _METHOD_KINDS = {"method_fit", "dividends_only", "negative_equity",
-                 "terminal_value_over_100"}
+                 "terminal_value_over_100",
+                 # A generic discount rate is a statement about the whole
+                 # output rather than about one input, so it outranks a
+                 # complaint the reader could answer by moving a slider.
+                 "wacc_default", "cost_of_equity_default"}
+
+
+def input_source_warnings(derived, *, dcf: bool) -> list["Warning"]:
+    """Caveats about where the discount rate's own inputs came from.
+
+    Every one of these was previously invisible. The provenance recorded
+    `source: "default"` and the app rendered that only on the assumption
+    row, so a valuation whose entire discount rate was a generic number
+    looked exactly like one built from the company's own capital structure.
+    The stored risk-free rate was the first of these to be found drifting,
+    by accident, from a figure that could not be right; these are the rest
+    of the same class, graded by how much of the answer they carry.
+
+    *dcf* selects the inputs that only one method has. The dividend model
+    has no WACC and no cost of debt; it has a cost of equity, which is the
+    same CAPM build-up and fails in the same way.
+    """
+    out: list["Warning"] = []
+    store = {**(getattr(derived, "wacc_inputs", None) or {}),
+             **(getattr(derived, "capm_inputs", None) or {}),
+             **(getattr(derived, "provenance", None) or {})}
+    diagnostics = getattr(derived, "diagnostics", None) or {}
+
+    def defaulted(name: str):
+        prov = store.get(name)
+        return prov if prov is not None and prov.source == "default" else None
+
+    stored_rate = stored_rate_warning(store)
+    if stored_rate is not None:
+        out.append(stored_rate)
+
+    # --- The discount rate itself ------------------------------------------
+    # Serious, and the only one of these that is. When WACC derivation fails
+    # outright the figure is not a valuation of this company any more: it is
+    # this company's cash flows discounted at a number chosen for want of
+    # one. A reader comparing it to the market price has to know that before
+    # they act on it, not after they go looking at an assumption row.
+    wacc_prov = defaulted("wacc")
+    if dcf and wacc_prov is not None:
+        out.append(Warning(
+            f"The discount rate could not be derived for this company, so a "
+            f"generic {wacc_prov.value:.1%} was used. The figure reflects "
+            "that rate rather than this company's own cost of capital.",
+            severity=SEVERITY_SERIOUS, kind="wacc_default",
+            detail={"wacc": wacc_prov.value, "why": wacc_prov.detail},
+            headline=(f"Valued at a generic {wacc_prov.value:.1%} discount "
+                      "rate because this company's own could not be worked "
+                      "out; the figure says little about this company.")))
+
+    cost_of_equity_prov = defaulted("cost_of_equity")
+    if not dcf and cost_of_equity_prov is not None:
+        out.append(Warning(
+            f"The cost of equity could not be derived for this company, so "
+            f"a generic {cost_of_equity_prov.value:.1%} was used. The figure "
+            "reflects that rate rather than this company's own.",
+            severity=SEVERITY_SERIOUS, kind="cost_of_equity_default",
+            detail={"cost_of_equity": cost_of_equity_prov.value,
+                    "why": cost_of_equity_prov.detail},
+            headline=(f"Valued at a generic "
+                      f"{cost_of_equity_prov.value:.1%} discount rate "
+                      "because this company's own could not be worked out; "
+                      "the figure says little about this company.")))
+
+    # --- Beta: one term of the discount rate, not the whole of it ----------
+    beta_prov = defaulted("beta")
+    if beta_prov is not None:
+        out.append(Warning(
+            "This company's share-price sensitivity to the market could not "
+            f"be measured, so the market average of {beta_prov.value:.1f} "
+            "was used. The discount rate rests on it.",
+            severity=SEVERITY_CAUTION, kind="beta_default",
+            detail={"beta": beta_prov.value, "why": beta_prov.detail},
+            headline=("How much this share moves with the market could not "
+                      f"be measured, so the market average of "
+                      f"{beta_prov.value:.1f} stands in. That feeds the "
+                      "discount rate.")))
+
+    # --- Cost of debt: a weighted minority of the discount rate ------------
+    debt_prov = defaulted("cost_of_debt")
+    if dcf and debt_prov is not None:
+        out.append(Warning(
+            f"The rate this company pays on its debt could not be worked "
+            f"out from its accounts, so {debt_prov.value:.1%} was assumed - "
+            "the risk-free rate plus a standard spread.",
+            severity=SEVERITY_INFO, kind="cost_of_debt_default",
+            detail={"cost_of_debt": debt_prov.value,
+                    "why": debt_prov.detail}))
+
+    # --- The two published figures that expire ----------------------------
+    # Both already had a staleness flag. Neither reached the reader: the
+    # flag travelled on the assumption row, where a date nobody is looking
+    # at is indistinguishable from a date that is current.
+    if erp_is_stale():
+        erp_prov = store.get("equity_risk_premium")
+        value = getattr(erp_prov, "value", DAMODARAN_IMPLIED_ERP)
+        out.append(Warning(
+            f"The equity risk premium of {value:.2%} was published "
+            f"{DAMODARAN_ERP_AS_OF:%B %Y} and is overdue an update. It is "
+            "republished monthly, and the discount rate moves with it.",
+            severity=SEVERITY_CAUTION, kind="erp_stale",
+            detail={"erp": value, "as_of": f"{DAMODARAN_ERP_AS_OF:%B %Y}",
+                    "age_days": erp_age_days()},
+            headline=(f"The market risk premium this uses is from "
+                      f"{DAMODARAN_ERP_AS_OF:%B %Y} and has not been "
+                      "refreshed since. The discount rate depends on it.")))
+
+    # Only when the stale figure is the one that bound. The ceiling is the
+    # lowest of three limits, and a stale number that lost to the other two
+    # changed nothing about the answer - warning about it would be noise
+    # that teaches the reader to ignore this tier.
+    if dcf and sep_is_stale() \
+            and diagnostics.get("terminal_growth_binding") == "long_run_growth":
+        out.append(Warning(
+            f"The long-run growth figure that caps this forecast's "
+            f"perpetuity was published {LONG_RUN_GROWTH_AS_OF:%B %Y} and is "
+            "overdue an update. It is the limit that bound here.",
+            severity=SEVERITY_CAUTION, kind="long_run_growth_stale",
+            detail={"growth": LONG_RUN_NOMINAL_GROWTH,
+                    "as_of": f"{LONG_RUN_GROWTH_AS_OF:%B %Y}",
+                    "age_days": sep_age_days()},
+            headline=("The long-run growth estimate that caps the perpetuity "
+                      f"is from {LONG_RUN_GROWTH_AS_OF:%B %Y} and has not "
+                      "been refreshed. It is what set the ceiling here.")))
+
+    return out
 
 
 def stored_rate_warning(inputs: dict) -> "Warning | None":
@@ -779,9 +910,7 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                           f"({a.revenue_growth:.1%}) than the perpetuity "
                           f"after it ({a.terminal_growth:.1%}).")))
 
-    stored_rate = stored_rate_warning(derived.wacc_inputs)
-    if stored_rate is not None:
-        warnings.append(stored_rate)
+    warnings.extend(input_source_warnings(derived, dcf=True))
 
     for prov in derived.provenance.values():
         if prov.source != "derived (clamped)":
@@ -1122,11 +1251,9 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
             "as a dividend the company can be expected to repeat."
         )
 
-    # The dividend model builds its cost of equity from the same risk-free
-    # rate, so it rests on the stored one in exactly the same way.
-    stored_rate = stored_rate_warning(derived.capm_inputs)
-    if stored_rate is not None:
-        warnings.append(stored_rate)
+    # The dividend model builds its cost of equity from the same CAPM
+    # inputs, so it rests on the same stand-ins in the same way.
+    warnings.extend(input_source_warnings(derived, dcf=False))
 
     for assumption, prov in derived.provenance.items():
         if prov.source == "derived (clamped)":

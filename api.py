@@ -85,7 +85,7 @@ from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
 from assumptions import (DAMODARAN_ERP_AS_OF, erp_is_stale,
                          risk_free_as_of_text, risk_free_is_stale)
 from analysis import (SEVERITY_CAUTION, SEVERITY_INFO, SEVERITY_SERIOUS,
-                      severity_of)
+                      _METHOD_KINDS as METHOD_KINDS, severity_of)
 from relative import MAX_PEERS
 from hypothetical import (HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
                           NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
@@ -1242,10 +1242,11 @@ def _warning_items(report) -> list[WarningOut]:
             headline=str(note)))
 
     order = {SEVERITY_SERIOUS: 0, SEVERITY_CAUTION: 1, SEVERITY_INFO: 2}
-    method_first = {"method_fit", "dividends_only", "negative_equity",
-                    "terminal_value_over_100"}
+    # Imported rather than retyped. This set was a second copy of
+    # analysis._METHOD_KINDS, and a kind added to one and not the other
+    # sorts correctly in the model and wrongly on the wire.
     items.sort(key=lambda i: (order.get(i.severity, 1),
-                              0 if i.kind in method_first else 1))
+                              0 if i.kind in METHOD_KINDS else 1))
     return items
 
 

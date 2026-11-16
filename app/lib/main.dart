@@ -1919,6 +1919,15 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
     // is a caveat about the figure and not about an input the reader
     // chose. Named for what it is rather than for the mechanism.
     'risk_free_fallback' => 'Interest rate not live',
+    // The whole discount rate, not one term of it: the figure is this
+    // company's cash flows at somebody else's cost of capital.
+    'wacc_default' => 'Generic discount rate',
+    'cost_of_equity_default' => 'Generic discount rate',
+    'beta_default' => 'Market average stands in',
+    // Two published figures that expire. Both already carried a date; the
+    // date reached nobody until these.
+    'erp_stale' => 'Risk premium out of date',
+    'long_run_growth_stale' => 'Growth estimate out of date',
     _ => 'Read with care',
   };
 

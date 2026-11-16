@@ -106,8 +106,8 @@ def test_the_detail_is_quiet_while_the_rate_is_fresh():
 # ---------------------------------------------------------------------------
 
 class _Prov:
-    def __init__(self, value, source):
-        self.value, self.source = value, source
+    def __init__(self, value, source, detail="forced for this test"):
+        self.value, self.source, self.detail = value, source, detail
 
 
 def test_no_warning_when_the_rate_came_from_the_curve():
@@ -270,3 +270,209 @@ def test_the_equity_risk_premium_still_carries_its_own_date():
         f"{Asm.DAMODARAN_ERP_AS_OF:%B %Y}"
     assert _is_stale("equity_risk_premium",
                      _Prov(0.0441, "override")) is False
+
+
+# ---------------------------------------------------------------------------
+# The rest of the same class: every other stand-in the discount rate rests on
+# ---------------------------------------------------------------------------
+#
+# Each of these recorded `source: "default"` and showed it on an assumption
+# row only, so a valuation discounted at a generic rate looked exactly like
+# one built from the company's own capital structure. Graded by how much of
+# the answer the stand-in carries.
+
+def _dcf_warnings(monkeypatch, **patches):
+    """Drive the real DCF path with one input forced onto its default."""
+    import test_warning_tiers as T
+    from market_data import base_year_from
+
+    _a_rate(monkeypatch)
+    for target, value in patches.items():
+        monkeypatch.setattr(Asm, target, value)
+    fin = T._fin()
+    base, _ = base_year_from(fin)
+    derived = Asm.derive_assumptions(fin)
+    return A.assess_suitability(fin, derived, base).warnings
+
+
+def _kinds(warnings):
+    return {getattr(w, "kind", "") for w in warnings}
+
+
+def _of_kind(warnings, kind):
+    return next(w for w in warnings if getattr(w, "kind", "") == kind)
+
+
+def test_a_generic_discount_rate_is_serious(monkeypatch):
+    """The one serious tier here. The figure stops being about the company.
+
+    LCID is the only real ticker that reaches this path, and it is refused
+    for being loss-making before a figure is produced - so this is forced,
+    and the forcing is the reason the test exists rather than a shortcut.
+    """
+    ws = _dcf_warnings(monkeypatch, _derive_wacc=lambda fin, tax, rec: (
+        None, "computed WACC of 3.6% is outside the plausible range", {}))
+    got = _of_kind(ws, "wacc_default")
+    assert severity_of(got) == A.SEVERITY_SERIOUS
+    assert "generic 8.5% discount rate" in got.headline
+    assert "says little about this company" in got.headline
+    assert got.detail["wacc"] == Asm.DEFAULT_WACC
+
+
+def test_a_generic_discount_rate_leads_the_list(monkeypatch):
+    """A complaint about the whole output outranks one about an input."""
+    ws = _dcf_warnings(monkeypatch, _derive_wacc=lambda fin, tax, rec: (
+        None, "failed", {}))
+    assert A.most_severe(ws).kind == "wacc_default"
+    assert "wacc_default" in A._METHOD_KINDS
+
+
+def test_the_api_sorts_a_generic_rate_first():
+    """analysis and api had two copies of this set; now they share one.
+
+    Asserted on the ordering the app receives, not on the identity of the
+    set. The first version of this test compared the two objects, which
+    passed happily with api.py sorting against a hard-coded set of one.
+    """
+    import api
+
+    assert api.METHOD_KINDS is A._METHOD_KINDS
+
+    class FakeSuit:
+        method_fit: list = []
+        # Equally serious, and the one that must win is built SECOND. The
+        # sort is stable, so an ordering that does not consult the set
+        # leaves these in the order written and the assertion fails.
+        warnings = [
+            A.Warning("some other serious thing",
+                      severity=A.SEVERITY_SERIOUS, kind="not_a_method_kind",
+                      headline="some other serious thing"),
+            A.Warning("generic rate", severity=A.SEVERITY_SERIOUS,
+                      kind="wacc_default", headline="generic rate"),
+            A.Warning("a caution", severity=SEVERITY_CAUTION,
+                      kind="beta_default", headline="a caution"),
+        ]
+
+    class FakeReport:
+        suitability = FakeSuit()
+        meta: dict = {}
+
+    kinds = [i.kind for i in api._warning_items(FakeReport())]
+    assert kinds[0] == "wacc_default", (
+        f"a generic discount rate must lead the list, got {kinds}")
+    assert kinds[-1] == "beta_default", "a caution outranked a serious one"
+
+
+def test_a_defaulted_beta_is_a_caution(monkeypatch):
+    """Real on SHEL and LMT, where Yahoo reports a beta of 0.07."""
+    ws = _dcf_warnings(monkeypatch, _capm_inputs=lambda fin, rec: (
+        0.0515,
+        rec("equity_risk_premium", 0.0441, "published", "pinned"),
+        rec("beta", Asm.DEFAULT_BETA, "default",
+            "beta reported 0.0720447, outside plausible range; used market "
+            "beta of 1.0")))
+    got = _of_kind(ws, "beta_default")
+    assert severity_of(got) == SEVERITY_CAUTION
+    assert "market average of 1.0" in got.headline
+    assert got.detail["beta"] == 1.0
+
+
+def test_a_defaulted_cost_of_debt_stays_in_the_quiet_tier(monkeypatch):
+    """Real on NKE and eight others. A weighted minority of the rate."""
+    ws = _dcf_warnings(monkeypatch, _cost_of_debt_history=lambda fin: [])
+    got = _of_kind(ws, "cost_of_debt_default")
+    assert severity_of(got) == SEVERITY_INFO
+    assert "could not be worked out from its accounts" in str(got)
+
+
+def test_nothing_is_raised_when_every_input_was_derived(monkeypatch):
+    """The ordinary case. These must not fire on a healthy company."""
+    ws = _dcf_warnings(monkeypatch)
+    assert not _kinds(ws) & {"wacc_default", "beta_default",
+                             "cost_of_debt_default", "risk_free_fallback",
+                             "erp_stale", "long_run_growth_stale"}
+
+
+def test_a_stale_risk_premium_reaches_the_reader(monkeypatch):
+    """It already had a staleness flag. The flag reached nobody."""
+    monkeypatch.setattr(Asm, "_today", lambda: date(2027, 4, 1))
+    ws = _dcf_warnings(monkeypatch)
+    got = _of_kind(ws, "erp_stale")
+    assert severity_of(got) == SEVERITY_CAUTION
+    assert f"{Asm.DAMODARAN_ERP_AS_OF:%B %Y}" in got.headline
+    assert got.detail["age_days"] > Asm.ERP_STALE_AFTER_DAYS
+
+
+def test_a_stale_long_run_growth_figure_reaches_the_reader(monkeypatch):
+    monkeypatch.setattr(Asm, "_today", lambda: date(2027, 4, 1))
+    ws = _dcf_warnings(monkeypatch)
+    if "long_run_growth_stale" not in _kinds(ws):
+        pytest.skip("the fixture company's ceiling is not bound by long-run "
+                    "growth; covered by the binding tests below")
+    got = _of_kind(ws, "long_run_growth_stale")
+    assert severity_of(got) == SEVERITY_CAUTION
+    assert f"{Asm.LONG_RUN_GROWTH_AS_OF:%B %Y}" in got.headline
+
+
+def test_a_stale_growth_figure_that_did_not_bind_stays_quiet(monkeypatch):
+    """KO's ceiling is set by its own discount rate, not by this figure.
+
+    Warning about a stale number that lost to the other two limits would
+    be noise, and noise in this tier teaches a reader to ignore it.
+    """
+    monkeypatch.setattr(Asm, "_today", lambda: date(2027, 4, 1))
+
+    class Derived:
+        wacc_inputs: dict = {}
+        capm_inputs: dict = {}
+        provenance: dict = {}
+        diagnostics = {"terminal_growth_binding": "wacc_margin"}
+
+    kinds = {w.kind for w in A.input_source_warnings(Derived(), dcf=True)}
+    assert "erp_stale" in kinds
+    assert "long_run_growth_stale" not in kinds
+
+
+def test_a_stale_growth_figure_that_bound_does_warn(monkeypatch):
+    monkeypatch.setattr(Asm, "_today", lambda: date(2027, 4, 1))
+
+    class Derived:
+        wacc_inputs: dict = {}
+        capm_inputs: dict = {}
+        provenance: dict = {}
+        diagnostics = {"terminal_growth_binding": "long_run_growth"}
+
+    kinds = {w.kind for w in A.input_source_warnings(Derived(), dcf=True)}
+    assert "long_run_growth_stale" in kinds
+
+
+def test_the_dividend_model_gets_the_ones_that_apply_to_it(monkeypatch):
+    """It has no WACC and no cost of debt; it has the same CAPM build-up."""
+    class Derived:
+        wacc_inputs: dict = {}
+        capm_inputs = {
+            "beta": _Prov(1.0, "default"),
+            "cost_of_equity": _Prov(0.0882, "default"),
+        }
+        provenance: dict = {}
+        diagnostics: dict = {}
+
+    kinds = {w.kind for w in A.input_source_warnings(Derived(), dcf=False)}
+    assert "cost_of_equity_default" in kinds
+    assert "beta_default" in kinds
+    # Neither of these exists in a dividend model.
+    assert "wacc_default" not in kinds
+    assert "cost_of_debt_default" not in kinds
+
+
+def test_a_generic_cost_of_equity_is_serious_too():
+    class Derived:
+        wacc_inputs: dict = {}
+        capm_inputs = {"cost_of_equity": _Prov(0.0882, "default")}
+        provenance: dict = {}
+        diagnostics: dict = {}
+
+    got = _of_kind(A.input_source_warnings(Derived(), dcf=False),
+                   "cost_of_equity_default")
+    assert severity_of(got) == A.SEVERITY_SERIOUS
+    assert "says little about this company" in got.headline
