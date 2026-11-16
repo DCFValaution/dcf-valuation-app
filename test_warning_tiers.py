@@ -351,6 +351,27 @@ class TestTheGrowthClampIsLouder:
         assert "shrinking" in got[0].headline
         assert "too fast" not in got[0].headline
 
+    def test_a_zero_floor_reads_as_words_not_as_a_figure(self, monkeypatch):
+        """The floor is zero, so "assumes 0.0% instead rather than" was both
+        clumsy and redundant. It says what the clamp does instead."""
+        got = self._clamped_growth(monkeypatch, -0.30)
+        assert "assumes no growth instead of projecting the decline " \
+               "indefinitely" in got[0].headline
+        # "shrinking 30.0%" legitimately contains "0.0%", so the slip is
+        # matched by the phrase it appeared in rather than by the figure.
+        assert "assumes 0.0%" not in got[0].headline
+        assert "instead rather than" not in got[0].headline
+
+    def test_a_non_zero_floor_would_still_name_its_rate(self, monkeypatch):
+        """If the floor ever moves off zero the sentence has to move with it,
+        or it would claim no growth while forecasting some."""
+        import assumptions as Asm
+        monkeypatch.setattr(Asm, "CLAMP_REVENUE_GROWTH", (0.02, 0.15))
+        got = self._clamped_growth(monkeypatch, -0.30)
+        assert got, "a -30% CAGR should still be clamped to a 2% floor"
+        assert "assumes 2.0% a year instead of projecting" in got[0].headline
+        assert "no growth" not in got[0].headline
+
     def test_the_headline_names_both_rates(self, monkeypatch):
         got = self._clamped_growth(monkeypatch, 0.60)
         assert "%" in got[0].headline

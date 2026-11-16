@@ -118,6 +118,13 @@ def _no_network(request, monkeypatch):
     monkeypatch.setattr(market_data, "_browser_session",
                         _denied_session)
 
+    # The same chokepoint for the official sources. Treasury and the ECB are
+    # reached through their own plain session, also curl_cffi, which likewise
+    # goes to the network below Python's socket module - so without this the
+    # socket guards would not see a Treasury fetch either.
+    import public_data
+    monkeypatch.setattr(public_data, "_plain_session", _denied_session)
+
     # ...and the generic ways out, for anything that does not. Loopback is
     # left open so the event loop under the API tests can still build its
     # own plumbing.

@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 from statistics import median
 
 from assumptions import (DAMODARAN_ERP_AS_OF, DerivedAssumptions,
-                         derive_assumptions)
+                         derive_assumptions, risk_free_as_of_text,
+                         risk_free_is_stale)
 from roic import CapitalReturns, compute as roic_diagnostic
 from plain_language import (clamp_warning, dividend_growth_default_warning,
                             growth_below_terminal_warning, signed_pct,
@@ -398,6 +399,41 @@ _METHOD_KINDS = {"method_fit", "dividends_only", "negative_equity",
                  "terminal_value_over_100"}
 
 
+def stored_rate_warning(inputs: dict) -> "Warning | None":
+    """A caution when the discount rate rests on the stored interest rate.
+
+    Worth a tier of its own rather than an entry in the quiet list of
+    defaults. The risk-free rate is the floor the whole discount rate is
+    built on, and the stored value is a point observation that goes out of
+    date on its own: when it last drifted it sat ninety basis points below
+    the curve and moved a valuation by eighteen per cent, with nothing in
+    the output to say which number the reader was looking at.
+
+    Returns None - the ordinary case by a wide margin - when the rate came
+    from either live source.
+    """
+    prov = (inputs or {}).get("risk_free_rate")
+    if prov is None or getattr(prov, "source", "") != "default":
+        return None
+
+    headline = (f"The live interest rate was unavailable, so this uses a "
+                f"stored rate of {prov.value:.2%} from "
+                f"{risk_free_as_of_text()}, which may be out of date.")
+    if risk_free_is_stale():
+        headline = (f"The live interest rate was unavailable, so this uses a "
+                    f"stored rate of {prov.value:.2%} from "
+                    f"{risk_free_as_of_text()} - old enough that it is "
+                    "probably no longer close to the real one.")
+    return Warning(
+        "The risk-free interest rate could not be fetched, so a stored "
+        f"rate from {risk_free_as_of_text()} was used instead. The discount "
+        "rate, and so the figure, rests on it.",
+        severity=SEVERITY_CAUTION, kind="risk_free_fallback",
+        detail={"rate": prov.value, "as_of": risk_free_as_of_text(),
+                "is_stale": risk_free_is_stale()},
+        headline=headline)
+
+
 def growth_cost_note(report: "ValuationReport") -> str | None:
     """Explain a valuation that falls when the growth assumption rises.
 
@@ -743,6 +779,10 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                           f"({a.revenue_growth:.1%}) than the perpetuity "
                           f"after it ({a.terminal_growth:.1%}).")))
 
+    stored_rate = stored_rate_warning(derived.wacc_inputs)
+    if stored_rate is not None:
+        warnings.append(stored_rate)
+
     for prov in derived.provenance.values():
         if prov.source != "derived (clamped)":
             continue
@@ -764,10 +804,18 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                 # the forecast holds it flat rather than projecting the
                 # decline forever. Saying "too fast" about a company going
                 # backwards would be nonsense.
+                #
+                # The floor is zero today, so "no growth" is what the clamp
+                # actually does and reads better than "0.0%". Branched rather
+                # than hard-coded: if the floor ever moves off zero the
+                # sentence has to move with it, and a figure printed as
+                # "assumes 0.0%" was the slip this replaces.
+                instead = ("assumes no growth" if abs(limit) < 5e-4
+                           else f"assumes {limit:.1%} a year")
                 headline = (
                     f"Revenue has been shrinking {abs(raw):.1%} a year. The "
-                    f"forecast assumes {limit:.1%} instead rather than "
-                    "projecting the decline indefinitely.")
+                    f"forecast {instead} instead of projecting the decline "
+                    "indefinitely.")
             else:
                 headline = ("The forecast uses a growth rate the model "
                             "adjusted, not the one the company has managed.")
@@ -1073,6 +1121,12 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
             "pattern, so they are treated as one-off returns of capital rather than "
             "as a dividend the company can be expected to repeat."
         )
+
+    # The dividend model builds its cost of equity from the same risk-free
+    # rate, so it rests on the stored one in exactly the same way.
+    stored_rate = stored_rate_warning(derived.capm_inputs)
+    if stored_rate is not None:
+        warnings.append(stored_rate)
 
     for assumption, prov in derived.provenance.items():
         if prov.source == "derived (clamped)":
@@ -2158,6 +2212,45 @@ def _format_value(name: str, value: float) -> str:
 GLOBAL_LEVERS = ("risk_free_rate", "equity_risk_premium", "terminal_growth")
 
 
+def fx_conversion_clause(report) -> str | None:
+    """The honesty note's exchange-rate sentence, or None for a US filer.
+
+    A converted company has one more thing the figure rests on, and it is
+    not an assumption the user can move: the exchange rate. Naming it puts
+    it alongside the WACC and the equity risk premium, which is where it
+    belongs - the figure moves with it the same way.
+
+    Separated out, and sent to the app as a finished sentence, because
+    nothing in it recomputes. The currency pair, the rate, its date and its
+    basis are fixed for a company; the app rebuilds the rest of the note
+    from local arithmetic as a slider moves, and this part has no arithmetic
+    to redo. A second copy of the wording in Dart would be a copy that can
+    drift with nothing to gain - which is how the sentence came to be
+    missing from the app's note in the first place.
+
+    The basis is named rather than summarised. Where the rate comes from the
+    ECB and the pair does not involve the euro, the figure is a cross-rate
+    this model computed from two published quotes - not something the ECB
+    published - and the licence that makes the data free requires that
+    modification to be stated wherever it appears.
+    """
+    meta = getattr(report, "meta", None) or {}
+    fx = meta.get("fx")
+    if not fx or not fx.get("pair"):
+        return None
+    name = report.company_name.rstrip(".")
+    basis = fx.get("basis") or "a single day's rate"
+    return (
+        f" {name}'s figures are reported in "
+        f"{meta.get('reporting_currency')} and have been converted "
+        f"to {meta.get('currency')} at "
+        f"{fx['rate']:.6g} ({fx['pair']}, {fx['as_of']}, {basis}), so the "
+        "figure moves with that rate as well. It is one day's rate, and "
+        "the discount rate is built from a US risk-free rate, so this "
+        "assumes no sustained drift between the two currencies."
+    )
+
+
 def honesty_note(report: "ValuationReport") -> str | None:
     """
     The sentence that must accompany any intrinsic value this system reports.
@@ -2178,22 +2271,7 @@ def honesty_note(report: "ValuationReport") -> str | None:
     # Company names routinely end in "Inc." - avoid "Apple Inc.." below.
     name = report.company_name.rstrip(".")
 
-    # A converted company has one more thing the figure rests on, and it is
-    # not an assumption the user can move: the exchange rate. Naming it here
-    # puts it alongside the WACC and the equity risk premium, which is where
-    # it belongs - the figure moves with it the same way.
-    fx_text = ""
-    fx = (report.meta or {}).get("fx")
-    if fx and fx.get("pair"):
-        fx_text = (
-            f" {name}'s figures are reported in "
-            f"{report.meta.get('reporting_currency')} and have been converted "
-            f"to {report.meta.get('currency')} at "
-            f"{fx['rate']:.6g} ({fx['pair']}, {fx['as_of']}), so the figure "
-            "moves with that rate as well. It is today's spot rate, and the "
-            "discount rate is built from a US risk-free rate, so this assumes "
-            "no sustained drift between the two currencies."
-        )
+    fx_text = fx_conversion_clause(report) or ""
 
     return (
         f"${report.result.intrinsic_value_per_share:,.2f} is the output of these assumptions, "

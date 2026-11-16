@@ -67,6 +67,8 @@ from datetime import date, datetime, timezone
 from typing import Any, Callable, Iterable, Sequence
 
 from dcf import BaseYearData
+from public_data import (ECB_ATTRIBUTION, TREASURY_COLUMNS, ecb_fx_rate,
+                         treasury_par_yield)
 
 # yfinance chats to stderr about 404s and retries. In a server that is noise
 # on someone else's terminal, and it is not how this module reports failure.
@@ -717,16 +719,10 @@ def fetch_fx_rate(frm: str, to: str) -> dict | None:
     """
     Units of *to* per one unit of *frm*, or None when it cannot be had.
 
-    Fetched over the chart endpoint rather than the quote endpoint. That is
-    the same choice fetch_risk_free_rate() makes and for the same reason:
-    Yahoo mints the crumb that authenticates quotes only rarely for a
-    datacentre IP, while serving charts normally.
-
-    The inverse pair is fetched as well and the two are required to agree.
-    It costs one extra request and it is the only independent check available
-    on a number that silently scales the entire valuation - a rate delivered
-    the wrong way round would be wrong by its own square and would still look
-    like a number.
+    The ECB's published reference rates first; the aggregator's quote when
+    the ECB does not cover the pair, which is the ordinary case rather than
+    the exceptional one - the ECB quotes 29 currencies and the New Taiwan
+    dollar, among others, is not one of them.
 
     Returns None rather than raising, so the caller decides whether a missing
     rate is fatal. For a company that needs conversion, it is.
@@ -743,6 +739,29 @@ def fetch_fx_rate(frm: str, to: str) -> dict | None:
     if cached is not None:
         return cached
 
+    official = ecb_fx_rate(frm, to)
+    if official is not None:
+        _fx_cache.put((frm, to), official)
+        return official
+
+    return _quoted_fx_rate(frm, to)
+
+
+def _quoted_fx_rate(frm: str, to: str) -> dict | None:
+    """
+    The aggregator's quote for the pair, the fallback source.
+
+    Fetched over the chart endpoint rather than the quote endpoint, because
+    Yahoo mints the crumb that authenticates quotes only rarely for a
+    datacentre IP while serving charts normally.
+
+    The inverse pair is fetched as well and the two are required to agree.
+    It costs one extra request and it is the only independent check available
+    on a number that silently scales the entire valuation - a rate delivered
+    the wrong way round would be wrong by its own square and would still look
+    like a number. The ECB path above needs no such check: it reads one
+    published table, which cannot disagree with itself.
+    """
     forward = _fx_close(f"{frm}{to}=X")
     if forward is None:
         _fx_cache.put((frm, to), None)
@@ -767,7 +786,8 @@ def fetch_fx_rate(frm: str, to: str) -> dict | None:
             return None
 
     out = {"rate": rate, "pair": f"{frm}{to}=X", "as_of": as_of,
-           "cross_check": drift}
+           "cross_check": drift, "source": "quote",
+           "basis": f"market quote for {frm}{to}=X"}
     _fx_cache.put((frm, to), out)
     return out
 
@@ -2710,7 +2730,9 @@ def _resolve_shares(fin: CompanyFinancials, price: float) -> tuple[float, str]:
 # Risk-free rate
 # ---------------------------------------------------------------------------
 
-# Yahoo publishes Treasury yields as index quotes, in percent.
+# Yahoo publishes Treasury yields as index quotes, in percent. Kept as the
+# fallback: these are a redistribution of Treasury's own curve, so when the
+# primary source is reachable there is no reason to prefer them.
 _TREASURY_SYMBOLS = {
     "month3": ("^IRX", "13-week"),
     "year5": ("^FVX", "5-year"),
@@ -2719,22 +2741,12 @@ _TREASURY_SYMBOLS = {
 }
 
 
-def fetch_risk_free_rate(tenor: str = "year10") -> tuple[float, str] | None:
-    """
-    Current Treasury yield for *tenor* as a decimal (0.0484 = 4.84%).
-
-    Returns (rate, source_description), or None when unavailable - callers
-    fall back to a documented static default rather than failing a valuation
-    because a rate lookup did.
-    """
+def _quoted_treasury_yield(tenor: str) -> tuple[float, str] | None:
+    """The aggregator's index quote for *tenor*, the fallback source."""
     symbol_and_label = _TREASURY_SYMBOLS.get(tenor)
     if symbol_and_label is None:
         return None
     symbol, label = symbol_and_label
-
-    cached = _rate_cache.get(tenor)
-    if cached is not None:
-        return cached
 
     rate: float | None = None
     as_of = date.today().isoformat()
@@ -2762,7 +2774,36 @@ def fetch_risk_free_rate(tenor: str = "year10") -> tuple[float, str] | None:
     if not 0.0 < rate < 0.25:  # a Treasury yield outside this band is not real
         return None
 
-    result = (rate, f"US Treasury {label} ({symbol}) as of {as_of}")
+    return rate, f"US Treasury {label} ({symbol}) as of {as_of}"
+
+
+def fetch_risk_free_rate(tenor: str = "year10") -> tuple[float, str] | None:
+    """
+    Current Treasury yield for *tenor* as a decimal (0.0484 = 4.84%).
+
+    Taken from Treasury's own Daily Treasury Par Yield Curve Rates, falling
+    back to the aggregator's index quote for the same tenor. The primary
+    source is preferred for three reasons and none of them is accuracy: it is
+    citable in the provenance the app shows the reader, it carries a published
+    licence that permits exactly this use, and it is the series the aggregator
+    is itself republishing, so a disagreement between them can only mean the
+    aggregator is stale or wrong.
+
+    Returns (rate, source_description), or None when neither source answers -
+    callers fall back to a documented static default rather than failing a
+    valuation because a rate lookup did.
+    """
+    if tenor not in _TREASURY_SYMBOLS and tenor not in TREASURY_COLUMNS:
+        return None
+
+    cached = _rate_cache.get(tenor)
+    if cached is not None:
+        return cached
+
+    result = treasury_par_yield(tenor) or _quoted_treasury_yield(tenor)
+    if result is None:
+        return None
+
     _rate_cache.put(tenor, result)
     return result
 

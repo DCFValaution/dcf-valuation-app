@@ -360,6 +360,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
           0,
       equityRiskPremium: _equityRiskPremium,
       equityRiskPremiumAsOf: _equityRiskPremiumAsOf,
+      // Without this the exchange-rate sentence was in the note on first
+      // load and gone the instant a reader moved a slider - on exactly the
+      // companies whose figure depends on a rate they cannot see.
+      fxClause: success.fxClause,
     );
   }
 
@@ -1911,6 +1915,10 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
     // than the model will project, held up for one going backwards.
     'growth_clamped' => 'Growth rate overridden',
     'growth_below_terminal' => 'Growth below the perpetuity',
+    // The discount rate is built on the risk-free rate, so a stored one
+    // is a caveat about the figure and not about an input the reader
+    // chose. Named for what it is rather than for the mechanism.
+    'risk_free_fallback' => 'Interest rate not live',
     _ => 'Read with care',
   };
 
@@ -2337,6 +2345,22 @@ Future<void> showDisclaimerSheet(BuildContext context) {
               'Market data comes from a third party and may be delayed, '
               'incomplete or wrong. Nothing here has been reviewed by a '
               'financial adviser.',
+            ),
+            // Attribution, not a courtesy. The ECB permits free use of its
+            // published rates on the condition that it is cited as the
+            // source wherever they are reproduced, so this paragraph is
+            // part of what makes the exchange rates usable at all. The US
+            // Treasury asks for nothing and is named for symmetry — a
+            // reader deserves to know which figures come from an
+            // institution and which from an aggregator.
+            _DisclaimerParagraph(
+              'Interest rates come from the US Treasury’s daily par yield '
+              'curve, and exchange rates from the European Central Bank’s '
+              'euro foreign exchange reference rates. Rates between two '
+              'currencies that are not the euro are cross-rates calculated '
+              'from two ECB quotes rather than figures the ECB published. '
+              'The equity risk premium and the industry betas are Aswath '
+              'Damodaran’s published data, used with his permission.',
             ),
             _DisclaimerParagraph(
               'Do your own research, and consider speaking to a licensed '

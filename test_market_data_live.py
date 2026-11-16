@@ -320,11 +320,95 @@ def check_risk_free() -> None:
     result = M.fetch_risk_free_rate("year10")
     if result is None:
         print("  unavailable - the model falls back to its documented default")
+        failures.append("neither Treasury nor the quote answered")
     else:
         rate, source = result
         print(f"  {rate:.3%}   {source}")
         if not 0.0 < rate < 0.25:
             failures.append("risk-free rate outside a plausible band")
+        # The fallback working is not the thing to verify. The primary source
+        # being reachable is, because a silent fall-through to the quote is
+        # invisible in the number and the whole point of Stage 0 was to stop
+        # resting on the aggregator.
+        if "par yield" not in source:
+            failures.append(
+                "risk-free rate came from the fallback, not Treasury")
+
+
+def check_official_sources() -> None:
+    """Treasury and the ECB directly, each against the aggregator.
+
+    Both of these publish a series the aggregator republishes, so the two
+    must agree closely. A disagreement is the useful signal: it means one of
+    them is stale, or a URL or a column heading moved underneath us - which
+    is exactly the failure a canned-bytes unit test cannot catch.
+    """
+    rule("5b. Official sources")
+
+    import public_data as P
+
+    print(f"  User-Agent: {P.public_user_agent()}")
+    if not P.public_data_contact():
+        print("  NOTE: no PUBLIC_DATA_CONTACT set. Treasury and the ECB do "
+              "not mind; the SEC will.")
+
+    for tenor in ("month3", "year5", "year10", "year30"):
+        official = P.treasury_par_yield(tenor)
+        quoted = M._quoted_treasury_yield(tenor)
+        if official is None:
+            failures.append(f"Treasury did not serve the {tenor} par yield")
+            print(f"  {tenor:<8} UNAVAILABLE")
+            continue
+        label = f"  {tenor:<8} {official[0]:.3%}  Treasury"
+        if quoted is not None:
+            gap = (official[0] - quoted[0]) * 10000
+            label += f"   vs {quoted[0]:.3%} quoted  ({gap:+.1f}bp)"
+            # The three-month points differ by convention, not by error:
+            # the par yield is coupon-equivalent, the ^IRX quote is
+            # bank-discount. The longer tenors have no such excuse.
+            if tenor != "month3" and abs(gap) > 15:
+                failures.append(
+                    f"Treasury and the quote disagree on {tenor} by "
+                    f"{gap:+.1f}bp")
+        print(label)
+
+    table = P.ecb_reference_rates()
+    if table is None:
+        failures.append("the ECB reference-rate feed did not parse")
+        print("  ECB feed UNAVAILABLE")
+        return
+    rates, as_of = table
+    print(f"  ECB table: {len(rates)} currencies as of {as_of}")
+    for expected in ("USD", "EUR", "JPY", "DKK", "GBP", "CNY"):
+        if expected not in rates:
+            failures.append(f"the ECB feed no longer carries {expected}")
+    if "TWD" in rates:
+        print("  NOTE: the ECB now quotes TWD. TSM no longer needs the "
+              "fallback, and public_data's docstring needs correcting.")
+
+    for frm, to in (("EUR", "USD"), ("DKK", "USD"), ("JPY", "USD"),
+                    ("CNY", "USD"), ("GBP", "USD")):
+        official = P.ecb_fx_rate(frm, to)
+        quoted = M._quoted_fx_rate(frm, to)
+        if official is None:
+            failures.append(f"the ECB did not serve {frm}/{to}")
+            continue
+        line = f"  {frm}/{to:<4} {official['rate']:.8g}  ECB"
+        if quoted is not None:
+            drift = (official["rate"] / quoted["rate"] - 1) * 100
+            line += f"   vs {quoted['rate']:.8g} quoted  ({drift:+.3f}%)"
+            # A reference rate fixed at 14:15 CET against a spot quote taken
+            # whenever this runs will differ. A percent apart means one of
+            # them is wrong, not that the clock moved.
+            if abs(drift) > 1.0:
+                failures.append(
+                    f"ECB and the quote disagree on {frm}/{to} by {drift:+.3f}%")
+        print(line)
+
+    if P.ecb_fx_rate("TWD", "USD") is not None:
+        print("  (TWD now covered)")
+    else:
+        print("  TWD/USD    not quoted by the ECB - falls back, as designed")
 
 
 def check_cache() -> None:
@@ -360,6 +444,7 @@ def main() -> int:
     check_relative()
     check_bad_input()
     check_risk_free()
+    check_official_sources()
     check_cache()
 
     rule("RESULT")
