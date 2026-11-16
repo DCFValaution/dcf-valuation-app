@@ -192,6 +192,11 @@ def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
         # notes, each carrying the severity the model assigned, so the app
         # does not have to infer one from where it happens to render.
         "warning_items",
+        # And later still again: the exchange-rate sentence from the end of
+        # `note`, sent on its own so the app can append it to the note it
+        # rebuilds locally as a slider moves. Null for a company that
+        # reports in the currency it trades in, which this one does.
+        "fx_clause",
     }
     assert body["method_fit_warnings"] == []
 

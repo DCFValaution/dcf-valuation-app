@@ -76,12 +76,14 @@ from pydantic import BaseModel, Field
 from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       DDMReport, RelativeNotApplicable, RelativeReport,
                       SpeculativeNotApplicable, SpeculativeReport, ValuationReport,
-                      honesty_note, relative_comparison, relative_note,
+                      fx_conversion_clause, honesty_note,
+                      relative_comparison, relative_note,
                       hypothetical_available, hypothetical_disclaimer,
                       speculative_disclaimer, speculative_estimate_available,
                       value_company, value_company_relatively,
                       value_company_hypothetically, value_company_speculatively)
-from assumptions import DAMODARAN_ERP_AS_OF, erp_is_stale
+from assumptions import (DAMODARAN_ERP_AS_OF, erp_is_stale,
+                         risk_free_as_of_text, risk_free_is_stale)
 from analysis import (SEVERITY_CAUTION, SEVERITY_INFO, SEVERITY_SERIOUS,
                       severity_of)
 from relative import MAX_PEERS
@@ -649,6 +651,16 @@ class ValuationResponse(BaseModel):
     current_price: float
     upside_downside: float = Field(..., description="Fraction, e.g. -0.674 for -67.4%")
     note: str = Field(..., description="Why this figure is not a measurement. Display it.")
+    fx_clause: str | None = Field(
+        None,
+        description=(
+            "The exchange-rate sentence at the end of `note`, for a company "
+            "whose statements were converted. Sent separately because the app "
+            "rebuilds the rest of the note locally as a slider moves and "
+            "nothing in this part recomputes; it appends this verbatim. Null "
+            "for a company that reports in its trading currency."
+        ),
+    )
     base_year: BaseYearOut
     valuation: ValuationOut
     assumptions: list[AssumptionOut]
@@ -1237,16 +1249,38 @@ def _warning_items(report) -> list[WarningOut]:
     return items
 
 
+def _as_of(name: str, prov) -> str | None:
+    """The date a configured figure belongs to, where it has one.
+
+    Two inputs are not derived from the company: the equity risk premium is
+    published monthly by someone else, and the risk-free rate falls back to
+    a stored observation when neither live source answers. Both go out of
+    date on their own, so both say when they were true.
+    """
+    if name == "equity_risk_premium":
+        return f"{DAMODARAN_ERP_AS_OF:%B %Y}"
+    if name == "risk_free_rate" and prov.source == "default":
+        return risk_free_as_of_text()
+    return None
+
+
+def _is_stale(name: str, prov) -> bool:
+    if prov.source == "override":
+        return False
+    if name == "equity_risk_premium":
+        return erp_is_stale()
+    if name == "risk_free_rate" and prov.source == "default":
+        return risk_free_is_stale()
+    return False
+
+
 def _assumption_list(store: dict) -> list[AssumptionOut]:
     return [
         AssumptionOut(name=name, value=prov.value, source=prov.source,
                       detail=prov.detail, is_percent=name in PERCENT_NAMES,
                       min_value=prov.allowed_min, max_value=prov.allowed_max,
-                      as_of=(f"{DAMODARAN_ERP_AS_OF:%B %Y}"
-                             if name == "equity_risk_premium" else None),
-                      is_stale=(name == "equity_risk_premium"
-                                and prov.source != "override"
-                                and erp_is_stale()))
+                      as_of=_as_of(name, prov),
+                      is_stale=_is_stale(name, prov))
         for name, prov in store.items()
     ]
 
@@ -1269,6 +1303,7 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
         current_price=r.current_price,
         upside_downside=r.upside_downside,
         note=honesty_note(report),
+        fx_clause=fx_conversion_clause(report),
         base_year=BaseYearOut(
             revenue=report.base.revenue,
             total_debt=report.base.total_debt,

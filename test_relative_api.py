@@ -151,6 +151,11 @@ def test_the_standard_valuation_is_unchanged_and_never_fetches_peers(client, mon
         # notes, each carrying the severity the model assigned, so the app
         # does not have to infer one from where it happens to render.
         "warning_items",
+        # And later still again: the exchange-rate sentence from the end of
+        # `note`, sent on its own so the app can append it to the note it
+        # rebuilds locally as a slider moves. Null for a company that
+        # reports in the currency it trades in, which this one does.
+        "fx_clause",
     }
     assert body["method_fit_warnings"] == []
 

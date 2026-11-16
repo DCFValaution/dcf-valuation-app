@@ -211,10 +211,30 @@ TAX_IMPLAUSIBLY_HIGH = 0.50
 TAX_NORMALIZED_DISAGREEMENT = 0.15
 
 # --- WACC inputs ----------------------------------------------------------
-# The risk-free rate is fetched live from the Treasury curve; this static value
-# is only the fallback when that lookup is unavailable. It will drift out of
-# date - that is precisely why the live lookup is preferred.
-FALLBACK_RISK_FREE_RATE = 0.0425
+# The risk-free rate is fetched live from the Treasury curve; this static
+# value is only the fallback when both that and the aggregator's quote are
+# unavailable.
+#
+# It carries a date, like the equity risk premium and the long-run growth
+# figure, because the previous version did not and drifted ninety basis
+# points below the curve without anything noticing. That was found by
+# accident: a BABA valuation came out at $223.00 instead of $189.31 - 17.8%
+# higher - because a rate lookup failed and this constant answered in its
+# place, and nothing in the output distinguished the two runs.
+#
+# Set to the last published ten-year par yield rather than to a long-run
+# average on purpose. A fallback that is a round number invites being left
+# alone; one that is a dated observation reads as something that expires.
+FALLBACK_RISK_FREE_RATE = 0.0515
+FALLBACK_RISK_FREE_AS_OF = date(2026, 11, 13)
+
+# Treasury publishes the curve every business day, so a stored rate is
+# always "not the latest". That is not what this threshold is for. It marks
+# the point at which the stored rate is old enough to be materially wrong:
+# the ten-year moves of the order of ten to twenty basis points a month, so
+# a month puts it within ordinary noise of the curve and a quarter does not.
+RISK_FREE_STALE_AFTER_DAYS = 30
+
 RISK_FREE_TENOR = "year10"  # matched to a ~perpetual horizon, not a short bill
 
 # Equity risk premium: the excess return demanded over the risk-free rate.
@@ -266,6 +286,37 @@ def erp_detail(today: date | None = None) -> str:
     if erp_is_stale(today):
         text += (f" - published {erp_age_days(today)} days ago and due an "
                  "update; check pages.stern.nyu.edu/~adamodar")
+    return text
+
+
+def risk_free_age_days(today: date | None = None) -> int:
+    """Days since the stored fallback rate was the published curve."""
+    return ((today or _today()) - FALLBACK_RISK_FREE_AS_OF).days
+
+
+def risk_free_is_stale(today: date | None = None) -> bool:
+    return risk_free_age_days(today) > RISK_FREE_STALE_AFTER_DAYS
+
+
+def risk_free_as_of_text() -> str:
+    """The fallback's date, written the way a sentence wants it.
+
+    Built by hand because the obvious format code is not portable: "%-d"
+    strips the leading zero on Linux, where this is deployed, and is a
+    ValueError on Windows, where it is developed.
+    """
+    return (f"{FALLBACK_RISK_FREE_AS_OF.day} "
+            f"{FALLBACK_RISK_FREE_AS_OF:%B %Y}")
+
+
+def fallback_risk_free_detail(today: date | None = None) -> str:
+    """The provenance line for a valuation built on the stored rate."""
+    text = ("live Treasury curve and market quote both unavailable; used the "
+            f"stored {FALLBACK_RISK_FREE_RATE:.2%} rate from "
+            f"{risk_free_as_of_text()}")
+    if risk_free_is_stale(today):
+        text += (f" - {risk_free_age_days(today)} days old and no longer a "
+                 "reliable stand-in for the curve")
     return text
 
 DEFAULT_BETA = 1.0          # market beta, when the company's own is unusable
@@ -472,8 +523,8 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
     if live is not None:
         rf = record_input("risk_free_rate", live[0], "derived", live[1])
     else:
-        rf = record_input("risk_free_rate", FALLBACK_RISK_FREE_RATE, "default",
-                          "Treasury curve unavailable; used documented static fallback")
+        rf = record_input("risk_free_rate", FALLBACK_RISK_FREE_RATE,
+                          "default", fallback_risk_free_detail())
 
     # "published" rather than "default": it is a figure someone computed
     # and dated, not a number this model picked for want of one.
