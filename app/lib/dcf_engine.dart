@@ -428,6 +428,7 @@ String buildHonestyNote({
   required double terminalGrowth,
   double? equityRiskPremium,
   String? equityRiskPremiumAsOf,
+  String? fxClause,
 }) {
   // Python does company_name.rstrip('.') to avoid "Apple Inc..".
   final name = companyName.replaceAll(RegExp(r'\.+$'), '');
@@ -448,5 +449,11 @@ String buildHonestyNote({
       ' The growth in perpetuity defaults to the lowest of the risk-free '
       'rate, long-run US nominal growth and the discount rate less three '
       'points, and that is as high as it can be set: it can be moved down '
-      'but not up.';
+      'but not up.'
+      // A converted company's note ends with the exchange rate it rests on.
+      // Appended rather than rebuilt: the rate, its date and its basis do
+      // not change as a slider moves, so the backend sends the finished
+      // sentence and there is only ever one copy of the wording. Empty for
+      // a company that reports in the currency it trades in.
+      '${fxClause ?? ''}';
 }

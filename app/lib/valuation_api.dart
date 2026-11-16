@@ -387,6 +387,19 @@ class ValuationSuccess extends ValuationResult {
   /// assumptions. Shown verbatim - it is not decoration.
   final String note;
 
+  /// The exchange-rate sentence at the end of [note], for a company whose
+  /// statements were converted into the currency it trades in. Null for one
+  /// that reports in that currency already.
+  ///
+  /// Carried separately because [buildHonestyNote] rebuilds the rest of the
+  /// note locally as a slider moves, and this part has nothing to recompute:
+  /// the pair, the rate, its date and its basis are fixed for a company.
+  /// Duplicating the wording in Dart would be a second copy that can drift
+  /// with nothing to gain - and the first version of this app had no copy at
+  /// all, so the sentence simply vanished the moment a reader touched a
+  /// slider on a foreign filer.
+  final String? fxClause;
+
   /// Every assumption behind this valuation, in the backend's order.
   final List<Assumption> assumptions;
 
@@ -460,6 +473,7 @@ class ValuationSuccess extends ValuationResult {
     required this.currentPrice,
     required this.upsideDownside,
     required this.note,
+    this.fxClause,
     required this.assumptions,
     required this.baseYear,
     this.method = ValuationMethod.dcf,
@@ -533,6 +547,9 @@ class ValuationSuccess extends ValuationResult {
       currentPrice: (json['current_price'] as num).toDouble(),
       upsideDownside: (json['upside_downside'] as num).toDouble(),
       note: json['note'] as String? ?? '',
+      fxClause: (json['fx_clause'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : json['fx_clause'] as String,
       assumptions: merged,
       baseYear: base == null ? null : BaseYearData.fromJson(base),
       method: method,

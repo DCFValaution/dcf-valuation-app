@@ -338,6 +338,19 @@ void main() {
       expect(cases.length, greaterThanOrEqualTo(10));
     });
 
+    test('fixture includes a company whose statements were converted', () {
+      // The guard on the guard. The exchange-rate sentence went missing
+      // from this engine's note for as long as the app had existed, and
+      // the parity test did not notice because every recorded case was a
+      // US filer with no such sentence to lose.
+      final converted = cases.where(
+        (c) => (c as Map<String, dynamic>)['fx_clause'] != null,
+      );
+      expect(converted, isNotEmpty,
+          reason: 'Re-run tools/generate_parity_fixtures.py; it captures a '
+              'foreign filer for exactly this.');
+    });
+
     test('every recorded case reproduces to within rounding', () {
       final failures = <String>[];
 
@@ -400,6 +413,7 @@ void main() {
           terminalGrowth: assumptions['terminal_growth']!,
           equityRiskPremium: assumptions['equity_risk_premium'],
           equityRiskPremiumAsOf: c['erp_as_of'] as String?,
+          fxClause: c['fx_clause'] as String?,
         );
 
         if (built != c['note']) {

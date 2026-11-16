@@ -24,7 +24,16 @@ import urllib.error
 import urllib.request
 
 BASE_URL = "http://127.0.0.1:8000"
-TICKER = "AAPL"
+
+# Two companies, not one, and the second is the point of having two.
+#
+# AAPL reports in the currency it trades in, so its honesty note has no
+# exchange-rate sentence and never exercised that branch. NVO reports in
+# Danish kroner and trades in dollars, so its note ends with the rate the
+# figure rests on - and the Dart copy of the note simply dropped that
+# sentence the moment a slider moved, for as long as the app had existed,
+# because no recorded case had one to drop.
+TICKERS = ["AAPL", "NVO"]
 OUT = pathlib.Path(__file__).resolve().parents[1] / "app" / "test" / "fixtures" / "parity_cases.json"
 
 # Combinations chosen to move each lever independently and then together,
@@ -64,8 +73,8 @@ CASES: list[tuple[str, dict]] = [
 ]
 
 
-def post(overrides: dict) -> dict:
-    payload = json.dumps({"ticker": TICKER, "overrides": overrides}).encode()
+def post(ticker: str, overrides: dict) -> dict:
+    payload = json.dumps({"ticker": ticker, "overrides": overrides}).encode()
     request = urllib.request.Request(
         f"{BASE_URL}/valuation",
         data=payload,
@@ -76,8 +85,9 @@ def post(overrides: dict) -> dict:
         return json.loads(response.read().decode())
 
 
-def get() -> dict:
-    with urllib.request.urlopen(f"{BASE_URL}/valuation/{TICKER}", timeout=60) as response:
+def get(ticker: str) -> dict:
+    with urllib.request.urlopen(f"{BASE_URL}/valuation/{ticker}",
+                                timeout=60) as response:
         return json.loads(response.read().decode())
 
 
@@ -90,53 +100,77 @@ def main() -> int:
         return 1
 
     cases = []
-    for label, overrides in CASES:
-        try:
-            body = post(overrides) if overrides else get()
-        except urllib.error.HTTPError as e:
-            print(f"  SKIP {label}: HTTP {e.code} {e.read().decode()[:120]}")
-            continue
+    for ticker in TICKERS:
+        # The whole grid for the first company; a handful for the second.
+        # The arithmetic is already covered by the grid, and what the second
+        # company is here to cover is the one sentence that only it has.
+        wanted = CASES if ticker == TICKERS[0] else [
+            c for c in CASES
+            if c[0] in ("derived (no overrides)", "low WACC", "high WACC",
+                        "everything moved")]
+        for label, overrides in wanted:
+            label = f"{ticker}: {label}"
+            try:
+                body = post(ticker, overrides) if overrides else get(ticker)
+            except urllib.error.HTTPError as e:
+                print(f"  SKIP {label}: HTTP {e.code} "
+                      f"{e.read().decode()[:120]}")
+                continue
 
-        # Every assumption, flattened - the Dart engine needs the full set,
-        # not only the ones that were overridden.
-        assumptions = {
-            a["name"]: a["value"]
-            for a in body.get("assumptions", []) + body.get("global_levers", [])
-        }
+            # Every assumption, flattened - the Dart engine needs the full
+            # set, not only the ones that were overridden.
+            assumptions = {
+                a["name"]: a["value"]
+                for a in body.get("assumptions", [])
+                + body.get("global_levers", [])
+            }
 
-        cases.append({
-            "label": label,
-            "overrides": overrides,
-            "company_name": body["company"]["company_name"],
-            "base_year": body["base_year"],
-            "assumptions": assumptions,
-            # The honesty note names the month the premium was published,
-            # so the Dart copy needs it to reproduce the sentence.
-            "erp_as_of": next(
-                (a.get("as_of") for a in body.get("global_levers", [])
-                 + body.get("assumptions", [])
-                 if a["name"] == "equity_risk_premium"), None),
-            "expected": {
-                "intrinsic_value_per_share": body["intrinsic_value_per_share"],
-                "current_price": body["current_price"],
-                "upside_downside": body["upside_downside"],
-                "enterprise_value": body["valuation"]["enterprise_value"],
-                "equity_value": body["valuation"]["equity_value"],
-                "terminal_value": body["valuation"]["terminal_value"],
-                "pv_terminal_value": body["valuation"]["pv_terminal_value"],
-                "pv_ufcf_sum": body["valuation"]["pv_ufcf_sum"],
-                "tv_pct_of_ev": body["valuation"]["tv_pct_of_ev"],
-            },
-            "note": body["note"],
-        })
-        print(f"  captured {label:<32} -> ${body['intrinsic_value_per_share']:,.4f}")
+            cases.append({
+                "label": label,
+                "ticker": ticker,
+                "overrides": overrides,
+                "company_name": body["company"]["company_name"],
+                "base_year": body["base_year"],
+                "assumptions": assumptions,
+                # The honesty note names the month the premium was
+                # published, so the Dart copy needs it to reproduce the
+                # sentence.
+                "erp_as_of": next(
+                    (a.get("as_of") for a in body.get("global_levers", [])
+                     + body.get("assumptions", [])
+                     if a["name"] == "equity_risk_premium"), None),
+                # Null for a company that reports in its trading currency.
+                "fx_clause": body.get("fx_clause"),
+                "expected": {
+                    "intrinsic_value_per_share":
+                        body["intrinsic_value_per_share"],
+                    "current_price": body["current_price"],
+                    "upside_downside": body["upside_downside"],
+                    "enterprise_value": body["valuation"]["enterprise_value"],
+                    "equity_value": body["valuation"]["equity_value"],
+                    "terminal_value": body["valuation"]["terminal_value"],
+                    "pv_terminal_value":
+                        body["valuation"]["pv_terminal_value"],
+                    "pv_ufcf_sum": body["valuation"]["pv_ufcf_sum"],
+                    "tv_pct_of_ev": body["valuation"]["tv_pct_of_ev"],
+                },
+                "note": body["note"],
+            })
+            print(f"  captured {label:<44} -> "
+                  f"${body['intrinsic_value_per_share']:,.4f}")
 
     if not cases:
         print("No cases captured.")
         return 1
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"ticker": TICKER, "cases": cases}, indent=2))
+    converted = sum(1 for c in cases if c["fx_clause"])
+    if not converted:
+        print("No converted company captured. The Dart note's exchange-rate "
+              "branch would go untested, which is how it came to be missing.")
+        return 1
+    OUT.write_text(json.dumps({"tickers": TICKERS, "cases": cases}, indent=2))
+    print(f"  {converted} of them exercise the exchange-rate sentence")
     print(f"\nWrote {len(cases)} cases to {OUT}")
     return 0
 

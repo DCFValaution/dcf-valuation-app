@@ -348,3 +348,109 @@ def test_a_non_positive_rate_is_refused(monkeypatch):
 
     with pytest.raises(M.UnsupportedListingError, match="exchange rate could not"):
         M.fetch_financials("TSM")
+
+
+# ---------------------------------------------------------------------------
+# The sentence the exchange rate buys
+# ---------------------------------------------------------------------------
+
+class _FakeReport:
+    """Just enough of a report for the clause builder."""
+
+    def __init__(self, meta, name="Novo Nordisk A/S"):
+        self.meta = meta
+        self.company_name = name
+
+
+def test_a_converted_company_gets_the_exchange_rate_sentence():
+    from analysis import fx_conversion_clause
+
+    clause = fx_conversion_clause(_FakeReport({
+        "reporting_currency": "DKK", "currency": "USD",
+        "fx": {"rate": 0.147841, "pair": "DKK/USD", "as_of": "2026-11-13",
+               "basis": "cross-rate computed from the EUR/DKK and EUR/USD "
+                        "European Central Bank euro foreign exchange "
+                        "reference rates"},
+    }))
+    assert clause is not None
+    assert "reported in DKK" in clause
+    assert "converted to USD" in clause
+    assert "0.147841" in clause
+    assert "DKK/USD, 2026-11-13" in clause
+    # The ECB's licence requires a derived figure to say it was derived.
+    assert "cross-rate computed" in clause
+    assert "European Central Bank" in clause
+
+
+def test_the_sentence_names_the_basis_the_rate_actually_came_from():
+    """A published pair must not be described as a computed one."""
+    from analysis import fx_conversion_clause
+
+    clause = fx_conversion_clause(_FakeReport({
+        "reporting_currency": "EUR", "currency": "USD",
+        "fx": {"rate": 1.1052, "pair": "EUR/USD", "as_of": "2026-11-13",
+               "basis": "published European Central Bank euro foreign "
+                        "exchange reference rates"},
+    }))
+    assert "published European Central Bank" in clause
+    assert "cross-rate" not in clause
+
+
+def test_a_company_that_needs_no_conversion_gets_no_sentence():
+    """fetch_fx_rate returns a 1.0 identity with pair None for these.
+
+    Without the pair check that identity produced a sentence saying a US
+    filer's dollars had been converted into dollars at 1.
+    """
+    from analysis import fx_conversion_clause
+
+    assert fx_conversion_clause(_FakeReport({
+        "reporting_currency": "USD", "currency": "USD",
+        "fx": {"rate": 1.0, "pair": None, "as_of": None,
+               "cross_check": None},
+    })) is None
+
+
+def test_no_fx_at_all_gets_no_sentence():
+    from analysis import fx_conversion_clause
+
+    assert fx_conversion_clause(_FakeReport({"fx": None})) is None
+    assert fx_conversion_clause(_FakeReport({})) is None
+
+
+def test_the_clause_is_the_tail_of_the_full_note(monkeypatch):
+    """One source for the wording: the note must end with this exact string."""
+    import analysis as A
+
+    pin_fx(monkeypatch, 0.03134403)
+    install(monkeypatch, FakeTicker(
+        info=foreign_info(), income=frame(AAPL_INCOME),
+        balance=frame(AAPL_BALANCE), cashflow=frame(AAPL_CASHFLOW)))
+    monkeypatch.setattr(A, "fetch_financials", M.fetch_financials)
+
+    report = A.value_company("TSM")
+    clause = A.fx_conversion_clause(report)
+    note = A.honesty_note(report)
+    assert clause, "the fixture company reports in TWD and trades in USD"
+    assert note.endswith(clause), (
+        "the app appends this clause to a note it rebuilds locally, so the "
+        "backend's note must end with exactly it")
+
+
+def test_the_api_sends_the_clause_for_a_converted_company(monkeypatch):
+    """The app cannot append what it was never sent."""
+    from fastapi.testclient import TestClient
+
+    import analysis as A
+    import api
+
+    pin_fx(monkeypatch, 0.03134403)
+    install(monkeypatch, FakeTicker(
+        info=foreign_info(), income=frame(AAPL_INCOME),
+        balance=frame(AAPL_BALANCE), cashflow=frame(AAPL_CASHFLOW)))
+    monkeypatch.setattr(A, "fetch_financials", M.fetch_financials)
+
+    body = TestClient(api.app).get("/valuation/TSM").json()
+    assert body.get("fx_clause"), "fx_clause was null for a converted company"
+    assert "reported in TWD" in body["fx_clause"]
+    assert body["note"].endswith(body["fx_clause"])
