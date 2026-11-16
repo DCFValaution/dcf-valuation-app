@@ -529,3 +529,204 @@ def test_the_shadow_fetcher_is_not_wired_into_anything():
         assert "edgar_data" not in text, (
             f"{name} imports the shadow fetcher. It is not ready to be "
             "production's source; switching it on is a later stage.")
+
+
+# ---------------------------------------------------------------------------
+# Trailing twelve months
+# ---------------------------------------------------------------------------
+#
+# TTM = last annual + current year-to-date - prior year's same period. The
+# ways that goes wrong are: pairing a nine-month column with a six-month
+# one, reading the three-month column of a 10-Q as the year-to-date one,
+# building a trailing year for a company that has filed nothing since its
+# annual report, and applying the sum to a figure that is already an
+# average. Each has its own test.
+
+def quarterly(val, start, end, *, form="10-Q", filed="2026-05-01", fy=None,
+              fp="Q1"):
+    out = {"val": val, "start": start, "end": end, "form": form,
+           "filed": filed, "fp": fp, "accn": "0000-26-000001"}
+    if fy is not None:
+        out["fy"] = fy
+    return out
+
+
+def company_facts(annual_points, quarterly_points, tag="Revenues"):
+    return {"facts": {"us-gaap": {
+        tag: {"units": {"USD": list(annual_points) + list(quarterly_points)}}}}}
+
+
+def test_ttm_is_the_annual_plus_the_year_so_far_less_last_years():
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+         quarterly(500.0, "2025-01-01", "2025-09-30", filed="2025-11-01")])
+    total, end, how = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1100.0)
+    assert end == "2026-09-30"
+    assert "2025-12-31 fiscal year plus" in how
+    assert "less the same period to 2025-09-30" in how
+
+
+def test_the_year_to_date_column_wins_over_the_three_month_one():
+    """A 10-Q carries both for the same end date."""
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+         quarterly(210.0, "2026-07-01", "2026-09-30", filed="2026-11-01"),
+         quarterly(500.0, "2025-01-01", "2025-09-30", filed="2025-11-01"),
+         quarterly(180.0, "2025-07-01", "2025-09-30", filed="2025-11-01")])
+    total, _, _ = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1100.0)
+
+
+def test_a_nine_month_column_is_not_paired_with_a_six_month_one():
+    """Pairing unequal windows would invent a quarter of revenue."""
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+         quarterly(330.0, "2025-01-01", "2025-06-30", filed="2025-08-01")])
+    total, _, how = E._ttm_flow(f, ("Revenues",))
+    # No nine-month prior column exists, so the annual figure stands.
+    assert total == pytest.approx(1000.0)
+    assert "no prior-year column matching" in how
+
+
+def test_a_prior_three_month_column_is_not_paired_with_a_nine_month_one():
+    """The real 10-Q shape: both columns end on the same anniversary.
+
+    The date check alone cannot reject this one - the prior three-month
+    column ends exactly a year before the current nine-month one - so only
+    the length check stands between it and a trailing year overstated by
+    two quarters.
+    """
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+         # Same end date a year earlier, but one quarter rather than three.
+         quarterly(180.0, "2025-07-01", "2025-09-30", filed="2025-11-01")])
+    total, _, how = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1000.0), (
+        "a nine-month column less a three-month one overstates by two "
+        f"quarters; got {total}")
+    assert "no prior-year column matching" in how
+
+
+def test_a_fifty_two_week_filer_s_shifted_anniversary_still_pairs():
+    """Coca-Cola's quarter ended 2 October against 26 September a year on."""
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(600.0, "2026-01-02", "2026-10-02", filed="2026-11-01"),
+         quarterly(500.0, "2024-12-28", "2025-09-26", filed="2025-11-01")])
+    total, _, _ = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1100.0)
+
+
+def test_nothing_filed_since_the_annual_report_returns_the_annual_figure():
+    """Apple right after its 10-K: the fiscal year IS the trailing year."""
+    f = company_facts([year(2025, 1000.0, filed="2026-02-01")], [])
+    total, end, how = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1000.0)
+    assert end == "2025-12-31"
+    assert "no quarter filed since" in how
+
+
+def test_a_quarter_filed_before_the_year_end_is_not_the_year_so_far():
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(700.0, "2025-01-01", "2025-09-30", filed="2025-11-01")])
+    total, _, how = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1000.0)
+    assert "no quarter filed since" in how
+
+
+def test_the_annual_figure_is_not_mistaken_for_a_year_to_date_column():
+    """A 12-month column in a 10-Q would double-count a whole year."""
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(1200.0, "2025-10-01", "2026-09-30", filed="2026-11-01")])
+    total, _, how = E._ttm_flow(f, ("Revenues",))
+    assert total == pytest.approx(1000.0)
+    assert "no quarter filed since" in how
+
+
+def test_a_share_count_is_averaged_not_summed():
+    """It is already an average over its period.
+
+    Summing gave a count four times too small, and it looked plausible
+    enough to reach a diff table before anything noticed.
+    """
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(1040.0, "2026-01-01", "2026-06-30", filed="2026-08-01"),
+         quarterly(1000.0, "2025-01-01", "2025-06-30", filed="2025-08-01")],
+        tag="WeightedAverageNumberOfDilutedSharesOutstanding")
+    chain = E.INCOME_TAGS["weightedAverageShsOutDil"]
+    total, end = E._ttm_weighted_average(f, chain)
+    # A = 1000 over four quarters, C - P = +40 over two: 1000 + 2*40/4.
+    assert total == pytest.approx(1020.0)
+    assert end == "2026-06-30"
+    assert total > 900, "a summed average would land near 260"
+
+
+def test_a_share_count_with_no_new_quarter_is_the_annual_average():
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")], [],
+        tag="WeightedAverageNumberOfDilutedSharesOutstanding")
+    total, end = E._ttm_weighted_average(
+        f, E.INCOME_TAGS["weightedAverageShsOutDil"])
+    assert total == pytest.approx(1000.0)
+    assert end == "2025-12-31"
+
+
+def test_a_balance_sheet_takes_the_newest_snapshot_not_a_sum():
+    f = {"facts": {"us-gaap": {"Assets": {"units": {"USD": [
+        point(5000.0, None, "2025-12-31", form="10-K"),
+        point(5500.0, None, "2026-09-30", form="10-Q"),
+    ]}}}}}
+    value, end = E._latest_instant(f, ("Assets",))
+    assert value == 5500.0
+    assert end == "2026-09-30"
+
+
+def test_a_duration_is_never_read_as_a_balance_sheet_instant():
+    f = {"facts": {"us-gaap": {"Assets": {"units": {"USD": [
+        point(5000.0, None, "2025-12-31", form="10-K"),
+        quarterly(9999.0, "2026-01-01", "2026-09-30"),
+    ]}}}}}
+    value, end = E._latest_instant(f, ("Assets",))
+    assert value == 5000.0
+    assert end == "2025-12-31"
+
+
+def test_a_twenty_f_filer_gets_no_trailing_year(monkeypatch):
+    """Nothing quarterly exists to build one from, and none is invented."""
+    f = facts(Revenues=("USD", [year(2025, 1000.0, form="20-F")]))
+    assert E.edgar_ttm_base(f, "USD") is None
+
+
+def test_the_ttm_base_carries_capex_as_an_outflow():
+    f = {"facts": {"us-gaap": {
+        "Revenues": {"units": {"USD": [
+            year(2025, 1000.0, filed="2026-02-01"),
+            quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+            quarterly(500.0, "2025-01-01", "2025-09-30", filed="2025-11-01")]}},
+        "PaymentsToAcquirePropertyPlantAndEquipment": {"units": {"USD": [
+            year(2025, 100.0, filed="2026-02-01"),
+            quarterly(60.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+            quarterly(50.0, "2025-01-01", "2025-09-30", filed="2025-11-01")]}},
+    }}}
+    base = E.edgar_ttm_base(f, "USD")
+    assert base is not None
+    assert base.values["revenue"] == pytest.approx(1100.0)
+    assert base.values["capex"] == pytest.approx(-110.0)
+
+
+def test_the_ttm_notes_say_how_each_figure_was_built():
+    f = company_facts(
+        [year(2025, 1000.0, filed="2026-02-01")],
+        [quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+         quarterly(500.0, "2025-01-01", "2025-09-30", filed="2025-11-01")])
+    base = E.edgar_ttm_base(f, "USD")
+    assert base is not None
+    assert any("fiscal year plus the" in n for n in base.notes)

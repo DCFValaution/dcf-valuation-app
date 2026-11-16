@@ -422,12 +422,22 @@ def compare_ticker(ticker: str, years: int) -> dict:
     try:
         base_theirs, _ = base_year_from(theirs)
         base_ours, _ = base_year_from(ours)
+        # In the aggregator's currency, as the per-field comparison is.
         out["base"] = {
-            "revenue": {"edgar": base_ours.revenue,
+            "revenue": {"edgar": base_ours.revenue * rate,
                         "aggregator": base_theirs.revenue},
             "shares": {"edgar": base_ours.shares,
                        "aggregator": base_theirs.shares},
         }
+        out["base_source"] = {
+            "edgar": ("trailing twelve months" if ours.ttm is not None
+                      else "latest fiscal year"),
+            "aggregator": ("trailing twelve months" if theirs.ttm is not None
+                           else "latest fiscal year"),
+        }
+        if ours.ttm is not None:
+            out["edgar_ttm"] = {"period_end": ours.ttm.period_end,
+                                "notes": list(ours.ttm.notes)[:2]}
     except Exception as exc:
         out["base_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -518,20 +528,18 @@ def report(results: list[dict]) -> None:
     print("\n" + "=" * 100)
     print("BASE YEAR AND HEADLINE")
     print("=" * 100)
-    print(f"{'tkr':<8}{'rev EDGAR':>16}{'rev agg':>16}{'move':>9}"
-          f"{'shares E':>12}{'shares A':>12}{'$ agg':>11}{'method':>8}")
+    print(f"{'tkr':<7}{'EDGAR base':<22}{'rev EDGAR':>15}{'rev agg':>15}"
+          f"{'move':>9}{'shares E':>11}{'shares A':>11}")
     for r in results:
         base = r.get("base")
         if not base:
             continue
         re_, ra = base["revenue"]["edgar"], base["revenue"]["aggregator"]
         se, sa = base["shares"]["edgar"], base["shares"]["aggregator"]
-        value = (r.get("value") or {}).get("aggregator")
-        method = (r.get("value") or {}).get("method") or "-"
+        source = (r.get("base_source") or {}).get("edgar", "?")
         move = (re_ / ra - 1) * 100 if ra else float("nan")
-        print(f"{r['ticker']:<8}{re_:>16,.0f}{ra:>16,.0f}{move:>+8.2f}%"
-              f"{se:>12,.1f}{sa:>12,.1f}"
-              f"{(value or 0):>11,.2f}{method:>8}")
+        print(f"{r['ticker']:<7}{source:<22}{re_:>15,.0f}{ra:>15,.0f}"
+              f"{move:>+8.2f}%{se:>11,.1f}{sa:>11,.1f}")
 
 
 def main() -> int:

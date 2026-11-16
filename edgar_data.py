@@ -468,13 +468,20 @@ ANNUAL_DAYS = (330, 400)
 # Reading facts
 # ---------------------------------------------------------------------------
 
-def _points(facts: dict, tag: str) -> list[dict]:
-    """Every annual point for *tag*, in any taxonomy, with its unit attached.
+def _points(facts: dict, tag: str, *, forms: frozenset = ANNUAL_FORMS,
+            days: tuple[int, int] | None = ANNUAL_DAYS) -> list[dict]:
+    """Every point for *tag*, in any taxonomy, with its unit attached.
 
     Flattened across taxonomies on purpose: a filer uses one of them and the
     caller does not care which. The unit is carried through because for a
     foreign filer it is the only statement of the reporting currency that
     comes from the filing itself.
+
+    *forms* and *days* select which filings and which period lengths count.
+    The defaults give the annual figures; the trailing-twelve-month build
+    asks for 10-Q periods of any length and sorts them out itself, because
+    a quarterly filing carries a three-month period and a year-to-date one
+    side by side and which is wanted depends on what the other filings hold.
     """
     out: list[dict] = []
     for taxonomy, tags in (facts.get("facts") or {}).items():
@@ -483,22 +490,23 @@ def _points(facts: dict, tag: str) -> list[dict]:
             continue
         for unit, points in (entry.get("units") or {}).items():
             for point in points:
-                if point.get("form") not in ANNUAL_FORMS:
+                if point.get("form") not in forms:
                     continue
                 end = point.get("end")
                 if not end:
                     continue
                 start = point.get("start")
+                span = None
                 if start is not None:
                     try:
                         span = (date.fromisoformat(end)
                                 - date.fromisoformat(start)).days
                     except (TypeError, ValueError):
                         continue
-                    if not ANNUAL_DAYS[0] <= span <= ANNUAL_DAYS[1]:
+                    if days is not None and not days[0] <= span <= days[1]:
                         continue
                 out.append({**point, "unit": unit, "taxonomy": taxonomy,
-                            "tag": tag})
+                            "tag": tag, "span": span})
     return out
 
 
@@ -609,7 +617,8 @@ def _instant_near(series: dict[str, dict], end: str,
 
 
 def edgar_financials(ticker: str, years: int = 5, *,
-                     profile: dict | None = None) -> CompanyFinancials:
+                     profile: dict | None = None,
+                     ttm: bool = True) -> CompanyFinancials:
     """Build a `CompanyFinancials` for *ticker* from EDGAR alone.
 
     *profile* is accepted so the comparison harness can lend the fields EDGAR
@@ -740,10 +749,273 @@ def edgar_financials(ticker: str, years: int = 5, *,
         reporting_currency=currency,
         trading_currency=(profile or {}).get("currency") or currency,
         fx=None,
-        # A 20-F filer files once a year, so there is nothing to build a
-        # trailing-twelve-month base from. Left None for every company at
-        # this stage rather than built for some: a base year that is TTM for
-        # domestic filers and annual for foreign ones would make the
-        # comparison against the aggregator incomparable.
-        ttm=None,
+        # Built for a 10-Q filer, None for a 20-F one. That asymmetry is
+        # the filings' and not this code's: a foreign private issuer
+        # publishes no quarterly figures, so no source has a trailing year
+        # for them that was not estimated. base_year_from() already reads a
+        # missing one as "use the annual base".
+        ttm=(edgar_ttm_base(facts, currency) if ttm else None),
     )
+
+
+# ---------------------------------------------------------------------------
+# Trailing twelve months
+# ---------------------------------------------------------------------------
+#
+# The aggregator's base year is a trailing-twelve-month figure. EDGAR's is
+# the latest annual period, and for a fast grower the gap between the two is
+# most of the difference between the sources: NVDA's base-year revenue came
+# out 28.7% lower from EDGAR than from the aggregator, and not one basis
+# point of that was a tagging difference - the annual figures agree.
+#
+# So the trailing year is rebuilt here from what the filer actually filed:
+#
+#     TTM = last annual + current year-to-date - prior year's same period
+#
+# which is the standard construction and needs only figures that exist in
+# the filings. A 10-Q carries a year-to-date column; the matching column one
+# year earlier is in the prior year's 10-Q. Subtracting the second from the
+# first leaves the part of the trailing year that is not in the annual
+# report, and adding the annual report completes it.
+#
+# Foreign private issuers file no 10-Q, so there is nothing to add and they
+# keep the annual base. That is not a shortcoming of this code: a 20-F filer
+# publishes no quarterly figures, so no source has a trailing year for them
+# that was not estimated.
+
+QUARTERLY_FORMS = frozenset({"10-Q", "10-Q/A"})
+
+# How far two periods may differ and still be treated as the same window.
+# A fiscal quarter is 13 weeks, and a 52/53-week filer shifts its quarter
+# ends by up to a week between years, so the prior-year column can be
+# several days off its anniversary without being a different period.
+PERIOD_TOLERANCE_DAYS = 20
+
+# A year-to-date column is anything from one quarter to three. Four would be
+# the annual figure, which comes from the 10-K.
+YTD_DAYS = (60, 310)
+
+
+def _ttm_flow(facts: dict, chain: tuple[str, ...]
+              ) -> tuple[float, str, str] | None:
+    """
+    (trailing twelve-month total, period end, how it was built), or None.
+
+    Returns the annual figure unchanged when the company has filed nothing
+    since its annual report - which is correct rather than a fallback, since
+    the latest twelve months and the latest fiscal year are then the same
+    twelve months.
+    """
+    annual = _series(facts, chain)
+    if not annual:
+        return None
+    fy_end = max(annual)
+    fy_value = _money(annual[fy_end])
+    if fy_value is None:
+        return None
+
+    # Year-to-date columns from the quarterly filings.
+    ytd: list[dict] = []
+    for tag in chain:
+        for point in _points(facts, tag, forms=QUARTERLY_FORMS,
+                             days=YTD_DAYS):
+            if _money(point) is not None:
+                ytd.append(point)
+    if not ytd:
+        return fy_value, fy_end, "latest fiscal year; no quarter filed since"
+
+    # The current year-to-date column: the one ending furthest past the
+    # fiscal year end. Among equals, the longest - a 10-Q carries both a
+    # three-month and a year-to-date column for the same end date, and the
+    # year-to-date one is the whole of the year so far.
+    after = [p for p in ytd if p["end"] > fy_end]
+    if not after:
+        return fy_value, fy_end, "latest fiscal year; no quarter filed since"
+    newest_end = max(p["end"] for p in after)
+    current = max((p for p in after if p["end"] == newest_end),
+                  key=lambda p: (p["span"] or 0, str(p.get("filed") or "")))
+
+    # The same window a year earlier. Matched on both length and anniversary
+    # so a nine-month column cannot be paired with a six-month one.
+    try:
+        this_end = date.fromisoformat(current["end"])
+        want_end = this_end.replace(year=this_end.year - 1)
+    except (TypeError, ValueError):
+        return None
+    span = current["span"] or 0
+
+    def fits(point: dict) -> bool:
+        if abs((point["span"] or 0) - span) > PERIOD_TOLERANCE_DAYS:
+            return False
+        try:
+            gap = abs((date.fromisoformat(point["end"]) - want_end).days)
+        except (TypeError, ValueError):
+            return False
+        return gap <= PERIOD_TOLERANCE_DAYS
+
+    candidates = [p for p in ytd if fits(p)]
+    if not candidates:
+        # The current year-to-date exists and its anniversary does not. That
+        # happens to a company that listed within the year, and the honest
+        # answer is the annual figure rather than a trailing year built by
+        # pretending the missing column was zero - which would read as a
+        # year of explosive growth.
+        return (fy_value, fy_end,
+                f"latest fiscal year; no prior-year column matching the "
+                f"{span}-day period to {current['end']}")
+
+    prior = max(candidates, key=lambda p: str(p.get("filed") or ""))
+    total = fy_value + _money(current) - _money(prior)
+    how = (f"{fy_end} fiscal year plus the {span}-day period to "
+           f"{current['end']} less the same period to {prior['end']}")
+    return total, current["end"], how
+
+
+def _latest_instant(facts: dict, chain: tuple[str, ...]
+                    ) -> tuple[float, str] | None:
+    """The most recent balance-sheet value for *chain*, quarterly included.
+
+    A balance sheet is a snapshot, not a total, so the trailing year does
+    not apply to it: the right figure is simply the newest one filed.
+    """
+    for tag in chain:
+        best: tuple[str, float] | None = None
+        for forms in (QUARTERLY_FORMS, ANNUAL_FORMS):
+            for point in _points(facts, tag, forms=forms, days=None):
+                if point.get("start") is not None:
+                    continue           # a duration, not an instant
+                value = _money(point)
+                if value is None:
+                    continue
+                if best is None or point["end"] > best[0]:
+                    best = (point["end"], value)
+        if best is not None:
+            return best[1], best[0]    # first tag in the chain that answers
+    return None
+
+
+def _ttm_weighted_average(facts: dict, chain: tuple[str, ...]
+                          ) -> tuple[float, str] | None:
+    """Trailing-twelve-month weighted-average share count, and its date.
+
+    A share count is already an average over its period, so the sum that
+    builds a revenue figure is meaningless here: adding a year to a
+    nine-month average and subtracting another nine-month average produced
+    a count four times too small, and it looked plausible enough to ship.
+
+    The arithmetic that is right works in share-quarters. If the annual
+    average A covers four quarters and the year-to-date average C covers c
+    of them, the trailing year holds 4A + cC - cP share-quarters, so its own
+    average is A + c(C - P)/4.
+    """
+    annual = _series(facts, chain)
+    if not annual:
+        return None
+    fy_end = max(annual)
+    a = _money(annual[fy_end])
+    if a is None:
+        return None
+
+    ytd = [p for tag in chain
+           for p in _points(facts, tag, forms=QUARTERLY_FORMS, days=YTD_DAYS)
+           if _money(p) is not None]
+    after = [p for p in ytd if p["end"] > fy_end]
+    if not after:
+        return a, fy_end
+
+    newest_end = max(p["end"] for p in after)
+    current = max((p for p in after if p["end"] == newest_end),
+                  key=lambda p: (p["span"] or 0, str(p.get("filed") or "")))
+    span = current["span"] or 0
+    try:
+        this_end = date.fromisoformat(current["end"])
+        want_end = this_end.replace(year=this_end.year - 1)
+    except (TypeError, ValueError):
+        return a, fy_end
+
+    prior = None
+    for point in ytd:
+        if abs((point["span"] or 0) - span) > PERIOD_TOLERANCE_DAYS:
+            continue
+        try:
+            gap = abs((date.fromisoformat(point["end"]) - want_end).days)
+        except (TypeError, ValueError):
+            continue
+        if gap <= PERIOD_TOLERANCE_DAYS and (
+                prior is None
+                or str(point.get("filed") or "") > str(prior.get("filed") or "")):
+            prior = point
+    if prior is None:
+        return a, fy_end
+
+    quarters = max(1, round(span / 91.0))
+    total = a + quarters * (_money(current) - _money(prior)) / 4.0
+    return total, current["end"]
+
+
+def edgar_ttm_base(facts: dict, currency: str | None):
+    """
+    A trailing-twelve-month base built from the filings, or None.
+
+    Mirrors market_data.TTMBase so the two can be compared field by field
+    and, later, swapped. None when the company files no quarterly reports -
+    a foreign private issuer on Form 20-F - which the caller reads as "use
+    the annual base", the same way it reads a missing one from anywhere else.
+    """
+    from market_data import TTMBase
+
+    values: dict[str, float] = {}
+    as_of: dict[str, str] = {}
+    notes: list[str] = []
+
+    flows = {"revenue": INCOME_TAGS["revenue"],
+             "capex": CASHFLOW_TAGS["capitalExpenditure"]}
+    quarterly_seen = False
+    for name, chain in flows.items():
+        built = _ttm_flow(facts, chain)
+        if built is None:
+            continue
+        total, end, how = built
+        if name == "capex":
+            # Filers tag cash paid as positive; everything downstream of
+            # this expects the aggregator's negative outflow.
+            total = -abs(total)
+        values[name] = total
+        as_of[name] = end
+        notes.append(f"{name}: {how}")
+        if "plus the" in how:
+            quarterly_seen = True
+
+    if not quarterly_seen:
+        # Nothing was actually rebuilt, so this would be the annual base
+        # wearing a trailing-year label. Saying so is better than returning
+        # it: the caller already knows what to do with a missing one.
+        return None
+
+    instants = {
+        "shares_ordinary": ("EntityCommonStockSharesOutstanding",),
+        "current_debt": BALANCE_TAGS["shortTermDebt"],
+        "long_term_debt": BALANCE_TAGS["longTermDebt"],
+        "cash_and_short_term": BALANCE_TAGS["cashAndCashEquivalents"],
+        "investments": BALANCE_TAGS["longTermInvestments"],
+        "minority_interest": BALANCE_TAGS["minorityInterest"],
+    }
+    for name, chain in instants.items():
+        found = _latest_instant(facts, chain)
+        if found is None:
+            notes.append(f"{name}: not reported in any quarterly filing")
+            continue
+        values[name], as_of[name] = found
+
+    shares = _ttm_weighted_average(facts,
+                                   INCOME_TAGS["weightedAverageShsOutDil"])
+    if shares is not None:
+        values["shares_diluted"], as_of["shares_diluted"] = shares
+
+    period_end = max(
+        (as_of[k] for k in ("current_debt", "long_term_debt",
+                            "cash_and_short_term") if k in as_of),
+        default=as_of.get("revenue", ""))
+
+    return TTMBase(values=values, as_of=as_of, period_end=period_end,
+                   currency=currency, notes=notes, stale={})
