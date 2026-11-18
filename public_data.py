@@ -115,14 +115,19 @@ def reset_session() -> None:
         _session = None
 
 
-def _get(url: str, *, timeout: int = 20, agent: str | None = None
-         ) -> str | None:
+def _get(url: str, *, timeout: int = 20, agent: str | None = None,
+         binary: bool = False) -> str | bytes | None:
     """GET *url* as text, or None on any failure.
 
     *agent* overrides the declared User-Agent. The SEC is the reason it
     exists: it serves a string that looks like a contact and refuses one
     that looks like a crawler, so that caller has to say who it is in the
     SEC's own shape rather than this module's.
+
+    *binary* returns the bytes instead of decoded text, for the one source
+    that publishes a spreadsheet rather than a CSV or a JSON document.
+    Decoding a spreadsheet as text and encoding it back corrupts it, so the
+    choice has to be made here rather than by the caller.
     """
     try:
         response = _plain_session().get(
@@ -135,7 +140,7 @@ def _get(url: str, *, timeout: int = 20, agent: str | None = None
         log.warning("public-data fetch of %s returned %s",
                     url, response.status_code)
         return None
-    return response.text
+    return response.content if binary else response.text
 
 
 # ---------------------------------------------------------------------------
