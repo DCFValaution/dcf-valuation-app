@@ -279,3 +279,136 @@ not a ratio at all.
 411bn for 2025) and is the one company where the definitional difference is
 large enough to be a different company. Investment gains and the insurance
 presentation. Needs its own look.
+
+## Vasicek shrinkage, with a per-industry prior variance
+
+Investigated November 2026 and **not adopted**. A significance-weighted
+industry beta was taken instead: the weight on a company's own beta ramps
+from nothing at |t| = 1.5 to all of it at |t| = 2.5, blending with the
+relevered industry figure between. That is a continuous blend too, so the
+cliff this was going to fix no longer exists. What Vasicek would still buy
+is a *better reason* for the weight - the ratio of the regression's variance
+to the industry's own dispersion, rather than a hand-chosen ramp - and a
+prior that is a genuine distribution rather than a point estimate.
+
+**What it is.** Blume shrinks every beta two thirds of the way from 1.0,
+whatever the regression was worth. Vasicek shrinks each one toward an
+industry prior by *how much the regression is worth*:
+
+    w = s2_prior / (s2_prior + se^2)
+    beta_adj = w x beta_raw + (1 - w) x beta_prior
+
+`se` is the standard error of the company's own slope; `s2_prior` is the
+variance of betas in the population being shrunk toward. A precisely
+measured beta barely moves; a noisy one moves a long way. It is strictly
+better reasoning than Blume, which ignores both.
+
+**Why it was not adopted: no single prior variance works.** The pilot ran
+all twenty-two check tickers plus Coinbase against three choices of
+`s2_prior`:
+
+| s2_prior | where it comes from | LMT | COIN |
+| --- | --- | --- | --- |
+| 0.072 | spread of Damodaran's 96 industry averages | **0.506** correct | 1.158 wrong |
+| 0.250 | halfway | 0.260 wrong | 1.823 wrong |
+| 0.716 | spread of individual firms' betas, less mean sampling variance | 0.147 wrong | **2.529** correct |
+
+The two failures are different in kind, which is why no middle value helps.
+Coinbase's regression is *precise* - t = 5.7 - so any correct Bayesian
+method must leave its 3.46 nearly alone; a tight prior crushes it to 1.16
+and moves the headline figure 87%. Lockheed's is imprecise *and centred near
+zero*, so only a tight prior rescues it; a loose one leaves it at 0.15,
+which is not a beta a defence prime can have. Shrinking correctly is not
+enough when the prior itself is a poor description of the company.
+
+**The principled fix, and what it costs.** Vasicek's own formulation wants
+`s2_prior` to be the spread *within the company's own industry*, not across
+industries or across all firms. Aerospace/Defense clusters tightly, so
+Lockheed would shrink hard and land near 0.5; "Investments & Asset
+Management" is wildly dispersed across 283 firms, so Coinbase would barely
+move. That is the version worth having.
+
+Damodaran's table publishes no dispersion column - only the average - so
+this means computing betas for the member firms of each industry: roughly
+**twenty firms x ninety-six industries = 1,900 regressions**, cached and
+refreshed when the table is. The peer-fetching path built for relative
+valuation is the obvious place to hang it. Damodaran does publish
+`indname.xls`, which lists the companies in each industry, so the
+membership does not have to be guessed.
+
+**The small-industry problem bites this harder than the gate.** A prior
+variance estimated from four firms is not a prior variance. Oil/Gas
+(Integrated) has four members and is the prior for Exxon, Chevron and BP;
+Chemical (Diversified) has four; Rubber & Tires has three; Reinsurance has
+**one**. The gate only uses the industry *mean*, which four firms can
+support badly but can support. A *variance* from four firms cannot be used
+at all, so these industries would need a fallback to a pooled estimate -
+another judgement, and one with no obvious right answer.
+
+**Where the working files are.** The pilot script, the full
+raw/Blume/Vasicek/WACC/value table for the twenty-two tickers plus Coinbase,
+and the SIC-to-industry map it used were written during the November 2026
+investigation. The map itself survived: it is now `industry_betas.py`, built
+for the S&P 500, so the join work does not have to be redone.
+
+## The industry beta is probably too high for large-cap pharma
+
+Checked November 2026, when the significance ramp shipped. Not a bug, and
+not fixed: an open question about the prior itself, with a measurable amount
+of money riding on it.
+
+**The finding.** The ten largest US-listed pharmaceutical filers (SIC 2834,
+foreign private issuers excluded) have a median raw beta of **0.216** and a
+median Blume-adjusted beta of **0.475**. Damodaran's Drugs (Pharmaceutical)
+average, relevered on each company's own borrowing, comes out at a median
+**0.984** - **2.07x the median Blume figure and 4.55x the median raw one**.
+Eight of the ten take that industry figure wholly or mostly.
+
+What it is worth, on Johnson & Johnson:
+
+| beta | where from | WACC | value |
+| --- | --- | --- | --- |
+| 0.452 | its own, Blume-adjusted (the old rule) | 6.75% | $364.49 |
+| 0.964 | Drugs (Pharmaceutical), relevered (shipped) | 8.85% | $218.15 |
+| 0.509 | cap-weighted Blume of the ten largest | 6.98% | $361.35 |
+
+So the question "is the industry beta fair for large-cap pharma" is the same
+question as "was the old answer right for pharma after all", and 40% of the
+headline figure turns on it.
+
+**Why it is probably too high: a composition effect.** Damodaran's average
+is **equal-weighted across 228 US drug companies**, and only about a dozen
+of those are in the S&P 500. The rest are small, cash-burning,
+financing-dependent developers, which are far more market-sensitive than a
+$671bn company selling inelastic products. His published levered beta for
+the industry is 0.983 - an average company - and large-cap pharma is
+defensive by every other measure. The cap-weighted raw beta of the ten
+largest is 0.267, in line with their median, so this is not one outlier
+dragging an average down; the whole large-cap cohort is low.
+
+**Why it is nonetheless defensible.** The large caps' own betas are not
+measurements: median |t| is 1.22 and median R-squared is **0.025**. A beta
+of 0.183 +/- 0.15 is not evidence of a low beta, it is an absence of
+evidence. An average of 228 noisy betas is a far more precise estimate of
+the industry's beta than any single one of them, because the noise cancels
+and the signal does not. That is the real statistical argument for the
+industry figure, and it stands.
+
+**A structural caveat worth remembering, and not only for pharma.** Since
+t = beta / se and the standard errors across this group are all in the
+0.15-0.27 band, **t is roughly proportional to beta**: a low beta is
+mechanically harder to measure significantly than a high one. The two names
+of the ten that clear |t| >= 2.5 (Abbott at 0.505, Zoetis at 0.631) are the
+two highest raw betas in the group. So a significance-weighted rule
+systematically keeps high betas and replaces low ones, which pushes
+defensive companies upward - over and above the composition effect above.
+The same mechanism is behind Coca-Cola, Verizon and General Mills moving
+the way they did.
+
+**What would settle it.** A size-matched or cap-weighted industry beta.
+Damodaran publishes no size breakdown, but he does publish the membership
+of each industry at
+<https://pages.stern.nyu.edu/~adamodar/pc/datasets/indname.xls>, so a
+cap-weighted industry beta could be computed from the member firms. That is
+the same infrastructure the parked Vasicek work needs, and doing either
+makes the other nearly free.
