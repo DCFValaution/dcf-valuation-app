@@ -408,7 +408,10 @@ def compare_ticker(ticker: str, years: int) -> dict:
         pass
     out["adr_ratio"] = adr_ratio
 
-    facts = E.company_facts(out["cik"]) if out["cik"] else None
+    # Every CIK, not just the primary one: a ticker whose history is
+    # split across registrants needs both halves here too, or the tag
+    # finder reports a missing tag that is only missing from one of them.
+    facts, _ciks = E.facts_for(ticker)
     common = {"facts": facts, "rate": rate, "adr_ratio": adr_ratio}
     out["findings"] = (
         compare_statement("income", ours.income, theirs.income,

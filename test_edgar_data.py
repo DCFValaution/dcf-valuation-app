@@ -227,8 +227,8 @@ def company(monkeypatch):
         }
         tags.update(extra_tags or {})
         f = facts(**tags)
-        monkeypatch.setattr(E, "cik_for",
-                            lambda t: ("0000000001", "Test Co Inc"))
+        monkeypatch.setattr(E, "ciks_for",
+                            lambda t: (("0000000001", "Test Co Inc"),))
         monkeypatch.setattr(E, "company_facts", lambda cik: f)
         return E.edgar_financials(ticker)
     return build
@@ -341,7 +341,8 @@ def test_a_lent_profile_fills_what_edgar_cannot_supply(company, monkeypatch):
     lent = {"sector": "Technology", "industry": "Software", "price": 100.0,
             "beta": 1.2, "currency": "USD"}
     f = facts(Revenues=("USD", [year(2025, 1000.0)]))
-    monkeypatch.setattr(E, "cik_for", lambda t: ("0000000001", "Test Co Inc"))
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co Inc"),))
     monkeypatch.setattr(E, "company_facts", lambda cik: f)
     fin = E.edgar_financials("TEST", profile=lent)
     assert fin.sector == "Technology"
@@ -357,13 +358,14 @@ def test_without_a_lent_profile_the_company_has_no_sector(company):
 
 
 def test_an_unknown_ticker_says_which_cases_land_there(monkeypatch):
-    monkeypatch.setattr(E, "cik_for", lambda t: None)
+    monkeypatch.setattr(E, "ciks_for", lambda t: ())
     with pytest.raises(LookupError, match="not in the SEC's ticker list"):
         E.edgar_financials("NOPE")
 
 
 def test_no_facts_is_a_lookup_error(monkeypatch):
-    monkeypatch.setattr(E, "cik_for", lambda t: ("0000000001", "Test Co"))
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
     monkeypatch.setattr(E, "company_facts", lambda cik: None)
     with pytest.raises(LookupError, match="no facts"):
         E.edgar_financials("TEST")
@@ -730,3 +732,184 @@ def test_the_ttm_notes_say_how_each_figure_was_built():
     base = E.edgar_ttm_base(f, "USD")
     assert base is not None
     assert any("fiscal year plus the" in n for n in base.notes)
+
+
+# ---------------------------------------------------------------------------
+# A company split across registrants
+# ---------------------------------------------------------------------------
+#
+# A reorganisation does not always move the filing history: it can split it.
+# Exxon is the case that found this. CIK 34088 holds fifty years of annual
+# accounts and the 10-Qs to 2026-05-04; CIK 2115436 - the registrant the
+# SEC's ticker list actually points at - holds the June and September 2026
+# 10-Qs and no annual filing at all. Neither CIK alone holds a complete
+# trailing year, so an override names both and the facts are merged.
+
+def test_an_override_may_name_several_ciks(monkeypatch, cik_list):
+    monkeypatch.setitem(E.CIK_OVERRIDES, "SPLIT",
+                        (("0000000001", "0000000002"), "a test"))
+    assert E.ciks_for("SPLIT") == (("0000000001", ""), ("0000000002", ""))
+
+
+def test_the_first_cik_of_an_override_is_the_one_cik_for_returns(
+        monkeypatch, cik_list):
+    """Callers that want one want the registrant with the annual history,
+    which is why the order of the tuple is part of the entry."""
+    monkeypatch.setitem(E.CIK_OVERRIDES, "SPLIT",
+                        (("0000000001", "0000000002"), "a test"))
+    assert E.cik_for("SPLIT") == ("0000000001", "")
+
+
+def test_an_ordinary_ticker_yields_exactly_one_cik(cik_list):
+    assert E.ciks_for("AAPL") == (("0000320193", "Apple Inc."),)
+    assert E.ciks_for("ZZZZ") == ()
+
+
+def test_the_real_override_names_both_of_exxons_registrants():
+    """The entry itself, because the whole point is that it is hand-kept."""
+    ciks, why = E.CIK_OVERRIDES["XOM"]
+    assert ciks == ("0000034088", "0002115436")
+    assert "trailing twelve months needs both" in why
+
+
+class TestMergingFacts:
+    def test_disjoint_periods_are_both_kept(self):
+        """The case that matters: one registrant's quarters and another's."""
+        first = facts(Revenues=("USD", [year(2024, 900.0), year(2025, 1000.0)]))
+        second = facts(Revenues=("USD", [year(2026, 1100.0)]))
+        merged = E.merge_facts([first, second])
+        ends = sorted(E._latest_per_period(E._points(merged, "Revenues")))
+        assert ends == ["2024-12-31", "2025-12-31", "2026-12-31"]
+
+    def test_the_more_recently_filed_copy_of_a_period_wins(self):
+        """A successor restating a predecessor's year is the same situation
+        as a 10-K's comparative column against last year's original, and
+        gets the same rule."""
+        old = facts(Revenues=("USD", [year(2025, 1000.0,
+                                           filed="2026-02-01")]))
+        new = facts(Revenues=("USD", [year(2025, 1050.0,
+                                           filed="2026-11-01")]))
+        merged = E.merge_facts([old, new])
+        series = E._latest_per_period(E._points(merged, "Revenues"))
+        assert series["2025-12-31"]["val"] == 1050.0
+
+    def test_a_tag_only_one_registrant_uses_survives_the_merge(self):
+        first = facts(Revenues=("USD", [year(2025, 1000.0)]))
+        second = facts(Assets=("USD", [point(5000.0, None, "2026-09-30")]))
+        merged = E.merge_facts([first, second])
+        assert "Revenues" in merged["facts"]["us-gaap"]
+        assert "Assets" in merged["facts"]["us-gaap"]
+
+    def test_taxonomies_are_kept_apart(self):
+        """A domestic filer and an IFRS one can be merged; their tags live
+        in different books and must not be flattened into one."""
+        gaap = facts(Revenues=("USD", [year(2025, 1000.0)]))
+        ifrs = {"facts": {"ifrs-full": {
+            "Revenue": {"units": {"USD": [year(2026, 1100.0)]}}}}}
+        merged = E.merge_facts([gaap, ifrs])
+        assert set(merged["facts"]) == {"us-gaap", "ifrs-full"}
+
+    def test_a_point_remembers_which_registrant_filed_it(self):
+        """So a figure can still be traced after the merge."""
+        first = {**facts(Revenues=("USD", [year(2025, 1000.0)])),
+                 "cik": 34088}
+        merged = E.merge_facts([first])
+        assert E._points(merged, "Revenues")[0]["cik"] == 34088
+
+    def test_an_empty_part_is_skipped_rather_than_crashing(self):
+        first = facts(Revenues=("USD", [year(2025, 1000.0)]))
+        merged = E.merge_facts([first, None, {}])
+        assert len(E._points(merged, "Revenues")) == 1
+
+    def test_facts_for_reads_every_cik_and_merges_them(self, monkeypatch,
+                                                       cik_list):
+        monkeypatch.setitem(E.CIK_OVERRIDES, "SPLIT",
+                            (("0000000001", "0000000002"), "a test"))
+        by_cik = {
+            "0000000001": facts(Revenues=("USD", [year(2025, 1000.0)])),
+            "0000000002": facts(Revenues=("USD", [year(2026, 1100.0)])),
+        }
+        monkeypatch.setattr(E, "company_facts", lambda cik: by_cik[cik])
+        merged, found = E.facts_for("SPLIT")
+        assert len(found) == 2
+        assert len(E._latest_per_period(E._points(merged, "Revenues"))) == 2
+
+    def test_facts_for_does_not_merge_a_single_cik(self, monkeypatch,
+                                                   cik_list):
+        """One registrant is the ordinary case and must cost one request
+        and no rebuilding."""
+        one = facts(Revenues=("USD", [year(2025, 1000.0)]))
+        calls = []
+        monkeypatch.setattr(E, "company_facts",
+                            lambda cik: (calls.append(cik), one)[1])
+        got, found = E.facts_for("AAPL")
+        assert got is one
+        assert calls == ["0000320193"]
+
+
+# ---------------------------------------------------------------------------
+# A share count that is not from the same year as the revenue
+# ---------------------------------------------------------------------------
+
+def test_a_share_count_from_another_fiscal_year_is_refused():
+    """Exxon stopped tagging a diluted count in 2013.
+
+    The chain's newest answer was therefore a 4,419m average from 2013, and
+    it was reported beside revenue to September 2026 with nothing to say
+    the two were thirteen years apart. A count that does not cover the same
+    year as the rest of the trailing base is not a count for it.
+    """
+    f = {"facts": {"us-gaap": {
+        "Revenues": {"units": {"USD": [
+            year(2025, 1000.0, filed="2026-02-01"),
+            quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+            quarterly(500.0, "2025-01-01", "2025-09-30", filed="2025-11-01")]}},
+        "WeightedAverageNumberOfDilutedSharesOutstanding": {"units": {
+            "shares": [year(2013, 4419.0, filed="2014-02-26")]}},
+    }}}
+    chain = E.INCOME_TAGS["weightedAverageShsOutDil"]
+    assert E._ttm_weighted_average(f, chain, fy_end="2025-12-31") is None
+
+    base = E.edgar_ttm_base(f, "USD")
+    assert base is not None
+    assert "shares_diluted" not in base.values
+    assert any("no weighted-average count tagged" in note
+               for note in base.notes)
+
+
+def test_a_share_count_from_the_right_year_is_used():
+    f = {"facts": {"us-gaap": {
+        "Revenues": {"units": {"USD": [
+            year(2025, 1000.0, filed="2026-02-01"),
+            quarterly(600.0, "2026-01-01", "2026-09-30", filed="2026-11-01"),
+            quarterly(500.0, "2025-01-01", "2025-09-30", filed="2025-11-01")]}},
+        "WeightedAverageNumberOfDilutedSharesOutstanding": {"units": {
+            "shares": [year(2025, 1000.0, filed="2026-02-01")]}},
+    }}}
+    base = E.edgar_ttm_base(f, "USD")
+    assert base is not None
+    assert base.values["shares_diluted"] == pytest.approx(1000.0)
+
+
+def test_a_basic_count_stands_in_only_where_no_diluted_tag_answers():
+    """Exxon tags basic alone, and for a company with no convertibles the
+    two differ by about a tenth of a per cent - a far smaller error than
+    having no share count. Ahead of the diluted tags it would understate
+    dilution for every company that reports both, so it comes last."""
+    chain = E.INCOME_TAGS["weightedAverageShsOutDil"]
+    assert chain[-1] == "WeightedAverageNumberOfSharesOutstandingBasic"
+
+    basic_only = {"facts": {"us-gaap": {
+        "WeightedAverageNumberOfSharesOutstandingBasic": {"units": {
+            "shares": [year(2025, 4188.0, filed="2026-02-01")]}}}}}
+    got = E._ttm_weighted_average(basic_only, chain, fy_end="2025-12-31")
+    assert got is not None and got[0] == pytest.approx(4188.0)
+
+    both = {"facts": {"us-gaap": {
+        "WeightedAverageNumberOfDilutedSharesOutstanding": {"units": {
+            "shares": [year(2025, 4200.0, filed="2026-02-01")]}},
+        "WeightedAverageNumberOfSharesOutstandingBasic": {"units": {
+            "shares": [year(2025, 4188.0, filed="2026-02-01")]}}}}}
+    got = E._ttm_weighted_average(both, chain, fy_end="2025-12-31")
+    assert got is not None and got[0] == pytest.approx(4200.0), (
+        "the diluted count wins where the filer reports one")

@@ -50,7 +50,7 @@ import threading
 import time
 import zipfile
 from datetime import date, datetime
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from market_data import CompanyFinancials
 from public_data import _get, public_data_contact, public_user_agent
@@ -144,27 +144,41 @@ def _load_cik_index() -> dict[str, tuple[str, str]]:
 
 # The SEC's ticker list holds one registrant per ticker, and after a
 # holding-company reorganisation that registrant can be the new shell rather
-# than the entity with the filing history. XOM is the case that found this:
-# the list maps it to "ExxonMobil Holdings Corporation" (CIK 2115436), which
-# carries 98 tags and not one annual revenue figure, while fifty years of
-# accounts sit under "Exxon Mobil Corporation" (CIK 34088).
+# than the entity with the filing history. Worse, the history can be split
+# rather than moved, with the old registrant keeping the annual accounts
+# while the new one files the quarters since.
+#
+# XOM is both at once, which is why an override carries a tuple of CIKs and
+# not one. The ticker list points at "ExxonMobil Holdings Corporation" (CIK
+# 2115436), which has no annual revenue figure at all; fifty years of
+# accounts and the 10-Qs to 2026-05-04 sit under "Exxon Mobil Corporation"
+# (CIK 34088), and the June and September 2026 10-Qs sit under the holding
+# company. Neither CIK alone holds a complete trailing year, so the facts
+# are read from every CIK named and merged.
 #
 # There is no machine-readable link from a successor to its predecessor, so
 # this is a hand-maintained map with a date and a reason per entry, and
 # edgar_financials() refuses loudly rather than silently returning an empty
 # company when a CIK has no annual history - which is how the next one gets
 # found rather than shipped.
-CIK_OVERRIDES: dict[str, tuple[str, str]] = {
-    # ticker: (CIK, why)
-    "XOM": ("0000034088",
-            "the SEC's list points at ExxonMobil Holdings Corporation, a "
-            "2026 holding company with no annual filings; the operating "
-            "history is under Exxon Mobil Corporation (checked 16 Nov 2026)"),
+CIK_OVERRIDES: dict[str, tuple[tuple[str, ...], str]] = {
+    # ticker: ((CIKs, newest registrant last), why)
+    "XOM": (("0000034088", "0002115436"),
+            "the SEC's list points at ExxonMobil Holdings Corporation (CIK "
+            "2115436), a 2026 holding company with no annual filings; the "
+            "annual history and the 10-Qs to 2026-05-04 are under Exxon "
+            "Mobil Corporation (CIK 34088), and the June and September 2026 "
+            "10-Qs are under the holding company, so a trailing twelve "
+            "months needs both (checked 18 Nov 2026)"),
 }
 
 
-def cik_for(ticker: str) -> tuple[str, str] | None:
-    """The CIK and registrant name for *ticker*, or None if unlisted.
+def ciks_for(ticker: str) -> tuple[tuple[str, str], ...]:
+    """Every (CIK, registrant name) that holds filings for *ticker*.
+
+    Usually one. An override may name several, in which case all of them are
+    read and their facts merged: a reorganisation can leave one registrant
+    with the annual history and another with the recent quarters.
 
     The aggregator's symbol and the SEC's are not always the same string.
     A class suffix is written with a hyphen by the aggregator (BRK-B) and
@@ -174,19 +188,28 @@ def cik_for(ticker: str) -> tuple[str, str] | None:
     index = _load_cik_index()
     override = CIK_OVERRIDES.get((ticker or "").upper().strip())
     if override is not None:
-        cik, _why = override
-        # The name still comes from the SEC's list where it has one, so the
-        # override carries a CIK and not a second source of truth.
-        for _, (listed_cik, name) in index.items():
-            if listed_cik == cik:
-                return cik, name
-        return cik, ""
+        ciks, _why = override
+        # Names still come from the SEC's list where it has one, so an
+        # override carries CIKs and not a second source of truth.
+        by_cik = {listed: name for listed, name in index.values()}
+        return tuple((cik, by_cik.get(cik, "")) for cik in ciks)
     wanted = (ticker or "").upper().strip()
     for candidate in (wanted, wanted.replace("-", "."),
                       wanted.replace("-", ""), wanted.split("-")[0]):
         if candidate in index:
-            return index[candidate]
-    return None
+            return (index[candidate],)
+    return ()
+
+
+def cik_for(ticker: str) -> tuple[str, str] | None:
+    """The CIK with *ticker*'s filing history, or None if unlisted.
+
+    The first of `ciks_for`, which for an override is the registrant holding
+    the annual accounts. Callers that need every CIK - anything building a
+    trailing twelve months - want `ciks_for` instead.
+    """
+    found = ciks_for(ticker)
+    return found[0] if found else None
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +292,57 @@ def company_facts(cik: str) -> dict | None:
         return None
 
 
+def merge_facts(parts: Sequence[dict]) -> dict:
+    """One facts document from several, concatenating the point lists.
+
+    A fact is identified by its taxonomy, tag, unit and period, and two
+    registrants covering one company report disjoint periods - that is what
+    made the split worth merging. Where they do overlap, concatenation is
+    safe because every reader downstream picks per period by `filed` date:
+    the successor's restatement of a period wins over the predecessor's
+    original for the same reason a 10-K's comparative column wins over last
+    year's original.
+
+    Points are tagged with the CIK they came from where the caller supplied
+    one, so a figure can still be traced to the registrant that filed it.
+    """
+    merged: dict = {"facts": {}}
+    for part in parts:
+        if not part:
+            continue
+        cik = part.get("cik")
+        for taxonomy, tags in (part.get("facts") or {}).items():
+            into_taxonomy = merged["facts"].setdefault(taxonomy, {})
+            for tag, entry in (tags or {}).items():
+                into_tag = into_taxonomy.setdefault(
+                    tag, {"label": entry.get("label"),
+                          "description": entry.get("description"),
+                          "units": {}})
+                for unit, points in (entry.get("units") or {}).items():
+                    into_tag["units"].setdefault(unit, []).extend(
+                        {**point, "cik": cik} if cik is not None else point
+                        for point in points or ())
+    return merged
+
+
+def facts_for(ticker: str) -> tuple[dict | None, tuple[tuple[str, str], ...]]:
+    """Every fact the SEC holds for *ticker*, and the CIKs it came from.
+
+    One request for the ordinary case, and for a ticker whose history is
+    split across registrants, one per CIK with the results merged.
+    """
+    found = ciks_for(ticker)
+    if not found:
+        return None, ()
+    parts = [facts for facts in (company_facts(cik) for cik, _name in found)
+             if facts is not None]
+    if not parts:
+        return None, found
+    if len(parts) == 1:
+        return parts[0], found
+    return merge_facts(parts), found
+
+
 # ---------------------------------------------------------------------------
 # Tag chains
 # ---------------------------------------------------------------------------
@@ -324,6 +398,13 @@ INCOME_TAGS: dict[str, tuple[str, ...]] = {
         "WeightedAverageNumberOfDilutedSharesOutstanding",
         "WeightedAverageNumberOfSharesOutstandingBasicAndDiluted",
         "WeightedAverageNumberOfDilutedSharesOutstandingIfrs",  # ifrs-full
+        # Last, and only because some filers tag no diluted count at all.
+        # Exxon has tagged basic alone since 2014; for a company with no
+        # convertibles and a small option programme the two differ by about
+        # a tenth of a per cent, which is a far smaller error than having
+        # no share count. Ahead of the diluted tags it would understate
+        # dilution for every company that reports both, so it comes last.
+        "WeightedAverageNumberOfSharesOutstandingBasic",
     ),
     "weightedAverageShsOut": (
         "WeightedAverageNumberOfSharesOutstandingBasic",
@@ -628,18 +709,18 @@ def edgar_financials(ticker: str, years: int = 5, *,
     is the honest shape of this stage: the statements are replaceable today
     and the profile is not.
     """
-    found = cik_for(ticker)
-    if found is None:
+    facts, found = facts_for(ticker)
+    if not found:
         raise LookupError(
             f"'{ticker}' is not in the SEC's ticker list. Foreign issuers "
             "without a US listing, and symbols the aggregator spells "
             "differently, both land here.")
-    cik, registrant = found
-
-    facts = company_facts(cik)
+    cik, registrant = found[0]
     if facts is None:
-        raise LookupError(f"The SEC returned no facts for CIK {cik} "
-                          f"('{ticker}').")
+        raise LookupError(
+            "The SEC returned no facts for "
+            + " or ".join(f"CIK {c}" for c, _n in found)
+            + f" ('{ticker}').")
 
     income_series = {k: _series(facts, v) for k, v in INCOME_TAGS.items()}
     balance_series = {k: _series(facts, v) for k, v in BALANCE_TAGS.items()}
@@ -894,7 +975,8 @@ def _latest_instant(facts: dict, chain: tuple[str, ...]
     return None
 
 
-def _ttm_weighted_average(facts: dict, chain: tuple[str, ...]
+def _ttm_weighted_average(facts: dict, chain: tuple[str, ...], *,
+                          fy_end: str | None = None
                           ) -> tuple[float, str] | None:
     """Trailing-twelve-month weighted-average share count, and its date.
 
@@ -907,12 +989,24 @@ def _ttm_weighted_average(facts: dict, chain: tuple[str, ...]
     average A covers four quarters and the year-to-date average C covers c
     of them, the trailing year holds 4A + cC - cP share-quarters, so its own
     average is A + c(C - P)/4.
+
+    *fy_end* is the fiscal year the rest of the trailing base is built from,
+    and the count is refused unless the share chain answers for that same
+    year. Without that check the newest figure in the chain stands in
+    whatever its date: Exxon stopped tagging a diluted count in 2013, and a
+    4,419m average from 2013 was reported beside revenue to September 2026
+    with nothing to say the two were thirteen years apart.
     """
     annual = _series(facts, chain)
     if not annual:
         return None
-    fy_end = max(annual)
-    a = _money(annual[fy_end])
+    if fy_end is not None:
+        if fy_end not in annual:
+            return None
+        a = _money(annual[fy_end])
+    else:
+        fy_end = max(annual)
+        a = _money(annual[fy_end])
     if a is None:
         return None
 
@@ -1007,10 +1101,17 @@ def edgar_ttm_base(facts: dict, currency: str | None):
             continue
         values[name], as_of[name] = found
 
-    shares = _ttm_weighted_average(facts,
-                                   INCOME_TAGS["weightedAverageShsOutDil"])
+    # Tied to the revenue's own fiscal year, so a company that stopped
+    # tagging a diluted count cannot contribute a decade-old average.
+    revenue_years = _series(facts, INCOME_TAGS["revenue"])
+    shares = _ttm_weighted_average(
+        facts, INCOME_TAGS["weightedAverageShsOutDil"],
+        fy_end=max(revenue_years) if revenue_years else None)
     if shares is not None:
         values["shares_diluted"], as_of["shares_diluted"] = shares
+    else:
+        notes.append("shares_diluted: no weighted-average count tagged for "
+                     "the fiscal year the trailing figures are built from")
 
     period_end = max(
         (as_of[k] for k in ("current_debt", "long_term_debt",
