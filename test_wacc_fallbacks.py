@@ -76,17 +76,21 @@ def test_wacc_components_recorded():
 
 # --- Beta guards -----------------------------------------------------------
 
-def test_absurd_beta_falls_back_to_market_beta():
+def test_absurd_beta_falls_back_to_the_industry():
     d = derive_assumptions(make_fin(beta=90.0))
-    assert d.wacc_inputs["beta"].value == DEFAULT_BETA
-    assert d.wacc_inputs["beta"].source == "default"
-    assert "outside plausible range" in d.wacc_inputs["beta"].detail
+    prov = d.wacc_inputs["beta"]
+    assert prov.source == "derived (industry)"
+    assert "outside plausible range" in prov.detail
+    # A test ticker has no SIC code, so the whole market stands in - and
+    # the detail has to say that rather than name an industry it guessed.
+    assert "whole-market beta" in prov.detail
 
 
-def test_missing_beta_falls_back_to_market_beta():
+def test_missing_beta_falls_back_to_the_industry():
     d = derive_assumptions(make_fin(beta=0.0))
-    assert d.wacc_inputs["beta"].value == DEFAULT_BETA
-    assert "not reported" in d.wacc_inputs["beta"].detail
+    prov = d.wacc_inputs["beta"]
+    assert prov.source == "derived (industry)"
+    assert prov.value != DEFAULT_BETA
 
 
 # --- Cost-of-debt guards ---------------------------------------------------

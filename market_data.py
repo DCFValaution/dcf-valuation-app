@@ -59,6 +59,7 @@ Yahoo needs no credentials, so the FMP_API_KEY dependency is gone entirely.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import threading
 import time
@@ -1588,12 +1589,34 @@ def _market_returns() -> dict[int, float]:
     return returns
 
 
-def fetch_beta(ticker: str) -> tuple[float, str] | None:
-    """
-    Beta of *ticker* against the S&P 500, or None if it cannot be computed.
+@dataclass(frozen=True)
+class BetaRegression:
+    """A beta, and how much the regression that produced it is worth.
 
-    Returns (beta, source_description). Cached, and the market series is
-    cached separately so a batch of valuations costs one index fetch.
+    The beta alone says nothing about whether it was measured. Lockheed's
+    0.07 and Apple's 1.08 are both slopes of the same regression, but
+    Apple's monthly returns track the index (r-squared 0.47) and Lockheed's
+    do not (0.001) - so Lockheed's slope is a number the data cannot
+    distinguish from zero, or from 0.5, and Apple's is not.
+
+    `std_error` is the standard error of the slope and `t_statistic` the
+    slope over it. A |t| below about 2 means the regression has not
+    established that this company moves with the market at all.
+    """
+
+    beta: float
+    std_error: float
+    t_statistic: float
+    r_squared: float
+    months: int
+    source: str
+
+
+def fetch_beta_regression(ticker: str) -> BetaRegression | None:
+    """Regress *ticker*'s monthly returns on the index, or None.
+
+    Cached, and the market series is cached separately so a batch of
+    valuations costs one index fetch.
     """
     cached = _beta_cache.get(ticker)
     if cached is not None:
@@ -1608,29 +1631,55 @@ def fetch_beta(ticker: str) -> tuple[float, str] | None:
     # Only months both series cover, so a mismatched calendar cannot pair a
     # company's return with the wrong month of the index.
     months = sorted(set(stock) & set(market))
-    if len(months) < _MIN_BETA_MONTHS:
+    n = len(months)
+    if n < _MIN_BETA_MONTHS:
         return None
 
     xs = [market[m] for m in months]
     ys = [stock[m] for m in months]
-    n = len(months)
     mean_x = sum(xs) / n
     mean_y = sum(ys) / n
 
-    variance = sum((x - mean_x) ** 2 for x in xs) / (n - 1)
-    if variance <= 0:
+    sxx = sum((x - mean_x) ** 2 for x in xs)
+    syy = sum((y - mean_y) ** 2 for y in ys)
+    sxy = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    if sxx <= 0:
         return None
-    covariance = sum((x - mean_x) * (y - mean_y)
-                     for x, y in zip(xs, ys)) / (n - 1)
 
-    beta = covariance / variance
+    beta = sxy / sxx
     if beta != beta:  # NaN
         return None
 
-    result = (beta, f"computed from {n} monthly returns vs {MARKET_INDEX} "
-                    f"(5y), the convention market data providers use")
+    # Residual sum of squares the short way: SYY - beta x SXY. The slope's
+    # standard error is sqrt(RSS / (n - 2) / SXX), the textbook ordinary
+    # least squares figure, with n - 2 because the line costs two
+    # parameters.
+    residual = syy - beta * sxy
+    if residual < 0:          # floating-point noise on a perfect fit
+        residual = 0.0
+    std_error = math.sqrt(residual / (n - 2) / sxx) if n > 2 else 0.0
+    t_statistic = beta / std_error if std_error > 0 else float("inf")
+    r_squared = (sxy * sxy / (sxx * syy)) if syy > 0 else 0.0
+
+    result = BetaRegression(
+        beta=beta, std_error=std_error, t_statistic=t_statistic,
+        r_squared=r_squared, months=n,
+        source=f"computed from {n} monthly returns vs {MARKET_INDEX} "
+               f"(5y), the convention market data providers use")
     _beta_cache.put(ticker, result)
     return result
+
+
+def fetch_beta(ticker: str) -> tuple[float, str] | None:
+    """
+    Beta of *ticker* against the S&P 500, or None if it cannot be computed.
+
+    Returns (beta, source_description). The slope alone, for callers that
+    want nothing else; `fetch_beta_regression` carries how well it was
+    measured, which is what decides whether it should be used at all.
+    """
+    found = fetch_beta_regression(ticker)
+    return None if found is None else (found.beta, found.source)
 
 
 # ---------------------------------------------------------------------------
@@ -2000,9 +2049,17 @@ def _with_computed_beta(profile: dict, ticker: str) -> None:
     determinism at no real cost in accuracy. A quoted beta is still used if
     the computation fails, and only then does the default apply.
     """
-    computed = fetch_beta(ticker)
+    computed = fetch_beta_regression(ticker)
     if computed is not None:
-        profile["beta"], profile["betaSource"] = computed
+        profile["beta"] = computed.beta
+        profile["betaSource"] = computed.source
+        # How well it was measured travels with it. Without these the
+        # derivation can only judge a beta by its size, which is how a
+        # regression indistinguishable from zero came to be used as one.
+        profile["betaStdError"] = computed.std_error
+        profile["betaTStatistic"] = computed.t_statistic
+        profile["betaRSquared"] = computed.r_squared
+        profile["betaMonths"] = computed.months
         return
 
     quoted = profile.get("beta")

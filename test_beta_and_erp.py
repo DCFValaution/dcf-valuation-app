@@ -38,7 +38,13 @@ from assumptions import (DAMODARAN_ERP_AS_OF, DAMODARAN_IMPLIED_ERP,
 from market_data import CompanyFinancials
 
 
-def make_fin(beta=1.0) -> CompanyFinancials:
+def make_fin(beta=1.0, t_statistic=6.0, std_error=None) -> CompanyFinancials:
+    """A company whose beta was measured well, unless a test says otherwise.
+
+    The t-statistic defaults to a comfortable 6.0 because most of these
+    tests are about what happens to a beta that IS usable; the gate that
+    decides whether it is has its own tests.
+    """
     income, balance, cashflow = [], [], []
     for i in range(3):
         revenue = 10_000e6 * (1.05 ** (2 - i))
@@ -64,7 +70,12 @@ def make_fin(beta=1.0) -> CompanyFinancials:
         })
     return CompanyFinancials(
         ticker="TEST",
-        profile={"companyName": "Test Co", "beta": beta, "marketCap": 1_000_000e6,
+        profile={"companyName": "Test Co", "beta": beta,
+                 "betaTStatistic": t_statistic,
+                 "betaStdError": (std_error if std_error is not None
+                                  else (abs(beta / t_statistic)
+                                        if t_statistic else 0.0)),
+                 "marketCap": 1_000_000e6,
                  "price": 100.0, "sector": "Technology", "exchange": "NASDAQ"},
         income=income, balance=balance, cashflow=cashflow,
     )
@@ -118,10 +129,18 @@ class TestTheBlumeAdjustment:
         d = derive_assumptions(make_fin(beta=2.0), overrides={"beta": 1.5})
         assert d.wacc_inputs["beta"].value == 1.5
 
-    def test_an_unusable_beta_still_falls_back_to_the_market(self):
+    def test_an_unusable_beta_is_replaced_by_its_industry(self):
+        """99 is not a beta a company can have, however precisely measured.
+
+        It used to fall back to a flat 1.0. It now falls back to the
+        company's own industry, relevered on the company's own borrowing,
+        which is a reasoned estimate rather than a placeholder.
+        """
         d = derive_assumptions(make_fin(beta=99.0))
-        assert d.wacc_inputs["beta"].value == pytest.approx(A.DEFAULT_BETA)
-        assert d.wacc_inputs["beta"].source == "default"
+        prov = d.wacc_inputs["beta"]
+        assert prov.source == "derived (industry)"
+        assert prov.value != pytest.approx(A.DEFAULT_BETA)
+        assert "outside plausible range" in prov.detail
 
 
 # --- The premium ------------------------------------------------------

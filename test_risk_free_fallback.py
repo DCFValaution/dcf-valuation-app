@@ -497,12 +497,20 @@ def test_the_beta_message_does_not_blame_the_provider_for_our_own_figure():
 
     fin = CompanyFinancials(
         ticker="LMT",
-        profile={"beta": 0.0698,
+        profile={"beta": 0.0698, "betaStdError": 0.2558,
+                 "betaTStatistic": 0.273,
+                 "companyName": "Lockheed Martin Corporation",
                  "betaSource": "computed from 59 monthly returns vs ^GSPC"},
         income=[{}], balance=[{}], cashflow=[{}])
     Asm._capm_inputs(fin, record)
 
     _, source, detail = recorded["beta"]
-    assert source == "default"
-    assert "measured 0.0698" in detail
+    assert source == "derived (industry)"
+    assert "measured 0.07" in detail
     assert "reported" not in detail
+    # And the reason is the imprecision, not the size. 0.0698 is also below
+    # SANE_BETA's floor, and saying "outside plausible range" would blame
+    # the figure for being small when the fault is that it was never
+    # measured: a standard error of 0.26 on a slope of 0.07.
+    assert "too imprecise to use" in detail
+    assert "outside plausible range" not in detail

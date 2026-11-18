@@ -53,6 +53,8 @@ from datetime import date
 from statistics import median
 
 from dcf import FADE_EXPONENTIAL, FADE_LINEAR, Assumptions
+from industry_betas import (MAX_DEBT_TO_EQUITY, as_of_text, industry_for,
+                            relevered_beta)
 from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
                          reported, total_debt_of)
 
@@ -319,7 +321,51 @@ def fallback_risk_free_detail(today: date | None = None) -> str:
                  "reliable stand-in for the curve")
     return text
 
-DEFAULT_BETA = 1.0          # market beta, when the company's own is unusable
+DEFAULT_BETA = 1.0          # market beta; the last resort, see below
+
+# A regression's slope is only evidence if the regression measured
+# something. Below a t-statistic of about two - the slope over its own
+# standard error - the data has not established that the company moves with
+# the market at all, and the slope is as consistent with zero as with the
+# figure it happens to be.
+#
+# That matters here because SANE_BETA screens betas by SIZE, and a
+# meaningless beta can be any size: Lockheed's 0.087 and Merck's 0.115 come
+# out of regressions with t-statistics of 0.34 and 0.59, and both used to
+# pass every check this model had.
+#
+# A single threshold would make the decision a cliff, and the companies
+# nearest it are exactly the ones whose side of it is arbitrary - Chevron
+# measured 2.00, Procter & Gamble 2.05, Duke 2.19, so a few weeks of prices
+# would move them from their own beta to their industry's in one jump. So
+# the weight on the company's own figure ramps instead:
+#
+#     w = clamp((|t| - 1.5) / (2.5 - 1.5), 0, 1)
+#     beta = w x own + (1 - w) x industry
+#
+# At |t| <= 1.5 the regression carries no weight; at |t| >= 2.5 it carries
+# all of it; between, the two are blended in proportion to how well the
+# company's own beta was measured. The midpoint is the conventional 5%
+# threshold, so the rule still agrees with convention where convention is
+# confident and hedges where it is not.
+BETA_RAMP_LOW_T = 1.5
+BETA_RAMP_HIGH_T = 2.5
+
+
+def measured_weight(t_statistic: float | None) -> float:
+    """How much of a company's own beta its regression has earned, 0 to 1.
+
+    None - a beta quoted with no error estimate - earns nothing. There is
+    no way to tell a measurement from noise without one, and treating the
+    unknown as precise is the assumption that put a 0.115 beta into
+    Merck's discount rate.
+    """
+    if not isinstance(t_statistic, (int, float)) \
+            or t_statistic != t_statistic:          # None or NaN
+        return 0.0
+    span = BETA_RAMP_HIGH_T - BETA_RAMP_LOW_T
+    weight = (abs(t_statistic) - BETA_RAMP_LOW_T) / span
+    return min(1.0, max(0.0, weight))
 
 # Blume's adjustment: betas revert toward the market over time, so a beta
 # measured on five years of history overstates how far from 1.0 the company
@@ -387,7 +433,9 @@ class Provenance:
     """How one assumption got its value."""
     name: str
     value: float
-    source: str      # "derived" | "derived (clamped)" | "default" | "override"
+    # "derived" | "derived (clamped)" | "derived (industry)" | "default"
+    # | "published" | "override"
+    source: str
     detail: str
 
     # For a clamped value, the facts behind it in structured form: the figure
@@ -510,6 +558,62 @@ def _cost_of_debt_history(fin: CompanyFinancials) -> list[tuple[str, float]]:
     return rates
 
 
+def capital_values(fin: CompanyFinancials) -> tuple[float, float]:
+    """(market value of equity, book value of debt) for *fin*.
+
+    Equity at market and debt at book, the asymmetry the WACC weights use.
+    Extracted so the WACC weights and the leverage an industry beta is
+    relevered on cannot be computed two different ways.
+    """
+    equity_value = num(fin.profile, "marketCap")
+    if equity_value <= 0:
+        price = num(fin.profile, "price")
+        shares = num(fin.income[0], "weightedAverageShsOutDil") \
+            if fin.income else 0.0
+        equity_value = price * shares
+    debt_value = total_debt_of(fin.balance[0]) if fin.balance else 0.0
+    return equity_value, debt_value
+
+
+def _market_debt_to_equity(fin: CompanyFinancials) -> float:
+    equity_value, debt_value = capital_values(fin)
+    return debt_value / equity_value if equity_value > 0 else 0.0
+
+
+def _industry_beta(fin: CompanyFinancials) -> tuple[float, str]:
+    """The industry beta for *fin*, relevered, and how it was arrived at.
+
+    Used where the company's own regression cannot be trusted. An industry
+    average is an average of betas and so is already pulled toward the
+    market; putting Blume's adjustment on top of it would shrink a figure
+    that has been shrunk, so it is not applied here.
+    """
+    industry, sic, mapped = industry_for(fin.ticker)
+    leverage = _market_debt_to_equity(fin)
+    beta = relevered_beta(industry, leverage)
+
+    if mapped:
+        where = (f"the {industry.name} industry beta "
+                 f"({industry.unlevered_beta:.2f} unlevered, across "
+                 f"{industry.firms:,} companies) relevered on "
+                 f"{fin.company_name}'s own capital structure")
+    else:
+        # No SIC code on file, or a code with no industry. Saying which is
+        # better than implying an industry was identified.
+        why = ("its SIC code is not one this model maps to an industry"
+               if sic else "the SEC has no SIC code on file for it")
+        where = (f"the whole-market beta ({industry.unlevered_beta:.2f} "
+                 f"unlevered, across {industry.firms:,} companies) "
+                 f"relevered on {fin.company_name}'s own capital "
+                 f"structure, because {why}")
+
+    detail = f"{where}; Damodaran industry data, {as_of_text()}"
+    if leverage > MAX_DEBT_TO_EQUITY:
+        detail += (f" - leverage of {leverage:.1f}x capped at "
+                   f"{MAX_DEBT_TO_EQUITY:.0f}x for the relevering")
+    return beta, detail
+
+
 def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, float]:
     """
     Risk-free rate, equity risk premium and beta, each recorded with provenance.
@@ -532,29 +636,87 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
                        "published", erp_detail())
 
     # --- Beta --------------------------------------------------------------
+    #
+    # Two gates, and they ask different questions. SANE_BETA asks whether
+    # the figure is a plausible size. The t-statistic asks whether it was
+    # measured at all, which the size cannot answer: a slope of 0.07 from a
+    # regression with a standard error of 0.26 is not a low beta, it is an
+    # absence of evidence wearing a number.
+    #
+    # Only a beta that passes both is the company's own. Everything else
+    # takes the industry's, relevered - which is a reasoned estimate from
+    # the company's actual industry and capital structure, and so a long way
+    # better than the flat 1.0 that used to stand here.
     raw_beta = num(fin.profile, "beta")
-    if SANE_BETA[0] <= raw_beta <= SANE_BETA[1]:
-        # Either quoted by Yahoo or computed from price history when the
-        # quote endpoint was unavailable; the profile records which, so the
-        # report can say rather than imply.
-        source = fin.profile.get("betaSource") or "quoted by the market data provider"
+    plausible = SANE_BETA[0] <= raw_beta <= SANE_BETA[1]
+    std_error = num(fin.profile, "betaStdError")
+    t_statistic = fin.profile.get("betaTStatistic")
+    # An implausible beta earns no weight whatever its t-statistic. The two
+    # gates ask different questions and both have to be passed: a precisely
+    # measured 99 is still not a beta a company can have.
+    weight = measured_weight(t_statistic) if plausible else 0.0
+
+    own = blume_adjusted(raw_beta)
+    # Either quoted by Yahoo or computed from price history when the quote
+    # endpoint was unavailable; the profile records which, so the report can
+    # say rather than imply.
+    source = fin.profile.get("betaSource") or "quoted by the market data provider"
+
+    if weight >= 1.0:
         # Both numbers, because the adjustment is a judgement and a reader
         # who disagrees with it should be able to see what it did.
         beta = record_input(
-            "beta", blume_adjusted(raw_beta), "derived",
+            "beta", own, "derived",
             f"Blume-adjusted from raw {raw_beta:.3g}; {source}")
+        return rf, erp, beta
+
+    industry, where = _industry_beta(fin)
+    value = weight * own + (1.0 - weight) * industry
+
+    # "measured", not "reported". The figure here is almost always one this
+    # model computed itself - a regression of the company's own five years
+    # of monthly returns against the S&P 500 - and calling it "reported"
+    # blamed the data provider for our own arithmetic.
+    if weight > 0.0:
+        # A blend, so both sides are named and the split is stated. The
+        # reader's question here is not "which figure" but "how much of
+        # each", and a provenance line that gave only the answer would
+        # leave the one number that explains it unsaid.
+        why = (f"blended {weight:.0%} measured, {1 - weight:.0%} industry "
+               f"because the measurement is only moderately precise: "
+               f"Blume-adjusted {own:.2f} from a raw {raw_beta:.2f} "
+               f"+/- {std_error:.2f}, against")
+        detail = f"{why} {where}"
     else:
-        # "measured", not "reported". The figure in this branch is almost
-        # always one this model computed itself - a regression of the
-        # company's own five years of monthly returns against the S&P 500 -
-        # and calling it "reported" blamed the data provider for our own
-        # arithmetic. The quoted figure is reached only when that regression
-        # could not run at all, and betaSource says so when it did.
-        reason = (fin.profile.get("betaSource")
-                  or "not reported by the quote endpoint") if raw_beta == 0 \
-            else f"measured {raw_beta:g}, outside plausible range"
-        beta = record_input("beta", DEFAULT_BETA, "default",
-                            f"beta {reason}; used market beta of 1.0")
+        # Imprecision is reported ahead of implausibility, because where
+        # both apply it is the honest reason. Lockheed's 0.087 is below
+        # SANE_BETA's floor, but calling it implausible suggests bad data;
+        # what is actually wrong is that a standard error of 0.26 makes it
+        # indistinguishable from zero. "Outside plausible range" is then
+        # left to mean what it says - a beta that WAS measured and is still
+        # not a number a company can have.
+        # `weight` is already zero for an implausible beta, so the
+        # regression's own precision has to be asked for separately here
+        # rather than read off it.
+        imprecise = measured_weight(t_statistic) <= 0.0
+        if raw_beta == 0 and not std_error:
+            why = (fin.profile.get("betaSource")
+                   or "could not be computed from price history")
+        elif std_error and imprecise:
+            why = (f"measured {raw_beta:.2f} +/- {std_error:.2f}, too "
+                   f"imprecise to use")
+        elif not plausible:
+            why = f"measured {raw_beta:g}, outside plausible range"
+        else:
+            why = f"measured {raw_beta:.2f}, with no estimate of its error"
+        detail = f"{why}, so {where}"
+
+    # "derived (industry)" rather than plain "derived", on the same pattern
+    # as "derived (clamped)": part of this figure comes from the company's
+    # industry rather than from its own share price, and a reader is
+    # entitled to know which. The suffix keeps `is_derived` true, so
+    # nothing downstream mistakes it for a figure picked for want of one.
+    beta = record_input("beta", value, "derived (industry)", detail)
 
     return rf, erp, beta
 
@@ -606,13 +768,7 @@ def _derive_wacc(fin: CompanyFinancials, tax_rate: float,
     after_tax_cost_of_debt = cost_of_debt * (1 - tax_rate)
 
     # --- Capital structure weights -----------------------------------------
-    equity_value = num(fin.profile, "marketCap")
-    if equity_value <= 0:
-        price = num(fin.profile, "price")
-        shares = num(fin.income[0], "weightedAverageShsOutDil")
-        equity_value = price * shares
-
-    debt_value = total_debt_of(fin.balance[0]) if fin.balance else 0.0
+    equity_value, debt_value = capital_values(fin)
     capital = equity_value + debt_value
 
     components.update({

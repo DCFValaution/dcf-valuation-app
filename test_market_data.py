@@ -62,7 +62,19 @@ AAPL_INFO = {
 # Captured before the autouse fixture stubs the module attribute, so the
 # probe's own behaviour can still be tested directly.
 REAL_PROBE_SYMBOL = M.probe_symbol
-REAL_FETCH_BETA = M.fetch_beta
+REAL_FETCH_BETA_REGRESSION = M.fetch_beta_regression
+
+
+def REAL_FETCH_BETA(ticker):
+    """fetch_beta's body, but reaching the regression the fixture stubbed.
+
+    fetch_beta looks its regression up on the module, so the captured
+    original would still find the stub. Only the call has to be rebound,
+    not the arithmetic - and keeping it one line means these tests still
+    exercise the real regression rather than a copy of it.
+    """
+    found = REAL_FETCH_BETA_REGRESSION(ticker)
+    return None if found is None else (found.beta, found.source)
 
 
 def frame(rows: dict) -> pd.DataFrame:
@@ -141,6 +153,10 @@ def _offline(monkeypatch):
     # quote one. Stubbed off by default so no unit test reaches the network;
     # the beta tests below call the real implementation deliberately.
     monkeypatch.setattr(M, "fetch_beta", lambda ticker: None)
+    # And the regression behind it, which is what the profile builder now
+    # calls. Stubbing only the wrapper left the real one reachable, which
+    # is exactly the hole this fixture exists to close.
+    monkeypatch.setattr(M, "fetch_beta_regression", lambda ticker: None)
 
 
 @pytest.fixture
@@ -1116,13 +1132,22 @@ def test_beta_returns_none_when_the_chart_is_refused(monkeypatch):
 def test_computed_beta_reaches_the_profile_and_says_so(monkeypatch):
     """The valuation must be able to report which path produced its beta."""
     profile = {"beta": None}
-    monkeypatch.setattr(M, "fetch_beta",
-                        lambda ticker: (1.23, "computed from 59 monthly returns"))
+    monkeypatch.setattr(M, "fetch_beta_regression",
+                        lambda ticker: M.BetaRegression(
+                            beta=1.23, std_error=0.18, t_statistic=6.8,
+                            r_squared=0.45, months=59,
+                            source="computed from 59 monthly returns"))
 
     M._with_computed_beta(profile, "AAPL")
 
     assert profile["beta"] == pytest.approx(1.23)
     assert "computed" in profile["betaSource"]
+    # How well it was measured travels with it, or the derivation can only
+    # judge the beta by its size.
+    assert profile["betaStdError"] == pytest.approx(0.18)
+    assert profile["betaTStatistic"] == pytest.approx(6.8)
+    assert profile["betaRSquared"] == pytest.approx(0.45)
+    assert profile["betaMonths"] == 59
 
 
 def test_the_computed_beta_wins_over_a_quoted_one(monkeypatch):
@@ -1134,8 +1159,11 @@ def test_the_computed_beta_wins_over_a_quoted_one(monkeypatch):
     like serving - the very instability being removed. AAPL returned 1.085
     quoted and 1.088 computed on the same afternoon.
     """
-    monkeypatch.setattr(M, "fetch_beta",
-                        lambda ticker: (1.088, "computed from 59 monthly returns"))
+    monkeypatch.setattr(M, "fetch_beta_regression",
+                        lambda ticker: M.BetaRegression(
+                            beta=1.088, std_error=0.15, t_statistic=7.2,
+                            r_squared=0.47, months=59,
+                            source="computed from 59 monthly returns"))
     profile = {"beta": 1.085}
 
     M._with_computed_beta(profile, "AAPL")
@@ -1146,7 +1174,7 @@ def test_the_computed_beta_wins_over_a_quoted_one(monkeypatch):
 
 def test_a_quoted_beta_is_used_when_the_computation_fails(monkeypatch):
     """Yahoo's number still beats falling back to a market beta of 1.0."""
-    monkeypatch.setattr(M, "fetch_beta", lambda ticker: None)
+    monkeypatch.setattr(M, "fetch_beta_regression", lambda ticker: None)
     profile = {"beta": 1.085}
 
     M._with_computed_beta(profile, "AAPL")
@@ -1158,7 +1186,7 @@ def test_a_quoted_beta_is_used_when_the_computation_fails(monkeypatch):
 def test_beta_falls_back_to_the_default_when_uncomputable(monkeypatch):
     """With no beta at all, WACC still has to produce a number."""
     profile = {"beta": None}
-    monkeypatch.setattr(M, "fetch_beta", lambda ticker: None)
+    monkeypatch.setattr(M, "fetch_beta_regression", lambda ticker: None)
 
     M._with_computed_beta(profile, "AAPL")
 
@@ -1255,3 +1283,107 @@ def test_unknown_tenor_returns_none():
 def test_no_api_key_required():
     assert M.requires_api_key() is False
     assert "Yahoo" in M.data_source_name()
+
+
+# ---------------------------------------------------------------------------
+# The regression's own arithmetic
+# ---------------------------------------------------------------------------
+#
+# The significance gate rests entirely on two numbers this function
+# produces, and nothing used to check either of them. A standard error
+# divided by n instead of n - 2 is 3% small, which moves a t-statistic
+# across the threshold for a company sitting near it, and no other test in
+# this suite would have noticed.
+#
+# The expectations below were computed once, outside this file, with numpy's
+# least-squares solver and the textbook variance of the slope - a different
+# path from the "SYY - beta x SXY" shortcut the code takes. They are
+# literals rather than a second implementation on purpose: a test that
+# recomputes the formula agrees with any version of it, including a wrong
+# one.
+
+_REG_MARKET = [
+    -0.105874, -0.012589, 0.012808, 0.036970, 0.002514, 0.014209,
+    0.004143, -0.024979, 0.051505, -0.086208, -0.011037, -0.020979,
+    0.009629, -0.039730, -0.035267, 0.046560, -0.064317, -0.033947,
+    0.034716, 0.050831, 0.073314, -0.077273, -0.030737, -0.068076,
+    0.057861, 0.035834, 0.048729, 0.005413, -0.052794, 0.143635,
+]
+_REG_STOCK = [
+    -0.123920, -0.128917, 0.041827, 0.109005, -0.007907, -0.003497,
+    -0.069051, -0.011363, 0.027333, -0.098237, -0.102334, -0.003524,
+    0.083898, -0.069855, -0.003412, 0.067941, -0.168433, 0.002437,
+    0.010667, 0.032929, 0.132084, -0.062587, -0.050516, -0.061904,
+    0.085508, -0.055900, 0.110657, 0.034795, 0.002382, 0.186893,
+]
+
+
+@pytest.fixture
+def pinned_regression(monkeypatch):
+    """Both series fed in as returns, keyed by the same months."""
+    months = {i: value for i, value in enumerate(_REG_MARKET)}
+    stock = {i: value for i, value in enumerate(_REG_STOCK)}
+    monkeypatch.setattr(M, "_market_returns", lambda: months)
+    monkeypatch.setattr(M, "_returns", lambda closes: stock)
+    monkeypatch.setattr(M, "_monthly_closes", lambda ticker: [(0, 1.0)])
+    M._beta_cache.clear()
+    yield
+    M._beta_cache.clear()
+
+
+class TestTheRegressionArithmetic:
+    def _got(self):
+        M._beta_cache._store.clear() if hasattr(M._beta_cache, "_store") \
+            else None
+        return REAL_FETCH_BETA_REGRESSION("PINNED")
+
+    def test_the_slope_is_the_least_squares_slope(self, pinned_regression):
+        assert self._got().beta == pytest.approx(1.2270976616, abs=1e-9)
+
+    def test_the_standard_error_divides_by_n_minus_two(self, pinned_regression):
+        """Two parameters were spent fitting the line, so thirty
+        observations buy twenty-eight degrees of freedom. Dividing by n
+        instead gives 0.17007, which is 3.4% small - enough to carry a
+        company across the significance threshold on its own."""
+        got = self._got()
+        assert got.std_error == pytest.approx(0.1760401762, abs=1e-9)
+        assert got.std_error != pytest.approx(0.1700709677, abs=1e-6)
+
+    def test_the_t_statistic_is_the_slope_over_its_own_error(
+            self, pinned_regression):
+        """Not the slope. A beta of 1.23 and a t of 6.97 are different
+        numbers, and the gate compares the second against 2."""
+        got = self._got()
+        assert got.t_statistic == pytest.approx(6.9705546108, abs=1e-7)
+        assert got.t_statistic == pytest.approx(got.beta / got.std_error)
+        assert got.t_statistic != pytest.approx(got.beta, abs=1e-3)
+
+    def test_the_r_squared_is_the_share_of_variance_explained(
+            self, pinned_regression):
+        assert self._got().r_squared == pytest.approx(0.6344104938, abs=1e-9)
+
+    def test_the_month_count_travels_with_it(self, pinned_regression):
+        assert self._got().months == 30
+
+    def test_a_perfect_fit_has_no_error_and_an_infinite_t(self, monkeypatch):
+        """Synthetic, but it is the branch that guards against dividing by
+        a zero standard error, and a company whose returns are a multiple
+        of the index would reach it."""
+        market = {i: 0.01 * (i % 7 - 3) for i in range(30)}
+        monkeypatch.setattr(M, "_market_returns", lambda: market)
+        monkeypatch.setattr(M, "_returns",
+                            lambda closes: {i: 2.0 * v
+                                            for i, v in market.items()})
+        monkeypatch.setattr(M, "_monthly_closes", lambda ticker: [(0, 1.0)])
+        got = REAL_FETCH_BETA_REGRESSION("PERFECT")
+        assert got.beta == pytest.approx(2.0)
+        assert got.std_error == pytest.approx(0.0)
+        assert got.t_statistic == float("inf")
+        assert got.r_squared == pytest.approx(1.0)
+
+    def test_fetch_beta_still_answers_with_just_the_slope(self,
+                                                         pinned_regression):
+        """The thin wrapper the rest of the code uses."""
+        beta, source = REAL_FETCH_BETA("PINNED")
+        assert beta == pytest.approx(1.2270976616, abs=1e-9)
+        assert "monthly returns" in source

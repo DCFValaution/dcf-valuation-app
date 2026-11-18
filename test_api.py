@@ -175,7 +175,8 @@ def test_projection_and_valuation_blocks_present(client):
     # and a defaulted 1.0 are three different claims, and the response has to
     # say which it is making.
     beta = next(a for a in body["wacc_inputs"] if a["name"] == "beta")
-    assert beta["source"] in {"derived", "default", "override"}
+    assert beta["source"] in {"derived", "derived (industry)", "default",
+                              "override"}
     assert beta["detail"]
 
 

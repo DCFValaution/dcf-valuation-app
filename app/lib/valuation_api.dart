@@ -105,9 +105,10 @@ class DividendBasis {
 /// One assumption behind a valuation, with where its value came from.
 ///
 /// [source] is the backend's own label - "derived", "derived (clamped)",
-/// "default" or "override". It matters as much as the number: a figure read
-/// off the company's filings and a global placeholder deserve different
-/// weight, and the backend is careful to distinguish them.
+/// "derived (industry)", "default", "published" or "override". It matters as
+/// much as the number: a figure read off the company's filings, one estimated
+/// from its industry, and a global placeholder deserve different weight, and
+/// the backend is careful to distinguish them.
 /// How loudly a caveat should be said, decided by the backend.
 ///
 /// The app used to infer this from where it rendered: whatever landed in

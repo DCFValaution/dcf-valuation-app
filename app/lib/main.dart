@@ -1924,6 +1924,7 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
     'wacc_default' => 'Generic discount rate',
     'cost_of_equity_default' => 'Generic discount rate',
     'beta_default' => 'Market average stands in',
+    'beta_industry' => 'Beta from the industry',
     // Two published figures that expire. Both already carried a date; the
     // date reached nobody until these.
     'erp_stale' => 'Risk premium out of date',

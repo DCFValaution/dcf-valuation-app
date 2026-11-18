@@ -32,7 +32,10 @@ from assumptions import (LONG_RUN_GROWTH_AS_OF, LONG_RUN_NOMINAL_GROWTH,
 from market_data import CompanyFinancials
 
 
-def make_fin(beta=1.0) -> CompanyFinancials:
+def make_fin(beta=1.0, t_statistic=6.0) -> CompanyFinancials:
+    """These tests are about the terminal-growth ceiling, so the beta is
+    measured well: a noisy one would be replaced by the industry's and the
+    low-beta cases below would never happen."""
     income, balance, cashflow = [], [], []
     for i in range(3):
         revenue = 10_000e6 * (1.05 ** (2 - i))
@@ -59,7 +62,11 @@ def make_fin(beta=1.0) -> CompanyFinancials:
         })
     return CompanyFinancials(
         ticker="TEST",
-        profile={"companyName": "Test Co", "beta": beta, "marketCap": 1_000_000e6,
+        profile={"companyName": "Test Co", "beta": beta,
+                 "betaTStatistic": t_statistic,
+                 "betaStdError": (abs(beta / t_statistic)
+                                  if t_statistic else 0.0),
+                 "marketCap": 1_000_000e6,
                  "price": 100.0, "sector": "Technology", "exchange": "NASDAQ"},
         income=income, balance=balance, cashflow=cashflow,
     )

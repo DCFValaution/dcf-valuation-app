@@ -37,12 +37,21 @@ def quarterly(per_quarter: dict[int, float], through: date = TODAY) -> list[tupl
 
 
 def bank(*, net_income=1_000e6, equity=10_000e6, dividends_paid=-300e6,
-         buybacks=-100e6, beta=1.0, years=4) -> CompanyFinancials:
-    """ROE 10% and a 30% payout by default: 7% sustainable growth."""
+         buybacks=-100e6, beta=1.0, years=4, t_statistic=6.0
+         ) -> CompanyFinancials:
+    """ROE 10% and a 30% payout by default: 7% sustainable growth.
+
+    The beta is measured well unless a test says otherwise, so these tests
+    exercise the cost of equity rather than the gate that decides whether
+    the company's own beta may be used.
+    """
     return CompanyFinancials(
         ticker="BANK",
         profile={"companyName": "Test Bank Corp.", "sector": "Financial Services",
-                 "beta": beta, "price": 50.0},
+                 "beta": beta, "price": 50.0,
+                 "betaTStatistic": t_statistic,
+                 "betaStdError": (abs(beta / t_statistic)
+                                  if t_statistic else 0.0)},
         income=[{"fiscalYear": str(2025 - i), "netIncomeCommon": net_income}
                 for i in range(years)],
         balance=[{"fiscalYear": str(2025 - i), "commonStockEquity": equity}
