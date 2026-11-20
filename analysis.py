@@ -471,7 +471,7 @@ def input_source_warnings(derived, *, dcf: bool) -> list["Warning"]:
     # Two warnings, because there are now two ways the company's own beta
     # can fail to be usable and they do not deserve the same weight.
     #
-    # An industry beta - whole or blended with the company's own - is INFO. It is a reasoned estimate - this company's
+    # An industry beta is INFO. It is a reasoned estimate - this company's
     # actual industry, relevered on this company's actual balance sheet -
     # and the reader should know it was used without being told the
     # valuation is unsound, because it is not.
@@ -484,36 +484,17 @@ def input_source_warnings(derived, *, dcf: bool) -> list["Warning"]:
     # Its tests record the provenance directly for the same reason.
     beta_prov = store.get("beta")
     if beta_prov is not None and beta_prov.source == "derived (industry)":
-        # A partly-measured beta and an unmeasured one get the same tier
-        # and different words. Telling a reader their company's own figure
-        # "could not be measured" when more than half of the beta came from
-        # it would be false, and saying nothing at all would hide the half
-        # that did not.
-        blended = beta_prov.detail.startswith("blended")
-        if blended:
-            body = (f"This company's own share-price sensitivity to the "
-                    f"market was measured only roughly, so the beta of "
-                    f"{beta_prov.value:.2f} behind the discount rate is "
-                    f"part its own figure and part its industry's.")
-            headline = (f"How much this share moves with the market was "
-                        f"measured only roughly, so the beta of "
-                        f"{beta_prov.value:.2f} is part its own and part "
-                        "its industry's. That feeds the discount rate.")
-        else:
-            body = (f"This company's own share-price sensitivity to the "
-                    f"market could not be measured reliably, so a beta of "
-                    f"{beta_prov.value:.2f} was estimated from its industry "
-                    f"and its own borrowing instead. The discount rate "
-                    f"rests on it.")
-            headline = ("How much this share moves with the market could "
-                        "not be measured reliably, so a beta of "
-                        f"{beta_prov.value:.2f} comes from its industry "
-                        "instead. That feeds the discount rate.")
         out.append(Warning(
-            body, severity=SEVERITY_INFO, kind="beta_industry",
-            detail={"beta": beta_prov.value, "why": beta_prov.detail,
-                    "blended": blended},
-            headline=headline))
+            f"This company's own share-price sensitivity to the market "
+            f"could not be measured, so a beta of {beta_prov.value:.2f} was "
+            f"estimated from its industry and its own borrowing instead. "
+            f"The discount rate rests on it.",
+            severity=SEVERITY_INFO, kind="beta_industry",
+            detail={"beta": beta_prov.value, "why": beta_prov.detail},
+            headline=("How much this share moves with the market could not "
+                      f"be measured, so a beta of {beta_prov.value:.2f} "
+                      "comes from its industry instead. That feeds the "
+                      "discount rate.")))
 
     beta_prov = defaulted("beta")
     if beta_prov is not None:

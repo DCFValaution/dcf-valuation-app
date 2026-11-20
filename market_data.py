@@ -1602,6 +1602,15 @@ class BetaRegression:
     `std_error` is the standard error of the slope and `t_statistic` the
     slope over it. A |t| below about 2 means the regression has not
     established that this company moves with the market at all.
+
+    These are REPORTED and not acted on, which is deliberate. 1.0.32 used
+    the t-statistic to decide whether a company's own beta could be used,
+    and that was wrong twice over: it tests the beta against zero when the
+    question is whether it beats the industry's figure, and since
+    t = beta / se with standard errors clustered in one band, it is very
+    nearly a test of whether the beta is large. See the note above
+    `assumptions.DEFAULT_BETA`. They stay because they belong in the record
+    and because the replacement worth building uses them properly.
     """
 
     beta: float

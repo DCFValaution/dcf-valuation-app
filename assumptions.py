@@ -321,51 +321,39 @@ def fallback_risk_free_detail(today: date | None = None) -> str:
                  "reliable stand-in for the curve")
     return text
 
-DEFAULT_BETA = 1.0          # market beta; the last resort, see below
+DEFAULT_BETA = 1.0          # market beta; now only Blume's shrink target
 
-# A regression's slope is only evidence if the regression measured
-# something. Below a t-statistic of about two - the slope over its own
-# standard error - the data has not established that the company moves with
-# the market at all, and the slope is as consistent with zero as with the
-# figure it happens to be.
+# A note on what is NOT done here, because it was done and then undone.
 #
-# That matters here because SANE_BETA screens betas by SIZE, and a
-# meaningless beta can be any size: Lockheed's 0.087 and Merck's 0.115 come
-# out of regressions with t-statistics of 0.34 and 0.59, and both used to
-# pass every check this model had.
+# 1.0.32 weighted a company's own beta by the t-statistic of its own
+# regression - the slope over its standard error - on the grounds that a
+# slope the data cannot tell apart from zero is not evidence. That reasoning
+# is wrong, and the arithmetic says why.
 #
-# A single threshold would make the decision a cliff, and the companies
-# nearest it are exactly the ones whose side of it is arbitrary - Chevron
-# measured 2.00, Procter & Gamble 2.05, Duke 2.19, so a few weeks of prices
-# would move them from their own beta to their industry's in one jump. So
-# the weight on the company's own figure ramps instead:
+# The t-statistic tests the beta against ZERO, which is not the question. The
+# question is whether the company's own figure beats the industry's, and a
+# measurement can answer that while failing the other. Johnson & Johnson
+# measured 0.183 with a standard error of 0.15: a t-statistic of 1.25, so it
+# cannot rule out zero - but it rules out the 0.96 industry beta by more than
+# five standard errors. Discarding it for the industry figure threw away the
+# more precise of the two estimates.
 #
-#     w = clamp((|t| - 1.5) / (2.5 - 1.5), 0, 1)
-#     beta = w x own + (1 - w) x industry
+# Worse, the test is correlated with the thing it tests. t = beta / se, and
+# standard errors across large companies cluster in one narrow band, so t is
+# very nearly proportional to beta: a LOW beta is mechanically harder to
+# measure "significantly" than a high one. Of the ten largest US
+# pharmaceutical companies, the only two clearing |t| = 2.5 were the two
+# with the highest raw betas. A significance-weighted rule therefore pushes
+# every defensive company upward, which is not a correction but a bias.
 #
-# At |t| <= 1.5 the regression carries no weight; at |t| >= 2.5 it carries
-# all of it; between, the two are blended in proportion to how well the
-# company's own beta was measured. The midpoint is the conventional 5%
-# threshold, so the rule still agrees with convention where convention is
-# confident and hedges where it is not.
-BETA_RAMP_LOW_T = 1.5
-BETA_RAMP_HIGH_T = 2.5
-
-
-def measured_weight(t_statistic: float | None) -> float:
-    """How much of a company's own beta its regression has earned, 0 to 1.
-
-    None - a beta quoted with no error estimate - earns nothing. There is
-    no way to tell a measurement from noise without one, and treating the
-    unknown as precise is the assumption that put a 0.115 beta into
-    Merck's discount rate.
-    """
-    if not isinstance(t_statistic, (int, float)) \
-            or t_statistic != t_statistic:          # None or NaN
-        return 0.0
-    span = BETA_RAMP_HIGH_T - BETA_RAMP_LOW_T
-    weight = (abs(t_statistic) - BETA_RAMP_LOW_T) / span
-    return min(1.0, max(0.0, weight))
+# So the industry beta is a fallback and not a weight: it stands in when
+# there is no usable measurement at all, and never competes with one. The
+# precision figures are still computed and reported - see
+# `market_data.BetaRegression` - because they belong in the record and
+# because the replacement worth building uses them properly. PARKED.md has
+# that: cap-weighted industry betas from Damodaran's own membership lists,
+# combined with the company's own by relative precision rather than by a
+# significance test against the wrong null.
 
 # Blume's adjustment: betas revert toward the market over time, so a beta
 # measured on five years of history overstates how far from 1.0 the company
@@ -637,86 +625,60 @@ def _capm_inputs(fin: CompanyFinancials, record_input) -> tuple[float, float, fl
 
     # --- Beta --------------------------------------------------------------
     #
-    # Two gates, and they ask different questions. SANE_BETA asks whether
-    # the figure is a plausible size. The t-statistic asks whether it was
-    # measured at all, which the size cannot answer: a slope of 0.07 from a
-    # regression with a standard error of 0.26 is not a low beta, it is an
-    # absence of evidence wearing a number.
+    # One gate, and it is the one that was always here: is this a number a
+    # company can have? SANE_BETA's band is what "usable" means, and a beta
+    # inside it is the company's own measurement, Blume-adjusted as before.
     #
-    # Only a beta that passes both is the company's own. Everything else
-    # takes the industry's, relevered - which is a reasoned estimate from
-    # the company's actual industry and capital structure, and so a long way
-    # better than the flat 1.0 that used to stand here.
+    # What changed is only the fallback. A beta outside the band, or no beta
+    # at all, used to become a flat 1.0 - a figure that said nothing about
+    # the company. It now becomes the company's own industry, relevered on
+    # the company's own borrowing: an estimate with reasons behind it. It is
+    # a replacement for a missing measurement and never an argument against
+    # one; see the note above DEFAULT_BETA for why it is not weighted
+    # against the regression's precision.
     raw_beta = num(fin.profile, "beta")
-    plausible = SANE_BETA[0] <= raw_beta <= SANE_BETA[1]
-    std_error = num(fin.profile, "betaStdError")
-    t_statistic = fin.profile.get("betaTStatistic")
-    # An implausible beta earns no weight whatever its t-statistic. The two
-    # gates ask different questions and both have to be passed: a precisely
-    # measured 99 is still not a beta a company can have.
-    weight = measured_weight(t_statistic) if plausible else 0.0
+    usable = SANE_BETA[0] <= raw_beta <= SANE_BETA[1]
+    # A company with no beta at all needs no separate test: an absent one
+    # reads as 0.0, which the band already rejects. The distinction still
+    # matters for the MESSAGE, though - "we could not compute one" and "we
+    # computed one and it was not a beta" send a reader to different places
+    # - so it is drawn below rather than here. Mutation testing found this:
+    # a test for the redundant condition could not fail.
+    reported = fin.profile.get("beta")
+    has_beta = (isinstance(reported, (int, float))
+                and reported == reported          # not NaN
+                and reported != 0)
 
-    own = blume_adjusted(raw_beta)
-    # Either quoted by Yahoo or computed from price history when the quote
-    # endpoint was unavailable; the profile records which, so the report can
-    # say rather than imply.
-    source = fin.profile.get("betaSource") or "quoted by the market data provider"
-
-    if weight >= 1.0:
+    if usable:
+        # Either quoted by Yahoo or computed from price history when the
+        # quote endpoint was unavailable; the profile records which, so the
+        # report can say rather than imply.
+        source = fin.profile.get("betaSource") or "quoted by the market data provider"
         # Both numbers, because the adjustment is a judgement and a reader
         # who disagrees with it should be able to see what it did.
         beta = record_input(
-            "beta", own, "derived",
+            "beta", blume_adjusted(raw_beta), "derived",
             f"Blume-adjusted from raw {raw_beta:.3g}; {source}")
         return rf, erp, beta
 
-    industry, where = _industry_beta(fin)
-    value = weight * own + (1.0 - weight) * industry
-
-    # "measured", not "reported". The figure here is almost always one this
-    # model computed itself - a regression of the company's own five years
-    # of monthly returns against the S&P 500 - and calling it "reported"
-    # blamed the data provider for our own arithmetic.
-    if weight > 0.0:
-        # A blend, so both sides are named and the split is stated. The
-        # reader's question here is not "which figure" but "how much of
-        # each", and a provenance line that gave only the answer would
-        # leave the one number that explains it unsaid.
-        why = (f"blended {weight:.0%} measured, {1 - weight:.0%} industry "
-               f"because the measurement is only moderately precise: "
-               f"Blume-adjusted {own:.2f} from a raw {raw_beta:.2f} "
-               f"+/- {std_error:.2f}, against")
-        detail = f"{why} {where}"
+    value, where = _industry_beta(fin)
+    # "measured", not "reported". The figure rejected here is almost always
+    # one this model computed itself - a regression of the company's own
+    # five years of monthly returns against the S&P 500 - and calling it
+    # "reported" blamed the data provider for our own arithmetic.
+    if not has_beta:
+        why = (fin.profile.get("betaSource")
+               or "could not be computed from price history")
     else:
-        # Imprecision is reported ahead of implausibility, because where
-        # both apply it is the honest reason. Lockheed's 0.087 is below
-        # SANE_BETA's floor, but calling it implausible suggests bad data;
-        # what is actually wrong is that a standard error of 0.26 makes it
-        # indistinguishable from zero. "Outside plausible range" is then
-        # left to mean what it says - a beta that WAS measured and is still
-        # not a number a company can have.
-        # `weight` is already zero for an implausible beta, so the
-        # regression's own precision has to be asked for separately here
-        # rather than read off it.
-        imprecise = measured_weight(t_statistic) <= 0.0
-        if raw_beta == 0 and not std_error:
-            why = (fin.profile.get("betaSource")
-                   or "could not be computed from price history")
-        elif std_error and imprecise:
-            why = (f"measured {raw_beta:.2f} +/- {std_error:.2f}, too "
-                   f"imprecise to use")
-        elif not plausible:
-            why = f"measured {raw_beta:g}, outside plausible range"
-        else:
-            why = f"measured {raw_beta:.2f}, with no estimate of its error"
-        detail = f"{why}, so {where}"
+        why = f"measured {raw_beta:g}, outside plausible range"
 
     # "derived (industry)" rather than plain "derived", on the same pattern
-    # as "derived (clamped)": part of this figure comes from the company's
-    # industry rather than from its own share price, and a reader is
-    # entitled to know which. The suffix keeps `is_derived` true, so
-    # nothing downstream mistakes it for a figure picked for want of one.
-    beta = record_input("beta", value, "derived (industry)", detail)
+    # as "derived (clamped)": this figure comes from the company's industry
+    # rather than from its own share price, and a reader is entitled to know
+    # which. The suffix keeps `is_derived` true, so nothing downstream
+    # mistakes it for a figure picked for want of one.
+    beta = record_input("beta", value, "derived (industry)",
+                        f"{why}, so {where}")
 
     return rf, erp, beta
 

@@ -506,11 +506,11 @@ def test_the_beta_message_does_not_blame_the_provider_for_our_own_figure():
 
     _, source, detail = recorded["beta"]
     assert source == "derived (industry)"
-    assert "measured 0.07" in detail
+    assert "measured 0.0698" in detail
     assert "reported" not in detail
-    # And the reason is the imprecision, not the size. 0.0698 is also below
-    # SANE_BETA's floor, and saying "outside plausible range" would blame
-    # the figure for being small when the fault is that it was never
-    # measured: a standard error of 0.26 on a slope of 0.07.
-    assert "too imprecise to use" in detail
-    assert "outside plausible range" not in detail
+    # The reason is the size, which is the only ground on which a measured
+    # beta is now set aside: 0.0698 is below SANE_BETA's floor. Its standard
+    # error of 0.26 is recorded in the profile and is deliberately not part
+    # of the decision - see the note above assumptions.DEFAULT_BETA.
+    assert "outside plausible range" in detail
+    assert "too imprecise" not in detail
