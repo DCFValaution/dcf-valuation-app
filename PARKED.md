@@ -280,16 +280,117 @@ not a ratio at all.
 large enough to be a different company. Investment gains and the insurance
 presentation. Needs its own look.
 
-## Vasicek shrinkage, with a per-industry prior variance
+## Precision-weighted betas, properly: the next version of this
 
-Investigated November 2026 and **not adopted**. A significance-weighted
-industry beta was taken instead: the weight on a company's own beta ramps
-from nothing at |t| = 1.5 to all of it at |t| = 2.5, blending with the
-relevered industry figure between. That is a continuous blend too, so the
-cliff this was going to fix no longer exists. What Vasicek would still buy
-is a *better reason* for the weight - the ratio of the regression's variance
-to the industry's own dispersion, rather than a hand-chosen ramp - and a
-prior that is a genuine distribution rather than a point estimate.
+Investigated November 2026. **This is now the thing to build**, and the
+history of how it got here is the reason to build it rather than something
+simpler.
+
+Three designs have been through the beta path in one week:
+
+1. **1.0.31 and earlier.** A company's own beta if it lay inside
+   SANE_BETA's band, Blume-adjusted; a flat 1.0 otherwise. The flat 1.0 was
+   the complaint: it said nothing about the company.
+2. **1.0.32.** The industry beta, relevered, weighted against the
+   company's own by the t-statistic of its own regression, ramping from
+   nothing at |t| = 1.5 to everything at |t| = 2.5. **Wrong, and reverted
+   in 1.0.33.**
+3. **1.0.33.** As 1.0.31, but the fallback is the relevered industry beta
+   instead of a flat 1.0. The industry figure stands in for a missing
+   measurement and never competes with one.
+
+**Why 1.0.32 was wrong, because it is the trap to avoid here too.** The
+t-statistic tests a beta against **zero**, and that is not the question the
+code faces. The question is whether the company's own figure beats the
+industry's, and a measurement can answer that while failing the other:
+Johnson & Johnson measured 0.183 with a standard error of 0.15, so it cannot
+rule out zero (t = 1.25) but rules out the 0.96 industry beta by **more than
+five standard errors**. Weighting it away threw out the more precise of the
+two estimates.
+
+Worse, the test was correlated with what it tested. **t = beta / se**, and
+standard errors across large companies cluster in one narrow band, so t is
+very nearly proportional to beta: a *low* beta is mechanically harder to
+measure "significantly" than a high one. Of the ten largest US
+pharmaceutical companies, the only two clearing |t| = 2.5 were the two with
+the highest raw betas. The rule therefore pushed every defensive company
+upward - a bias dressed as a correction.
+
+**What to build instead.** Combine the two estimates by their *relative*
+precision, which is what Vasicek actually says:
+
+    w = s2_prior / (s2_prior + se^2)
+    beta = w x beta_raw + (1 - w) x beta_prior
+
+This asks the right question. A company with a tight standard error keeps
+its own figure whatever its size; a company with a loose one moves toward
+the prior; and nothing is ever compared against zero. Note that `se` enters
+as a variance and not as a ratio to beta, which is exactly why it does not
+inherit the t-statistic's bias.
+
+Two things have to be right for it to work, and both were the reason it was
+not adopted in November:
+
+**The prior must be cap-weighted, not equal-weighted.** Damodaran's industry
+averages are equal-weighted across every US filer in the industry, and for
+Drugs (Pharmaceutical) that is **228 companies, most of them small,
+cash-burning and financing-dependent**. The ten largest have a median Blume
+beta of 0.475 against a relevered industry figure of 0.984 - **2.07x** - and
+on Johnson & Johnson the difference is $218 against $361. An equal-weighted
+average of 228 small drug developers is not a prior for a $671bn defensive.
+He publishes industry membership at
+<https://pages.stern.nyu.edu/~adamodar/pc/datasets/indname.xls>, so a
+cap-weighted industry beta can be computed from the member firms.
+
+**The prior variance must be per-industry.** A pilot across the usual
+twenty-two tickers plus Coinbase tried three choices of `s2_prior` and none
+worked for both ends:
+
+| s2_prior | where it comes from | LMT | COIN |
+| --- | --- | --- | --- |
+| 0.072 | spread of Damodaran's 96 industry averages | **0.506** correct | 1.158 wrong |
+| 0.250 | halfway | 0.260 wrong | 1.823 wrong |
+| 0.716 | spread of individual firms' betas, less mean sampling variance | 0.147 wrong | **2.529** correct |
+
+The failures differ in kind, which is why no middle value helps. Coinbase's
+regression is precise, so any correct method must leave its 3.46 nearly
+alone; a tight prior crushes it to 1.16 and moves the headline figure 87%.
+Lockheed's is imprecise *and* centred near zero, so only a tight prior
+rescues it. What Vasicek's own formulation wants is the spread *within the
+company's own industry*: Aerospace/Defense clusters tightly, so Lockheed
+shrinks hard; Investments & Asset Management is dispersed across 283 firms,
+so Coinbase barely moves.
+
+Both of those come off the same work - fetching `indname.xls` and computing
+betas for the member firms, roughly **twenty firms x ninety-six industries =
+1,900 regressions**, cached and refreshed when the table is. The
+peer-fetching path built for relative valuation is the place to hang it. Do
+either and the other is nearly free.
+
+**The small-industry problem bites a variance far harder than a mean.** A
+prior variance estimated from four firms is not a prior variance. Oil/Gas
+(Integrated) has four members and is the prior for Exxon, Chevron and BP;
+Chemical (Diversified) has four; Rubber & Tires has three; Reinsurance has
+**one**. 1.0.33 only uses the industry *mean*, which four firms support
+badly but do support. These industries would need a pooled fallback for the
+variance - another judgement, with no obvious right answer.
+
+**What 1.0.33 leaves on the table, and it is not small.** With the
+significance test gone, a measured beta inside SANE_BETA's band is used
+however bad the regression was. That restores 1.0.31's behaviour, including
+its discount rates: Lockheed's cost of equity comes out at **5.99%** - an
+equity risk premium of 1.81 percentage points - from a regression with an
+**R-squared of 0.004**. Merck gets 6.12% and Johnson & Johnson 6.23%,
+against Apple's 8.74%. Those are hard numbers to defend on their own terms,
+and the precision-weighted version is what fixes them without reintroducing
+the bias.
+
+**And the band's floor is now the cliff.** The own-beta-or-industry decision
+turns on SANE_BETA's 0.10 floor, and the companies near it cross it on
+ordinary data drift: Lockheed measured 0.087 on 18 November and 0.121 on
+20 November, moving from the industry beta to its own in two days, with the
+valuation going from $566 to $1,016. Precision weighting has no such edge,
+because nothing switches.
 
 **What it is.** Blume shrinks every beta two thirds of the way from 1.0,
 whatever the regression was worth. Vasicek shrinks each one toward an
@@ -369,7 +470,7 @@ What it is worth, on Johnson & Johnson:
 | beta | where from | WACC | value |
 | --- | --- | --- | --- |
 | 0.452 | its own, Blume-adjusted (the old rule) | 6.75% | $364.49 |
-| 0.964 | Drugs (Pharmaceutical), relevered (shipped) | 8.85% | $218.15 |
+| 0.964 | Drugs (Pharmaceutical), relevered (1.0.32 only) | 8.85% | $218.15 |
 | 0.509 | cap-weighted Blume of the ten largest | 6.98% | $361.35 |
 
 So the question "is the industry beta fair for large-cap pharma" is the same
@@ -394,16 +495,20 @@ the industry's beta than any single one of them, because the noise cancels
 and the signal does not. That is the real statistical argument for the
 industry figure, and it stands.
 
-**A structural caveat worth remembering, and not only for pharma.** Since
-t = beta / se and the standard errors across this group are all in the
-0.15-0.27 band, **t is roughly proportional to beta**: a low beta is
-mechanically harder to measure significantly than a high one. The two names
-of the ten that clear |t| >= 2.5 (Abbott at 0.505, Zoetis at 0.631) are the
-two highest raw betas in the group. So a significance-weighted rule
-systematically keeps high betas and replaces low ones, which pushes
-defensive companies upward - over and above the composition effect above.
-The same mechanism is behind Coca-Cola, Verizon and General Mills moving
-the way they did.
+**This finding is what killed the significance test.** Since t = beta / se
+and the standard errors across this group are all in the 0.15-0.27 band,
+**t is roughly proportional to beta**: a low beta is mechanically harder to
+measure significantly than a high one. The two names of the ten that clear
+|t| >= 2.5 (Abbott at 0.505, Zoetis at 0.631) are the two highest raw betas
+in the group. So the 1.0.32 rule systematically kept high betas and replaced
+low ones, pushing every defensive company upward - a bias, not a correction,
+and on top of the composition effect above. 1.0.33 reverted it; the industry
+beta is now a fallback for a missing measurement only.
+
+Which means the numbers above are no longer what ships - Johnson & Johnson
+is back on its own 0.465 - but the composition question stands, because the
+fallback still uses the equal-weighted average and the replacement described
+under "Precision-weighted betas" will use it as a prior for every company.
 
 **What would settle it.** A size-matched or cap-weighted industry beta.
 Damodaran publishes no size breakdown, but he does publish the membership
