@@ -67,6 +67,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Iterable, Sequence
 
+import price_source
 from dcf import BaseYearData
 from public_data import (ECB_ATTRIBUTION, TREASURY_COLUMNS, ecb_fx_rate,
                          treasury_par_yield)
@@ -198,9 +199,6 @@ _beta_cache = _TTLCache(_BETA_TTL)
 # The market series is identical for every ticker, so it is cached apart from
 # them: valuing thirty companies costs one index fetch, not thirty.
 _market_cache = _TTLCache(_BETA_TTL)
-# Dividends are declared quarterly at most; a few hours of staleness cannot
-# matter, and the dividend history is the heaviest chart request the DDM makes.
-_dividend_cache = _TTLCache(_BETA_TTL)
 # Relative valuation touches several companies per request. Who watches what
 # and which industry a company is in change slowly; prices and trailing
 # figures are cached on the same terms as the financials.
@@ -220,11 +218,14 @@ def clear_caches() -> None:
     _reporting_currency_cache.clear()
     _beta_cache.clear()
     _market_cache.clear()
-    _dividend_cache.clear()
     _peer_cache.clear()
     _figures_cache.clear()
     _ttm_cache.clear()
     _search_cache.clear()
+    # Prices cache themselves on the market's clock rather than on a TTL, so
+    # they live in their own module. Clearing them here keeps "drop
+    # everything cached" meaning what it says.
+    price_source.clear_caches()
 
 
 # ---------------------------------------------------------------------------
@@ -861,19 +862,21 @@ _reporting_currency_cache = _TTLCache(_FINANCIALS_TTL)
 
 
 def _fx_close(symbol: str) -> tuple[float, str] | None:
-    """Latest close for an FX symbol, with the date it belongs to."""
+    """Latest close for an FX symbol, with the date it belongs to.
+
+    Only ever the fallback now: exchange rates come from the ECB, and this
+    fires for the pairs the ECB does not publish (TWD, SAR, AED) or when it
+    cannot be reached. Routed through the price source like every other
+    quoted figure, so a provider switch carries it.
+    """
     try:
-        handle = yf.Ticker(symbol, session=_browser_session())
-        history = handle.history(period="5d")
-        if history is None or getattr(history, "empty", True) \
-                or "Close" not in history:
-            return None
-        close = float(history["Close"].iloc[-1])
-        stamp = history.index[-1]
-        as_of = str(stamp.date() if hasattr(stamp, "date") else stamp)
-        return (close, as_of) if close > 0 else None
-    except Exception:
+        found = price_source.daily_close(symbol)
+    except price_source.PriceUnavailable:
         return None
+    if found is None:
+        return None
+    close, as_of = found
+    return (close, as_of) if close > 0 else None
 
 
 def _convert_rows(rows: list[dict], fields: Sequence[str], rate: float) -> None:
@@ -1462,39 +1465,57 @@ def crumb_free_profile(ticker: str) -> dict | None:
         industry = _normalise_industry(match.get("industry") or match.get("industryDisp"))
 
     try:
-        chart = session.get(_CHART_URL.format(ticker),
-                            params={"range": "1d", "interval": "1d"},
-                            timeout=20)
-        if chart.status_code != 200:
-            return None
-        meta = chart.json()["chart"]["result"][0]["meta"]
-    except Exception:
+        close = price_source.latest_close(ticker)
+    except price_source.PriceUnavailable:
+        close = None
+
+    # A profile with no price is still a profile. This used to return None,
+    # which refused the whole company - and on this path that is the wrong
+    # trade, because the statements arrive over a different endpoint and are
+    # usually fine. The price only decides what to compare the answer with.
+    #
+    # Only the trading currency goes with it, and that one matters: without
+    # it nothing can tell whether the statements need converting. Rather
+    # than guess, the reporting currency is used for both, which applies NO
+    # conversion - the conservative choice, since an unverified rate is
+    # worse than none - and `profileSource` says so. For a US filer, which
+    # is almost all of this, the two were equal anyway.
+    reporting = fetch_reporting_currency(ticker)
+    if close is None and not (name or sector):
+        # Nothing answered at all. There is no company here to describe.
         return None
 
-    price = meta.get("regularMarketPrice") or meta.get("previousClose")
-    if not price:
-        return None
+    unpriced_note = ""
+    if close is None:
+        unpriced_note = ("; no price available, so no comparison with the "
+                         "market and no currency conversion")
 
     return {
-        "symbol": meta.get("symbol") or ticker,
-        "companyName": meta.get("longName") or meta.get("shortName")
-                       or name or ticker,
+        "symbol": (close.symbol if close else None) or ticker,
+        "companyName": (close.name if close else None) or name or ticker,
         "sector": sector,
         "industry": industry,
-        "exchange": meta.get("fullExchangeName") or meta.get("exchangeName"),
-        # Filled in by _with_computed_beta() below, from the chart endpoint.
+        "exchange": close.exchange if close else None,
+        # Filled in by _with_computed_beta() below, from the price source.
         "beta": None,
         "marketCap": None,
-        "price": float(price),
+        "price": close.price if close else None,
+        # The date the price closed on, carried so nothing downstream has to
+        # guess whether it is today's. A cached price and a live one are
+        # otherwise indistinguishable on screen.
+        "priceAsOf": close.as_of_iso if close else None,
+        "priceAsOfText": (close.as_of_text if close
+                          else "no price available"),
         "sharesOutstanding": None,
-        "currency": meta.get("currency"),
+        "currency": (close.currency if close else None) or reporting,
         # The quoteSummary endpoint that carries this answers 401 without a
         # crumb, which is the ordinary case here. The statements' own
         # currencyCode is the crumb-free source, so it is asked for directly.
-        "financialCurrency": fetch_reporting_currency(ticker),
+        "financialCurrency": reporting,
         "quoteType": quote_type or "EQUITY",
         "profileSource": "crumb-free fallback (chart + search)"
-                         + ("" if sector else "; sector unavailable"),
+                         + ("" if sector else "; sector unavailable")
+                         + unpriced_note,
     }
 
 
@@ -1524,53 +1545,15 @@ _MIN_BETA_MONTHS = 24
 
 
 def _monthly_closes(symbol: str) -> list[tuple[int, float]]:
-    """Five years of monthly closes as (timestamp, price), oldest first."""
-    response = _browser_session().get(
-        _CHART_URL.format(symbol),
-        params={"range": "5y", "interval": "1mo"},
-        timeout=30,
-    )
-    if response.status_code != 200:
-        logging.getLogger(__name__).warning("%s: chart request returned HTTP %s",
-                                            symbol, response.status_code)
-        raise DataUnavailableError(
-            f"The market data provider did not return price history for {symbol} just now.")
+    """Month-end closes for *symbol*. Delegated to the price source.
 
-    result = response.json()["chart"]["result"][0]
-    stamps = result.get("timestamp") or []
-    indicators = result.get("indicators") or {}
-
-    # Adjusted closes where available: dividends and splits are returns to
-    # the holder, and a raw split would otherwise read as a -50% month.
-    adjusted = indicators.get("adjclose") or []
-    series = None
-    if adjusted and adjusted[0].get("adjclose"):
-        series = adjusted[0]["adjclose"]
-    else:
-        quote = (indicators.get("quote") or [{}])[0]
-        series = quote.get("close")
-
-    bars = [(t, float(v)) for t, v in zip(stamps, series or [])
-            if v is not None]
-
-    # Yahoo returns sixty monthly bars and then repeats the last one,
-    # stamped with the moment of the request and carrying the same close.
-    # That duplicate is not a month: it is a 0.000000% return, and a month
-    # of zero return that never happened belongs in neither series.
-    #
-    # It is dropped here rather than in fetch_beta, because every caller of
-    # this function wants months and none of them wants this. Today it
-    # changes no beta, and only by luck: the index's copy is stamped a few
-    # seconds apart from each company's, so fetch_beta's intersection of
-    # timestamps already discards it. Resting on that is resting on the
-    # clock - were the two ever stamped alike, the fake month would enter
-    # both series and shift NVDA's beta by 0.0015 with nothing to say so.
-    if len(bars) >= 2:
-        previous = datetime.fromtimestamp(bars[-2][0], timezone.utc)
-        last = datetime.fromtimestamp(bars[-1][0], timezone.utc)
-        if (previous.year, previous.month) == (last.year, last.month):
-            bars = bars[:-1]
-    return bars
+    Kept as a name here because the beta regression and its tests are
+    written against it, but it owns no request any more: the fetching, the
+    adjusted-close preference and the duplicate-bar fix all live in
+    price_source.YahooPriceSource.monthly_closes, so a different provider
+    inherits them.
+    """
+    return price_source.monthly_closes(symbol)
 
 
 def _returns(closes: Sequence[tuple[int, float]]) -> dict[int, float]:
@@ -1710,50 +1693,20 @@ def fetch_dividends(ticker: str) -> list[tuple[int, float]]:
     refuse a bank for a reason that is simply untrue.
     """
     ticker = _validate_ticker(ticker)
-    cached = _dividend_cache.get(ticker)
-    if cached is not None:
-        return cached
-
     try:
-        response = _browser_session().get(
-            _CHART_URL.format(ticker),
-            params={"range": "10y", "interval": "1mo", "events": "div"},
-            timeout=30,
-        )
-    except Exception as e:
-        logging.getLogger(__name__).warning("%s: dividend history request failed: %r", ticker, e)
+        events = price_source.dividend_events(ticker)
+    except price_source.PriceRateLimited as e:
+        # Kept distinct from a generic failure: "wait a moment" is true and
+        # actionable, and the API turns it into an HTTP 429 so a client can
+        # back off rather than retry immediately.
+        raise RateLimitedError(str(e)) from e
+    except price_source.PriceUnavailable as e:
+        logging.getLogger(__name__).warning(
+            "%s: dividend history unavailable: %r", ticker, e)
         raise DataUnavailableError(
-            f"Could not reach the market data provider for {ticker}'s dividend history just now. "
-            "Try again shortly."
-        ) from e
-
-    if response.status_code == 429:
-        raise RateLimitedError(
-            "The market data provider is rate-limiting requests right now. "
-            "Wait a moment and try again.")
-    if response.status_code != 200:
-        logging.getLogger(__name__).warning("%s: dividend history returned HTTP %s",
-                                            ticker, response.status_code)
-        raise DataUnavailableError(
-            f"The market data provider did not return {ticker}'s dividend history just now. "
-            "Try again shortly.")
-
-    try:
-        result = response.json()["chart"]["result"][0]
-        events = ((result.get("events") or {}).get("dividends") or {}).values()
-    except Exception as e:
-        raise DataUnavailableError(
-            f"The market data provider returned an unreadable dividend history for {ticker}."
-        ) from e
-
-    dividends = sorted(
-        (int(event["date"]), float(event["amount"]))
-        for event in events
-        if event.get("date") is not None and event.get("amount") is not None
-        and float(event["amount"]) > 0
-    )
-    _dividend_cache.put(ticker, dividends)
-    return dividends
+            f"Could not read {ticker}'s dividend history just now. "
+            "Try again shortly.") from e
+    return [(stamp, amount) for stamp, amount in events if amount > 0]
 
 
 # ---------------------------------------------------------------------------
@@ -1929,22 +1882,26 @@ def fetch_market_figures(ticker: str) -> MarketFigures:
         raw = (row.get("reportedValue") or {}).get("raw") if row else None
         return float(raw) if raw is not None else None
 
-    chart = _get_json(_CHART_URL.format(ticker), {"range": "1d", "interval": "1d"},
-                      "share price", ticker)
     try:
-        meta = chart["chart"]["result"][0]["meta"]
-    except (KeyError, IndexError, TypeError) as e:
-        raise DataUnavailableError(f"The market data provider returned no price for {ticker}.") from e
+        close = price_source.latest_close(ticker)
+    except price_source.PriceRateLimited as e:
+        raise RateLimitedError(str(e)) from e
+    except price_source.PriceUnavailable as e:
+        raise DataUnavailableError(
+            f"The price source could not be reached for {ticker}.") from e
+    if close is None:
+        raise DataUnavailableError(
+            f"The price source returned no price for {ticker}.")
 
-    price = meta.get("regularMarketPrice") or meta.get("previousClose")
+    price = close.price
     trailing_dates = [row.get("asOfDate") for series, row in latest.items()
                       if series.startswith("trailing") and row.get("asOfDate")]
     cash = value("cash_and_investments")
 
     figures = MarketFigures(
         ticker=ticker,
-        name=meta.get("longName") or meta.get("shortName"),
-        trading_currency=meta.get("currency"),
+        name=close.name,
+        trading_currency=close.currency,
         reporting_currency=next((row.get("currencyCode") for row in latest.values()
                                  if row.get("currencyCode")), None),
         price=float(price) if price is not None else None,
@@ -2013,13 +1970,49 @@ def _empty_quote_error(ticker: str) -> MarketDataError:
     )
 
 
+def _price_source_note(fin: "CompanyFinancials") -> str:
+    """What to say about where the share price came from.
+
+    This used to read "market data provider quote (live)" unconditionally.
+    It was not checked and, once prices were cached until the next market
+    close, it was usually false: the figure is the last close, which on a
+    Sunday is Friday's. A date is both honest and more useful than the word
+    "live".
+    """
+    if not fin.profile.get("price"):
+        return "no share price available"
+    text = fin.profile.get("priceAsOfText")
+    if text:
+        return f"market data provider: {text}"
+    return "market data provider quote, date unavailable"
+
+
 def _profile_from(info: dict, ticker: str) -> dict:
-    price = (info.get("currentPrice")
-             or info.get("regularMarketPrice")
-             or info.get("previousClose")
-             or info.get("regularMarketPreviousClose"))
+    """A profile from the quote endpoint, with the price from one place.
+
+    The price comes from the price source, not from the quote - even here,
+    where the quote carries one of its own. Two sources for one number is
+    how AAPL's beta came back at 1.085 and 1.088 on the same afternoon
+    depending on which endpoint answered, and the same unpredictability in
+    a share price moves the upside percentage a reader acts on.
+
+    The quote's own figure is the fallback for when the price source has
+    nothing, and the parsing of it lives in price_source so that Yahoo's
+    field names stay inside the Yahoo module - which a guard in
+    test_price_source asserts.
+    """
+    try:
+        close = price_source.latest_close(ticker)
+    except price_source.PriceUnavailable:
+        close = None
+    if close is None:
+        close = price_source.close_from_quote(info, ticker)
 
     return {
+        "priceAsOf": close.as_of_iso if close else None,
+        "priceAsOfText": (close.as_of_text if close
+                          else "no price available"),
+        "price": close.price if close else None,
         "symbol": info.get("symbol") or ticker,
         "companyName": info.get("longName") or info.get("shortName") or ticker,
         "sector": info.get("sector"),
@@ -2027,7 +2020,6 @@ def _profile_from(info: dict, ticker: str) -> dict:
         "exchange": info.get("fullExchangeName") or info.get("exchange"),
         "beta": info.get("beta"),
         "marketCap": info.get("marketCap"),
-        "price": price,
         "sharesOutstanding": info.get("sharesOutstanding")
                              or info.get("impliedSharesOutstanding"),
         "currency": info.get("currency"),
@@ -2523,11 +2515,11 @@ def _ttm_base_year_from(fin: CompanyFinancials,
         raw = ttm.values.get(name)
         return None if raw is None else float(raw) * rate / 1e6
 
+    # A missing price is not fatal: it costs the comparison with the market
+    # and leaves the valuation itself untouched. It used to raise, which
+    # refused a company whose statements had all arrived.
     price = fin.profile.get("price")
-    if price is None:
-        raise DataUnavailableError(
-            f"The market data provider did not return a current price for '{ticker}'.")
-    current_price = float(price)
+    current_price = float(price) if price else None
 
     revenue_mm = money("revenue")
     if revenue_mm is None or revenue_mm <= 0:
@@ -2617,7 +2609,10 @@ def _ttm_base_year_from(fin: CompanyFinancials,
         "shares_source": shares_source,
         "minority_interest_source": minority_source,
         "minority_interest_reported": reported_minority is not None,
-        "price_source": "market data provider quote (live)",
+        "price_source": _price_source_note(fin),
+        "price_as_of": fin.profile.get("priceAsOf"),
+        "price_as_of_text": fin.profile.get("priceAsOfText")
+                            or "close date unavailable",
         "currency": fin.trading_currency or None,
         "reporting_currency": fin.reporting_currency or None,
     }
@@ -2654,11 +2649,7 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
     revenue_mm = float(revenue) / 1e6
 
     price = fin.profile.get("price")
-    if price is None:
-        raise DataUnavailableError(
-            f"The market data provider did not return a current price for '{ticker}'."
-        )
-    current_price = float(price)
+    current_price = float(price) if price else None
 
     fiscal_year = income.get("fiscalYear", "?")
     period_end = income.get("date", "?")
@@ -2734,7 +2725,10 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
         "shares_source": shares_source,
         "minority_interest_source": minority_source,
         "minority_interest_reported": reported_minority is not None,
-        "price_source": "market data provider quote (live)",
+        "price_source": _price_source_note(fin),
+        "price_as_of": fin.profile.get("priceAsOf"),
+        "price_as_of_text": fin.profile.get("priceAsOfText")
+                            or "close date unavailable",
         "currency": fin.trading_currency or None,
         "reporting_currency": fin.reporting_currency or None,
     }
@@ -2750,7 +2744,8 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
     return base, meta
 
 
-def _resolve_shares(fin: CompanyFinancials, price: float) -> tuple[float, str]:
+def _resolve_shares(fin: CompanyFinancials,
+                    price: float | None) -> tuple[float, str]:
     """
     Resolve the share count (in millions) used to divide equity value.
 
@@ -2814,26 +2809,14 @@ def _quoted_treasury_yield(tenor: str) -> tuple[float, str] | None:
         return None
     symbol, label = symbol_and_label
 
-    rate: float | None = None
-    as_of = date.today().isoformat()
-
     try:
-        handle = yf.Ticker(symbol, session=_browser_session())
-        history = handle.history(period="5d")
-        if history is not None and not history.empty and "Close" in history:
-            rate = float(history["Close"].iloc[-1])
-            stamp = history.index[-1]
-            as_of = str(stamp.date() if hasattr(stamp, "date") else stamp)
-        else:
-            quote = handle.info or {}
-            candidate = (quote.get("regularMarketPrice")
-                         or quote.get("previousClose"))
-            if candidate is not None:
-                rate = float(candidate)
-    except Exception:
+        found = price_source.daily_close(symbol)
+    except price_source.PriceUnavailable:
         return None
-
-    if rate is None or rate != rate:
+    if found is None:
+        return None
+    rate, as_of = found
+    if rate != rate:                     # NaN
         return None
 
     rate /= 100.0  # quoted in percent

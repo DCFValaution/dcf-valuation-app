@@ -99,6 +99,23 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_prices():
+    """Empty the price caches between tests.
+
+    Prices are cached until the next US market close, which is a long time
+    inside one test run: without this, the second test to fake a price for a
+    ticker silently gets the first test's answer. Three tests failed exactly
+    that way when the cache was introduced.
+    """
+    import price_source
+    price_source.clear_caches()
+    price_source.reset_source()
+    yield
+    price_source.clear_caches()
+    price_source.reset_source()
+
+
+@pytest.fixture(autouse=True)
 def _no_network(request, monkeypatch):
     """Block the ways out of the process, for every test but the live ones."""
     if request.node.get_closest_marker("live"):

@@ -836,13 +836,25 @@ def test_other_upstream_failures_are_transient_not_not_found(monkeypatch):
     assert not isinstance(excinfo.value, TickerNotFoundError)
 
 
-def test_missing_price_is_reported_clearly(monkeypatch):
-    info = {k: v for k, v in AAPL_INFO.items() if k != "currentPrice"}
+def test_a_missing_price_costs_the_comparison_not_the_valuation(monkeypatch):
+    """It used to raise, which refused a company whose statements had all
+    arrived. The price is not an input to any figure the model produces -
+    only to the comparison with what the shares cost - so losing it costs
+    that comparison and nothing else.
+    """
+    info = {k: v for k, v in AAPL_INFO.items()
+            if k not in {"currentPrice", "regularMarketPrice",
+                         "previousClose", "regularMarketPreviousClose"}}
     install(monkeypatch, FakeTicker(
         info=info, income=frame(AAPL_INCOME), balance=frame(AAPL_BALANCE),
         cashflow=frame(AAPL_CASHFLOW)))
-    with pytest.raises(DataUnavailableError, match="current price"):
-        M.fetch_with_meta("AAPL")
+    base, meta = M.fetch_with_meta("AAPL")
+    assert base.current_price is None
+    assert base.revenue > 0, "the valuation's own inputs are untouched"
+    assert base.shares > 0, "and the share count did not need the price"
+    assert meta["price_source"] == "no share price available"
+    assert "live" not in meta["price_source"], (
+        "this field used to claim the price was live, unconditionally")
 
 
 def test_missing_revenue_is_reported_clearly(monkeypatch):
@@ -1241,32 +1253,49 @@ class FakeRateTicker:
         return self._info
 
 
+# The quoted yield is the FALLBACK behind the Treasury's own par yield
+# curve, and it is a price fetch of an index symbol - so it goes through the
+# price source like every other quoted figure, and these patch that rather
+# than yfinance.
+
+def _quoted_yield(monkeypatch, close=None, raises=None, counter=None):
+    import price_source
+
+    def daily_close(symbol):
+        if counter is not None:
+            counter["n"] += 1
+        if raises is not None:
+            raise raises
+        if close is None:
+            return None
+        return close, "2026-09-09"
+
+    monkeypatch.setattr(price_source, "daily_close", daily_close)
+
+
 def test_risk_free_rate_converts_percent_to_decimal(monkeypatch):
-    monkeypatch.setattr(M.yf, "Ticker", lambda s, **kwargs: FakeRateTicker(close=4.837))
+    _quoted_yield(monkeypatch, close=4.837)
     rate, source = M.fetch_risk_free_rate("year10")
     assert rate == pytest.approx(0.04837)
     assert "10-year" in source and "^TNX" in source
 
 
 def test_risk_free_rate_returns_none_when_unavailable(monkeypatch):
-    monkeypatch.setattr(M.yf, "Ticker", lambda s, **kwargs: FakeRateTicker(raises=RuntimeError()))
+    import price_source
+    _quoted_yield(monkeypatch,
+                  raises=price_source.PriceUnavailable("blocked"))
     assert M.fetch_risk_free_rate("year10") is None
 
 
 def test_absurd_risk_free_rate_is_rejected(monkeypatch):
     """A bad quote must not silently become a 90% discount rate."""
-    monkeypatch.setattr(M.yf, "Ticker", lambda s, **kwargs: FakeRateTicker(close=9000.0))
+    _quoted_yield(monkeypatch, close=9000.0)
     assert M.fetch_risk_free_rate("year10") is None
 
 
 def test_risk_free_rate_is_cached(monkeypatch):
     calls = {"n": 0}
-
-    def counting(symbol, **kwargs):
-        calls["n"] += 1
-        return FakeRateTicker(close=4.5)
-
-    monkeypatch.setattr(M.yf, "Ticker", counting)
+    _quoted_yield(monkeypatch, close=4.5, counter=calls)
     M.fetch_risk_free_rate("year10")
     M.fetch_risk_free_rate("year10")
     assert calls["n"] == 1
