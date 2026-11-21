@@ -10,7 +10,7 @@ it.
 WHAT IS DERIVED vs DEFAULTED
 ----------------------------
 Derived from the company's own filings:
-    revenue_growth      trailing revenue CAGR over the available window
+    revenue_growth      revenue CAGR over a fixed three-year window
     operating_margin    median operatingIncome / revenue
     tax_rate            median incomeTaxExpense / incomeBeforeTax
     da_pct              median D&A / revenue
@@ -35,9 +35,24 @@ median discards it.
 
 CAGR FOR GROWTH
 ---------------
-Growth uses endpoint-to-endpoint CAGR over the full window rather than the
-latest year, which would let a single strong or weak year set the trajectory
-for the entire projection.
+Growth uses endpoint-to-endpoint CAGR rather than the latest year, which
+would let a single strong or weak year set the trajectory for the entire
+projection.
+
+Over a FIXED three-year window, FY-3 to the latest fiscal year, and not over
+however much history happened to arrive. That distinction turned out to
+matter more than the choice of CAGR itself: the window used to be "as many
+years as the source gave", so the same company got a different growth
+assumption depending on how much history its data source returned. Moving
+the statements to SEC EDGAR, which files five years where the aggregator
+returns four, changed Exxon's growth from -6.7% to +4.68% and Coinbase's
+from +31% to -2.2% - because the extra year was 2021, Exxon's post-COVID
+trough and Coinbase's crypto-boom peak. Neither number was wrong; the
+window was.
+
+A company with less history than that uses what it has and the provenance
+says how much, because three years of a two-year-old listing do not exist
+and inventing them would be worse than measuring what is there.
 
 CLAMPING
 --------
@@ -414,6 +429,17 @@ CLAMP_CAPEX_PCT = (0.00, 1.00)
 CLAMP_NWC_PCT = (-0.40, 0.60)
 
 RATIO_WINDOW = 3  # years of history used for median ratios
+
+# Years spanned by the revenue growth CAGR: FY-3 to the latest fiscal year,
+# which is four observations and three periods of growth.
+#
+# Fixed rather than "the whole window", so the assumption does not move when
+# a data source returns a different amount of history. Three to match
+# RATIO_WINDOW: the margin, tax rate, capex and D&A ratios are all medians
+# over three years, and a growth rate measured over a different span from
+# the margins it is multiplied by is a harder thing to reason about than one
+# measured over the same span.
+GROWTH_WINDOW_YEARS = 3
 
 
 @dataclass
@@ -881,16 +907,30 @@ def derive_assumptions(fin: CompanyFinancials,
     years = [r.get("fiscalYear", "?") for r in income]
     diagnostics["revenue_by_year"] = list(zip(years, revenues))
 
-    # --- Revenue growth: endpoint CAGR over the window ---------------------
+    # --- Revenue growth: endpoint CAGR over a FIXED window -----------------
+    #
+    # The window is GROWTH_WINDOW_YEARS and not len(revenues), so the figure
+    # does not change when a source returns an extra year of history. See
+    # the note on GROWTH_WINDOW_YEARS.
     growth_value, growth_detail = None, ""
-    if len(revenues) >= 2:
-        newest, oldest = revenues[0], revenues[-1]
-        periods = len(revenues) - 1
+    series = revenues[:GROWTH_WINDOW_YEARS + 1]
+    if len(series) >= 2:
+        newest, oldest = series[0], series[-1]
+        periods = len(series) - 1
         if oldest > 0 and newest > 0:
             cagr = (newest / oldest) ** (1 / periods) - 1
             growth_value = cagr
-            growth_detail = (f"{periods}-year revenue CAGR, FY{years[-1]}-FY{years[0]} "
+            growth_detail = (f"{periods}-year revenue CAGR, "
+                             f"FY{years[periods]}-FY{years[0]} "
                              f"({oldest / 1e9:,.1f}bn -> {newest / 1e9:,.1f}bn)")
+            if periods < GROWTH_WINDOW_YEARS:
+                # Said rather than implied. A two-year CAGR is a weaker
+                # measurement than a three-year one and the reader is
+                # entitled to know which they have.
+                growth_detail += (
+                    f"; only {len(series)} years of revenue history, so the "
+                    f"usual {GROWTH_WINDOW_YEARS}-year window could not be "
+                    "used")
     revenue_growth = derive(
         "revenue_growth", growth_value, CLAMP_REVENUE_GROWTH, growth_detail,
         DEFAULT_TERMINAL_GROWTH, "insufficient revenue history; fell back to terminal growth",
