@@ -406,7 +406,9 @@ _METHOD_KINDS = {"method_fit", "dividends_only", "negative_equity",
 
 
 def input_source_warnings(derived, *, dcf: bool,
-                          price_unavailable: bool = False) -> list["Warning"]:
+                          price_unavailable: bool = False,
+                          price_is_last_known: bool = False
+                          ) -> list["Warning"]:
     """Caveats about where the discount rate's own inputs came from.
 
     Every one of these was previously invisible. The provenance recorded
@@ -466,6 +468,22 @@ def input_source_warnings(derived, *, dcf: bool,
                       f"{cost_of_equity_prov.value:.1%} discount rate "
                       "because this company's own could not be worked out; "
                       "the figure says little about this company.")))
+
+    # --- A price from a previous session -----------------------------------
+    #
+    # Caution, like a missing price, and for the same reason: the valuation
+    # is unaffected and the comparison is not what it appears. The date is
+    # on screen beside the figure either way, so this says what the date
+    # means rather than repeating it.
+    if price_is_last_known:
+        out.append(Warning(
+            "The market price could not be read just now, so the comparison "
+            "below uses the last price this app obtained. It was real on the "
+            "date shown beside it and is not today's. Every figure in the "
+            "valuation is unaffected.",
+            severity=SEVERITY_CAUTION, kind="price_last_known",
+            headline=("The market price is from an earlier session, not "
+                      "today. The valuation itself is unaffected.")))
 
     # --- The share price, which is not an input at all ---------------------
     #
@@ -959,7 +977,8 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                           f"after it ({a.terminal_growth:.1%}).")))
 
     warnings.extend(input_source_warnings(
-        derived, dcf=True, price_unavailable=base.current_price is None))
+        derived, dcf=True, price_unavailable=base.current_price is None,
+        price_is_last_known=bool(fin.profile.get("priceIsLastKnown"))))
 
     for prov in derived.provenance.values():
         if prov.source != "derived (clamped)":
@@ -1304,7 +1323,8 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
     # inputs, so it rests on the same stand-ins in the same way.
     warnings.extend(input_source_warnings(
         derived, dcf=False,
-        price_unavailable=not getattr(inputs, "current_price", None)))
+        price_unavailable=not getattr(inputs, "current_price", None),
+        price_is_last_known=bool(fin.profile.get("priceIsLastKnown"))))
 
     for assumption, prov in derived.provenance.items():
         if prov.source == "derived (clamped)":

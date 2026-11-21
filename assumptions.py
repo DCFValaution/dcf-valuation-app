@@ -575,7 +575,15 @@ def _cost_of_debt_history(fin: CompanyFinancials) -> list[tuple[str, float]]:
 def capital_values(fin: CompanyFinancials) -> tuple[float, float]:
     """(market value of equity, book value of debt) for *fin*.
 
-    Equity at market and debt at book, the asymmetry the WACC weights use.
+    Equity at MARKET value and debt at book, the asymmetry the WACC weights
+    use: a market capitalisation is observable and is what equity investors
+    have at stake, whereas the market value of corporate debt rarely is and
+    book value is close to par for an investment-grade issuer.
+
+    Equity at BOOK value was tried as a stand-in when no price is available
+    and rejected on measurement - see PARKED.md. It was further from the
+    truth than the generic discount rate it was meant to improve on.
+
     Extracted so the WACC weights and the leverage an industry beta is
     relevered on cannot be computed two different ways.
     """

@@ -1506,6 +1506,7 @@ def crumb_free_profile(ticker: str) -> dict | None:
         "priceAsOf": close.as_of_iso if close else None,
         "priceAsOfText": (close.as_of_text if close
                           else "no price available"),
+        "priceIsLastKnown": bool(close and close.is_last_known),
         "sharesOutstanding": None,
         "currency": (close.currency if close else None) or reporting,
         # The quoteSummary endpoint that carries this answers 401 without a
@@ -1982,6 +1983,9 @@ def _price_source_note(fin: "CompanyFinancials") -> str:
     if not fin.profile.get("price"):
         return "no share price available"
     text = fin.profile.get("priceAsOfText")
+    if fin.profile.get("priceIsLastKnown"):
+        return (f"market data provider unavailable; last known "
+                f"{text or 'price'}")
     if text:
         return f"market data provider: {text}"
     return "market data provider quote, date unavailable"
@@ -2012,6 +2016,10 @@ def _profile_from(info: dict, ticker: str) -> dict:
         "priceAsOf": close.as_of_iso if close else None,
         "priceAsOfText": (close.as_of_text if close
                           else "no price available"),
+        # True when the price source would not answer and the newest price
+        # we ever got was used instead. The figure is real and was real on
+        # its date; what is not current is the date.
+        "priceIsLastKnown": bool(close and close.is_last_known),
         "price": close.price if close else None,
         "symbol": info.get("symbol") or ticker,
         "companyName": info.get("longName") or info.get("shortName") or ticker,

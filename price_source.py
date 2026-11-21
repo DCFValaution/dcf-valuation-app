@@ -36,9 +36,10 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time as time_of_day, timedelta, timezone
 from typing import Protocol, Sequence
 from zoneinfo import ZoneInfo
@@ -97,6 +98,12 @@ class LatestClose:
     # True when the figure is the last regular-session close rather than a
     # price from a session now open. It changes the wording, not the number.
     is_close: bool = True
+
+    # True when this is the newest price we ever obtained rather than a
+    # current one - the provider was asked just now and would not answer.
+    # The number is real and was real on `as_of`; what is not current is the
+    # date, which is why the date travels with every price.
+    is_last_known: bool = False
 
     @property
     def as_of_text(self) -> str:
@@ -180,6 +187,7 @@ class _ClosePriceCache:
 
     def get(self, symbol: str, *, now: datetime | None = None
             ) -> LatestClose | None:
+        """The price for *symbol* if it is still current, else None."""
         moment = now or datetime.now(timezone.utc)
         with self._lock:
             entry = self._data.get(symbol)
@@ -188,11 +196,27 @@ class _ClosePriceCache:
                 return None
             expires, value = entry
             if moment >= expires:
-                self._data.pop(symbol, None)
+                # Expired, and KEPT. An old price is not as good as a current
+                # one, but it is a great deal better than nothing: it is a
+                # real figure that was real on its own date, and the date is
+                # shown. `last_known` is how the fallback reaches it.
                 self.misses += 1
                 return None
             self.hits += 1
             return value
+
+    def last_known(self, symbol: str) -> LatestClose | None:
+        """The newest price ever cached for *symbol*, however old.
+
+        For the case where the provider will not answer at all. Returning a
+        dated price from this morning beats losing the comparison, and
+        beats every alternative that involves inventing one.
+        """
+        with self._lock:
+            entry = self._data.get(symbol)
+            if entry is None:
+                return None
+            return entry[1]
 
     def put(self, symbol: str, value: LatestClose, *,
             now: datetime | None = None) -> None:
@@ -512,14 +536,36 @@ def reset_source() -> None:
 
 def latest_close(symbol: str, *, now: datetime | None = None
                  ) -> LatestClose | None:
-    """The newest close for *symbol*, cached until the next one exists."""
+    """The newest close for *symbol*, cached until the next one exists.
+
+    Three answers, in order of preference: a current price, the last price
+    we ever got, or nothing. The middle one is marked `is_last_known` and
+    keeps its own date, so it is never presented as current - and it is
+    offered at all because a dated price from this morning is worth more
+    than an empty field, and a great deal more than a guess.
+    """
     cached = _close_cache.get(symbol, now=now)
     if cached is not None:
         return cached
-    found = source().latest_close(symbol)
+    try:
+        found = source().latest_close(symbol)
+    except PriceUnavailable:
+        found = None
+        failure: Exception | None = sys.exc_info()[1]
+    else:
+        failure = None
     if found is not None:
         _close_cache.put(symbol, found, now=now)
-    return found
+        return found
+
+    stale = _close_cache.last_known(symbol)
+    if stale is not None:
+        log.info("%s: price source gave nothing; using the last known close "
+                 "from %s", symbol, stale.as_of)
+        return replace(stale, is_last_known=True)
+    if failure is not None:
+        raise failure
+    return None
 
 
 def cached_close(symbol: str) -> LatestClose | None:
