@@ -537,3 +537,68 @@ def test_the_floor_is_the_last_value_inside_the_wall(client):
     stops meaning anything, not where the figure stops being plausible."""
     assert _post(client, -0.99).status_code == 200
     assert _post(client, -1.0).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Which build is running
+# ---------------------------------------------------------------------------
+
+def test_health_reports_the_commit_so_a_deploy_can_be_verified(client):
+    body = client.get("/health").json()
+    assert body["commit"] == api.BUILD_COMMIT
+    assert body["commit"] != ""
+
+
+def test_the_platforms_own_variable_is_the_authority(monkeypatch):
+    """Render sets RENDER_GIT_COMMIT on every deploy. The runtime container
+    may carry no .git at all, so this is the path that matters in
+    production."""
+    monkeypatch.setenv(api._BUILD_VAR, "a" * 40)
+    assert api._build_commit() == "a" * 40
+
+
+def test_an_over_long_value_is_truncated(monkeypatch):
+    monkeypatch.setenv(api._BUILD_VAR, "b" * 100)
+    assert len(api._build_commit()) == 40
+
+
+def test_a_blank_variable_falls_through_to_git(monkeypatch):
+    monkeypatch.setenv(api._BUILD_VAR, "   ")
+    got = api._build_commit()
+    assert got != "   "
+    assert got
+
+
+def test_it_never_raises_when_nothing_can_answer(monkeypatch):
+    """A health probe that throws would make Render restart a service that
+    is perfectly fine."""
+    monkeypatch.delenv(api._BUILD_VAR, raising=False)
+    import subprocess
+
+    def refuse(*a, **k):
+        raise OSError("no git here")
+
+    monkeypatch.setattr(subprocess, "run", refuse)
+    assert api._build_commit() == "unknown"
+
+
+def test_the_commit_is_resolved_once_not_per_request(client):
+    """/health must touch nothing. Resolving it per call would shell out to
+    git on every cold-start probe, which is paid for by a user watching a
+    spinner."""
+    import subprocess
+
+    calls = {"n": 0}
+    original = subprocess.run
+
+    def counting(*a, **k):
+        calls["n"] += 1
+        return original(*a, **k)
+
+    subprocess.run = counting
+    try:
+        client.get("/health")
+        client.get("/health")
+    finally:
+        subprocess.run = original
+    assert calls["n"] == 0

@@ -103,10 +103,30 @@ class TestDiagnosticsGate:
         assert r.status_code == 401
 
 
-def test_health_says_only_that_it_is_up(client):
-    """It is the load balancer's probe, not an inventory of the machine."""
+def test_health_says_only_that_it_is_up_and_which_build(client):
+    """It is the load balancer's probe, not an inventory of the machine.
+
+    `commit` is the one exception and it was argued rather than assumed.
+    Against it: an unauthenticated caller learns exactly which build is
+    running, which advertises whichever bugs that build has. For it: the
+    repository is public, so the commit names a version anyone can already
+    read in full - it is not a secret being leaked, only a pointer to
+    published source - and without it a release whose behaviour is
+    deliberately unchanged cannot be verified from outside at all. Version
+    1.0.35 fixed the growth window to three years, a no-op on the live data
+    source by design, and there was no way to confirm the deployed service
+    contained it.
+
+    Everything else stays out. A Python version, a platform string, a
+    filesystem path or a hostname would each describe the machine rather
+    than the source, and none of them buys anything.
+    """
     body = client.get("/health").json()
     assert body["status"] == "ok"
     for leaky in ("version", "python", "platform", "path", "env",
-                  "hostname", "commit", "token"):
+                  "hostname", "token", "secret", "key"):
         assert leaky not in body, f"/health should not publish {leaky}"
+    assert body["commit"], "a deploy has to be verifiable"
+    # A commit, not a branch name or a message - those would say more about
+    # the work in progress than about which source is running.
+    assert len(body["commit"]) <= 40

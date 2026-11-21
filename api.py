@@ -1624,10 +1624,46 @@ COMMON_RESPONSES: dict = {
 }
 
 
+# The commit this process is running, resolved once at import.
+#
+# Render sets RENDER_GIT_COMMIT on every deploy, which is the authority in
+# production. Locally there is no such variable, so git is asked - once,
+# here, and never again, because /health must not touch the disk.
+#
+# It exists because a release whose behaviour is deliberately unchanged
+# cannot be verified from outside. Version 1.0.35 fixed the growth window
+# to three years, which is a no-op on the live data source by design, and
+# there was no way to confirm from the outside that Render was running it.
+# "The tests passed and I pushed" is not the same claim as "the deployed
+# service contains the change".
+_BUILD_VAR = "RENDER_GIT_COMMIT"
+
+
+def _build_commit() -> str:
+    configured = (os.environ.get(_BUILD_VAR) or "").strip()
+    if configured:
+        return configured[:40]
+    try:
+        import subprocess
+
+        found = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, timeout=5)
+        if found.returncode == 0:
+            return found.stdout.strip()[:40]
+    except Exception:
+        pass
+    return "unknown"
+
+
+BUILD_COMMIT = _build_commit()
+
+
 @app.get("/health", tags=["meta"], summary="Liveness and configuration check")
 def health() -> dict:
     """
-    Liveness plus which data source is in use.
+    Liveness, which data source is in use, and which build is running.
 
     Deliberately touches nothing: no Yahoo call, no cache read, no disk. The
     app pings this on launch to wake a sleeping free-tier instance, so it
@@ -1636,6 +1672,10 @@ def health() -> dict:
     unhealthy and restart it. **Keep it that way**: anything added here is
     paid for on every cold start, by a user staring at a spinner.
 
+    `commit` is resolved once at import, not here, for exactly that reason.
+    It is the thing that makes a deploy checkable: a release whose behaviour
+    is unchanged on purpose cannot otherwise be told from the one before it.
+
     The old `fmp_key_configured` flag is gone: the backend reads Yahoo
     Finance, which needs no credentials, so there is no key to report on.
     """
@@ -1643,6 +1683,7 @@ def health() -> dict:
         "status": "ok",
         "data_source": data_source_name(),
         "requires_api_key": requires_api_key(),
+        "commit": BUILD_COMMIT,
     }
 
 
