@@ -315,11 +315,28 @@ class TestVintage:
         del rows[M._TTM_SERIES["cash_and_short_term"]]
         assert self._fetch(monkeypatch, rows) is None
 
-    def test_without_any_debt_there_is_no_trailing_base(self, monkeypatch):
+    def test_without_any_debt_the_trailing_base_still_stands(self,
+                                                             monkeypatch):
+        """This used to refuse the whole base, and that was the bug.
+
+        Absent debt lines are exactly what a debt-free company looks like:
+        the data source publishes no quarterly debt for Palantir or Arista
+        because there is nothing to publish. Discarding the trailing year
+        over it valued Palantir on $4.5bn of revenue while $7.3bn sat in
+        the same response - a 63% understatement, and silent.
+
+        Revenue and cash are what a base cannot be built without. Debt is
+        filled from the annual balance sheet, or counted as nil, and the
+        base notes say which.
+        """
         rows = self._rows()
         del rows[M._TTM_SERIES["current_debt"]]
         del rows[M._TTM_SERIES["long_term_debt"]]
-        assert self._fetch(monkeypatch, rows) is None
+        result = self._fetch(monkeypatch, rows)
+        assert result is not None
+        assert "current_debt" not in result.values
+        assert "long_term_debt" not in result.values
+        assert result.values["revenue"] > 0, "the base is still built"
 
     def test_without_revenue_there_is_no_trailing_base(self, monkeypatch):
         rows = self._rows()

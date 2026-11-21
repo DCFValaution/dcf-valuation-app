@@ -405,9 +405,24 @@ _METHOD_KINDS = {"method_fit", "dividends_only", "negative_equity",
                  "wacc_default", "cost_of_equity_default"}
 
 
+def _annual_base_reason(meta: dict | None) -> str | None:
+    """Why this valuation is on an annual base, if it should not have been.
+
+    None where the trailing base was used, and None where there was never a
+    trailing base to want - a company whose only filing is its first annual
+    report is not working from stale figures, it is working from all the
+    figures there are. Only a REFUSED trailing base is worth saying.
+    """
+    meta = meta or {}
+    if meta.get("base_period") != "annual":
+        return None
+    return meta.get("ttm_declined") or None
+
+
 def input_source_warnings(derived, *, dcf: bool,
                           price_unavailable: bool = False,
-                          price_is_last_known: bool = False
+                          price_is_last_known: bool = False,
+                          annual_base_reason: str | None = None
                           ) -> list["Warning"]:
     """Caveats about where the discount rate's own inputs came from.
 
@@ -468,6 +483,25 @@ def input_source_warnings(derived, *, dcf: bool,
                       f"{cost_of_equity_prov.value:.1%} discount rate "
                       "because this company's own could not be worked out; "
                       "the figure says little about this company.")))
+
+    # --- An annual base where a trailing one was wanted --------------------
+    #
+    # Caution, because it is not an error and it is not nothing: the figures
+    # are real and audited, they are just up to a year old, and for a fast
+    # growing company a year is most of the story. Palantir was valued on
+    # $4.5bn of revenue while $7.3bn sat unused in the same response, and
+    # the only warning on screen was about the growth cap.
+    if annual_base_reason:
+        out.append(Warning(
+            f"This valuation uses the last full financial year rather than "
+            f"the latest twelve months, because {annual_base_reason}. For a "
+            f"company that has grown or shrunk since, the starting point is "
+            f"out of date and every figure built on it with it.",
+            severity=SEVERITY_CAUTION, kind="annual_base",
+            detail={"why": annual_base_reason},
+            headline=("Built on the last full financial year, not the "
+                      "latest twelve months - so the starting figures may "
+                      "be up to a year old.")))
 
     # --- A price from a previous session -----------------------------------
     #
@@ -832,8 +866,14 @@ def uses_dividend_discount_model(fin: CompanyFinancials) -> bool:
 
 
 def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
-                       base: BaseYearData) -> Suitability:
-    """Decide whether a standard growth-perpetuity DCF applies to this company."""
+                       base: BaseYearData,
+                       meta: dict | None = None) -> Suitability:
+    """Decide whether a standard growth-perpetuity DCF applies to this company.
+
+    *meta* is the base year's provenance, which carries whether the trailing
+    twelve months were used and, where they were not, why. Optional because
+    the speculative path assesses a company without one.
+    """
     reasons: list[str] = []
     warnings: list[str] = []
     method_fit: list[str] = []
@@ -978,7 +1018,8 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
 
     warnings.extend(input_source_warnings(
         derived, dcf=True, price_unavailable=base.current_price is None,
-        price_is_last_known=bool(fin.profile.get("priceIsLastKnown"))))
+        price_is_last_known=bool(fin.profile.get("priceIsLastKnown")),
+        annual_base_reason=_annual_base_reason(meta)))
 
     for prov in derived.provenance.values():
         if prov.source != "derived (clamped)":
@@ -1059,7 +1100,7 @@ def value_company(ticker: str,
 
     base, meta = base_year_from(fin)
     derived = derive_assumptions(fin, overrides=overrides)
-    suitability = assess_suitability(fin, derived, base)
+    suitability = assess_suitability(fin, derived, base, meta)
 
     result = run_dcf(base, derived.assumptions) if suitability.suitable else None
 

@@ -1950,6 +1950,14 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
     'cost_of_equity_default' => 'Generic discount rate',
     'beta_default' => 'Market average stands in',
     'beta_industry' => 'Beta from the industry',
+    // The starting point, not an assumption: a year-old base year makes
+    // every figure built on it a year old too.
+    'annual_base' => 'Figures up to a year old',
+    // The price, which is not an input to the valuation at all - only to
+    // the comparison with it. Both of these were added with their warnings
+    // and arrived here one release late, falling through to the catch-all.
+    'price_unavailable' => 'No market price to compare',
+    'price_last_known' => 'Price from an earlier session',
     // Two published figures that expire. Both already carried a date; the
     // date reached nobody until these.
     'erp_stale' => 'Risk premium out of date',

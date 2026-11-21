@@ -2327,6 +2327,12 @@ def _month_year(iso_date: str) -> str:
         return str(iso_date)
 
 # One quarter of slack, in days, before a field counts as a different vintage.
+# Below this, in millions of the reporting currency, a company's borrowings
+# are treated as nil rather than as a figure. A few million of finance
+# leases on a multi-billion balance sheet is not a capital structure, and
+# carrying it only invites a cost-of-debt computed from rounding.
+_NIL_DEBT_MM = 1.0
+
 _TTM_MAX_LAG_DAYS = 100
 
 _TTM_LOOKBACK_SECONDS = 3 * 365 * 24 * 3600
@@ -2376,6 +2382,19 @@ def _days_between(later: str, earlier: str) -> int | None:
     return (a - b).days
 
 
+# Why the trailing base was not used, per ticker, set by fetch_ttm_base and
+# _usable_ttm and read by base_year_from. A plain dict rather than a return
+# value because `ttm` is carried on CompanyFinancials as None-or-a-base, and
+# threading a reason through every caller to explain an absence would be a
+# worse change than this.
+_ttm_declined: dict[str, str] = {}
+
+
+def ttm_declined_reason(ticker: str) -> str | None:
+    """Why *ticker* has no trailing base, if it was asked and refused."""
+    return _ttm_declined.get(_validate_ticker(ticker))
+
+
 def fetch_ttm_base(ticker: str) -> TTMBase | None:
     """
     Trailing-twelve-month figures for *ticker*, or None where they cannot be
@@ -2395,6 +2414,8 @@ def fetch_ttm_base(ticker: str) -> TTMBase | None:
         latest = _ttm_rows(ticker)
     except Exception as e:
         logging.getLogger(__name__).info("%s: trailing figures unavailable: %r", ticker, e)
+        _ttm_declined[ticker] = ("the data source returned no trailing "
+                                 "figures at all")
         return None
 
     values: dict[str, float] = {}
@@ -2422,11 +2443,14 @@ def fetch_ttm_base(ticker: str) -> TTMBase | None:
     stale: dict[str, str] = {}
 
     if values.get("revenue") is None:
+        _ttm_declined[ticker] = "no trailing revenue figure was reported"
         return None
 
     # --- One balance sheet, not several ------------------------------------
     balance_dates = [as_of[f] for f in _TTM_BALANCE_FIELDS if f in as_of]
     if not balance_dates:
+        _ttm_declined[ticker] = ("no quarterly balance sheet date could be "
+                                 "established")
         return None
     period_end = max(balance_dates)
     for field_name in _TTM_BALANCE_FIELDS:
@@ -2445,11 +2469,26 @@ def fetch_ttm_base(ticker: str) -> TTMBase | None:
             values.pop(field_name)
             as_of.pop(field_name, None)
 
-    if "current_debt" not in values and "long_term_debt" not in values:
-        return None
+    # Debt absent is NOT a reason to discard the trailing base.
+    #
+    # This used to `return None` when neither quarterly debt line was
+    # reported, which is exactly what a debt-free company looks like: the
+    # aggregator publishes no `quarterlyCurrentDebt` and no
+    # `quarterlyLongTermDebt` for Palantir or Arista because there is
+    # nothing to publish. The whole trailing year went with it and a
+    # twelve-month-old annual base was used instead - Palantir on $4.5bn of
+    # revenue when $7.3bn was sitting in the response, a 63% understatement
+    # that nothing on screen mentioned.
+    #
+    # The caller fills debt from the annual balance sheet, or treats it as
+    # nil, and says which. Revenue and cash are what the base cannot be
+    # built without, and they are checked above and below.
     if "cash_and_short_term" not in values:
+        _ttm_declined[ticker] = ("the latest quarterly cash figure is "
+                                 "missing or too old to use")
         return None
 
+    _ttm_declined.pop(ticker, None)
     result = TTMBase(values=values, as_of=as_of, period_end=period_end,
                      currency=(currencies.pop() if len(currencies) == 1 else None),
                      notes=notes, stale=stale)
@@ -2474,6 +2513,10 @@ def _usable_ttm(ticker: str, reporting_currency: str) -> TTMBase | None:
         logging.getLogger(__name__).info(
             "%s: trailing figures are in %s but statements report in %s; "
             "using the annual base", ticker, ttm.currency, reporting)
+        _ttm_declined[_validate_ticker(ticker)] = (
+            f"the trailing figures are reported in {ttm.currency} while the "
+            f"statements are in {reporting}, so there is no safe rate to "
+            "convert them with")
         return None
     return ttm
 
@@ -2539,11 +2582,47 @@ def _ttm_base_year_from(fin: CompanyFinancials,
     # annual figure it replaces. That difference is $98.8bn on AMZN.
     current_debt = money("current_debt")
     long_term_debt = money("long_term_debt")
-    if current_debt is None:
-        notes.append(_missing_note(fin, ttm, "current_debt"))
-    if long_term_debt is None:
-        notes.append(_missing_note(fin, ttm, "long_term_debt"))
-    total_debt_mm = (current_debt or 0.0) + (long_term_debt or 0.0)
+    if current_debt is None and long_term_debt is None:
+        # Neither half reported. Either the company has no debt, or the
+        # quarterly lines are simply absent - and the annual balance sheet
+        # distinguishes them, because it is the same company a few months
+        # earlier.
+        annual_row = fin.balance[0] if fin.balance else {}
+        annual_debt_mm = (total_debt_of(annual_row) * rate / 1e6
+                          if annual_row else 0.0)
+        if annual_debt_mm > _NIL_DEBT_MM:
+            total_debt_mm = annual_debt_mm
+            notes.append(
+                f"{_short_name(fin)}'s borrowings are not in the latest "
+                f"quarterly figures, so the {income.get('fiscalYear', '?')} "
+                f"year-end figure of ${annual_debt_mm:,.0f}m is used.")
+        elif debt_was_reported(annual_row):
+            # The balance sheet names its debt lines and they are nil or
+            # near it. That is a statement about the company.
+            total_debt_mm = 0.0
+            notes.append(
+                f"{_short_name(fin)} reports no borrowings in either the "
+                "latest quarter or its year-end balance sheet, so debt is "
+                "treated as nil.")
+        else:
+            # Neither balance sheet names a debt line at all, which is the
+            # data being absent rather than the company being debt-free -
+            # the distinction debt_was_reported() exists to draw. Nil is
+            # still the only arithmetic available, and it flatters the
+            # company by subtracting nothing, so it is said plainly rather
+            # than dressed up as a finding about the business.
+            total_debt_mm = 0.0
+            notes.append(
+                f"No borrowings figure could be read for "
+                f"{_short_name(fin)} in either the latest quarter or its "
+                "year-end balance sheet, so debt is counted as zero. If it "
+                "has any, this values the shares too high.")
+    else:
+        if current_debt is None:
+            notes.append(_missing_note(fin, ttm, "current_debt"))
+        if long_term_debt is None:
+            notes.append(_missing_note(fin, ttm, "long_term_debt"))
+        total_debt_mm = (current_debt or 0.0) + (long_term_debt or 0.0)
 
     cash_mm = (money("cash_and_short_term") or 0.0) + (money("investments") or 0.0)
     if ttm.values.get("investments") is None:
@@ -2723,6 +2802,7 @@ def base_year_from(fin: CompanyFinancials) -> tuple[BaseYearData, dict]:
         "fiscal_year": fiscal_year,
         "base_period": "annual",
         "base_label": f"FY{fiscal_year}",
+        "ttm_declined": ttm_declined_reason(ticker),
         "period_end": period_end,
         "revenue_source": "income statement: Total Revenue",
         "debt_source": "balance sheet: Current Debt + Long Term Debt "
