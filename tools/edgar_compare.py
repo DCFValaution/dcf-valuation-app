@@ -202,7 +202,11 @@ FIELD_KEYWORDS: dict[str, tuple[str, ...]] = {
     "dilutedEPS": ("pershare", "earningspershare"),
     "weightedAverageShsOut": ("weightedaverage", "sharesoutstanding"),
     "weightedAverageShsOutDil": ("weightedaverage", "sharesoutstanding"),
-    "depreciationAndAmortization": ("deprecia", "amorti", "depletion"),
+    # "amorti" alone matched AvailableForSaleSecuritiesDebtMaturities-
+    # RollingYearTwoThroughFiveAmortizedCostBasis, which is a maturity
+    # schedule. The word has to be about the expense.
+    "depreciationAndAmortization": ("deprecia", "amortisation",
+                                    "amortization", "depletion"),
     "capitalExpenditure": ("propertyplant", "productiveassets",
                            "capitalexpenditure", "acquirereal",
                            "purchaseofproperty"),
@@ -225,6 +229,59 @@ FIELD_KEYWORDS: dict[str, tuple[str, ...]] = {
     "premiumsEarned": ("premium",),
     "policyholderBenefits": ("policyholder", "benefit", "claim"),
 }
+
+
+# Suggestions considered in Stage 3 and REFUSED, with the reason. A pair
+# here is reported as a definitional difference rather than as a missing
+# tag, because adding it would make the figure agree with the aggregator and
+# mean something different from what the field says.
+#
+# The value in each case really does match - that is why the finder offered
+# it - which is exactly why a value match cannot be the whole test.
+REJECTED_TAGS: dict[tuple[str, str], str] = {
+    ("shortTermDebt", "OperatingLeaseLiabilityCurrent"):
+        "an operating lease liability is not interest-bearing debt, and "
+        "total_debt_of() excludes leases deliberately; the aggregator "
+        "includes it, which is a different definition rather than a better "
+        "one (Coinbase, Alphabet, Meta)",
+    ("depreciationAndAmortization",
+     "AvailableForSaleSecuritiesDebtMaturitiesRollingYearTwoThroughFive"
+     "AmortizedCostBasis"):
+        "a securities-maturity schedule that happens to contain the word "
+        "'amortized'. A coincidence of value and of spelling, and the "
+        "reason FIELD_KEYWORDS now requires the word to be about expense "
+        "(Microsoft)",
+    ("commonStockEquity",
+     "StockholdersEquityIncludingPortionAttributableToNoncontrolling"
+     "Interest"):
+        "that is total equity INCLUDING the minority; common equity "
+        "excludes it. The same tag was wrongly in the minorityInterest "
+        "chain, where it returned all of J&J's $81.5bn equity as a "
+        "minority interest to subtract (Johnson & Johnson)",
+    ("weightedAverageShsOut", "CommonStockSharesOutstanding"):
+        "a point-in-time count is not a weighted average over the period; "
+        "the two measure different moments and _resolve_shares says so "
+        "(Tesla)",
+    ("weightedAverageShsOutDil", "CommonStockSharesOutstanding"):
+        "as above, and doubly so: a point-in-time BASIC count cannot stand "
+        "in for a diluted average (Tesla)",
+}
+
+
+# Every chain, flattened. Used to tell "the chain is missing this tag" from
+# "the chain has this tag and preferred another" - which are different
+# findings with different fixes, and one of them has no fix because nothing
+# is wrong.
+CHAINS: dict[str, tuple[str, ...]] = {
+    **E.INCOME_TAGS, **E.BALANCE_TAGS, **E.CASHFLOW_TAGS,
+}
+
+
+def rejected(field: str, tag: str | None) -> str | None:
+    """The reason this suggestion was refused, if it was."""
+    if not tag:
+        return None
+    return REJECTED_TAGS.get((field, tag.split(":")[-1]))
 
 
 def _plausible(field: str, tag: str) -> bool:
@@ -318,11 +375,40 @@ def compare_statement(label: str, ours: list[dict], theirs: list[dict],
             if facts is not None and b and field not in NORMALISED_ONLY:
                 found = matching_tag(facts, b / rate if rate else b, period,
                                      field)
-                if found:
+                refusal = rejected(field, found)
+                if refusal:
+                    # Offered before, considered, and refused: adding it
+                    # would make the figure agree with the aggregator and
+                    # mean something else. Reported as the definitional
+                    # difference it is, with the reason, so it is not
+                    # re-suggested as a to-do every run.
+                    category = DEFINITIONAL
+                    why = (f"the filer tagged that figure {found}, which "
+                           f"was considered and refused: {refusal}")
+                elif found and found.split(":")[-1] in CHAINS.get(field, ()):
+                    # The tag the aggregator used is ALREADY in our chain,
+                    # and something earlier in the chain answered for this
+                    # period instead. So nothing is missing: the filer
+                    # tagged several candidates and the two sources picked
+                    # different ones.
+                    #
+                    # That is a disagreement about which line is meant, and
+                    # often ours is the better pick - Coinbase's
+                    # CashAndCashEquivalentsAtCarryingValue against the
+                    # aggregator's restricted-cash-inclusive figure, which
+                    # is not cash available to shareholders at all. Calling
+                    # it "tag chain wrong" sent a reader looking for a tag
+                    # to add, and there is none.
+                    category = DEFINITIONAL
+                    why = (f"both sources read the filing; the aggregator "
+                           f"took {found} and the chain reached a different "
+                           f"tag that also answered for this period")
+                elif found:
                     # Some tag in this filing carries exactly the
                     # aggregator's figure, under a name that belongs to this
-                    # field. That is our chain reaching for the wrong line,
-                    # and the fix is the tag's name.
+                    # field, and it is NOT one the chain already has. That
+                    # is our chain reaching for the wrong line, and the fix
+                    # is the tag's name.
                     category = TAG_WRONG
                     why = f"the filer tagged that figure {found}"
                 else:

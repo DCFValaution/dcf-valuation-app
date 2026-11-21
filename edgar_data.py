@@ -391,6 +391,9 @@ INCOME_TAGS: dict[str, tuple[str, ...]] = {
         "InterestExpense",
         "InterestExpenseDebt",
         "InterestExpenseNonoperating",
+        # A bank's interest expense IS operating, which is why none of the
+        # above answered for JPMorgan.
+        "InterestExpenseOperating",
         "InterestIncomeExpenseNet",
         "FinanceCosts",                        # ifrs-full
     ),
@@ -414,6 +417,9 @@ INCOME_TAGS: dict[str, tuple[str, ...]] = {
         "NetIncomeLossAvailableToCommonStockholdersBasic",
         "NetIncomeLoss",
         "ProfitLossAttributableToOwnersOfParent",   # ifrs-full
+        # BP's wording for the same thing, and more precise than the above:
+        # it names ordinary equity holders explicitly.
+        "ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity",
     ),
     "dilutedEPS": (
         "EarningsPerShareDiluted",
@@ -427,6 +433,13 @@ INCOME_TAGS: dict[str, tuple[str, ...]] = {
         "InterestAndDividendIncomeOperating",
         "InterestIncomeOperating",
         "InvestmentIncomeInterest",
+        # The big cash piles. Apple, Alphabet and Microsoft each tag this
+        # differently and none of them used a tag above, so interest income
+        # read as nil for all three - and for Coinbase, where it is a real
+        # part of the business rather than a rounding.
+        "InvestmentIncomeInterestAndDividend",
+        "InterestIncomeOther",
+        "InvestmentIncomeNet",
         "RevenueFromInterest",                      # ifrs-full
     ),
     "premiumsEarned": (
@@ -446,12 +459,26 @@ BALANCE_TAGS: dict[str, tuple[str, ...]] = {
         "DebtCurrent",
         "LongTermDebtCurrent",
         "ShortTermBorrowings",
+        "CommercialPaper",
+        # Realty Income funds itself with commercial paper and tags nothing
+        # broader, so without this its short-term debt read as nil - the
+        # bug class this project has been bitten by three times now.
         "CurrentPortionOfLongTermBorrowings",       # ifrs-full
+        "CurrentPortionOfLongtermBorrowings",       # ifrs-full, TSM's casing
+        "CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings",  # ifrs-full
     ),
     "longTermDebt": (
         "LongTermDebtNoncurrent",
         "LongTermDebt",
+        "LongTermDebtAndCapitalLeaseObligations",
         "NoncurrentPortionOfLongTermBorrowings",    # ifrs-full
+        "LongtermBorrowings",                       # ifrs-full, BP's casing
+        # LAST, and only because JPMorgan tags nothing else. It INCLUDES
+        # current maturities, which the tags above exclude, so where a
+        # filer offers both this one would double-count the short-term
+        # portion against shortTermDebt. Reaching it means the filer
+        # published no non-current figure at all.
+        "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
     ),
     "cashAndCashEquivalents": (
         "CashAndCashEquivalentsAtCarryingValue",
@@ -467,6 +494,24 @@ BALANCE_TAGS: dict[str, tuple[str, ...]] = {
         "LongTermInvestments",
         "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent",
         "MarketableSecuritiesNoncurrent",
+        # Each of the big balance sheets names this differently, and none
+        # of them used a tag above: Alphabet $135.2bn, Exxon $44.3bn,
+        # Coca-Cola $20.7bn all read as nil, and the equity bridge adds
+        # this back to shareholders.
+        "OtherLongTermInvestments",
+        "LongTermInvestmentsAndReceivablesNet",
+        # Equity-method stakes. Included because the aggregator includes
+        # them and the point of this chain is to be comparable with it -
+        # but they are a bottling network rather than a bank balance, and
+        # whether the bridge should add them back at all is a separate
+        # question. PARKED.md has it.
+        "EquityMethodInvestments",
+        # The property companies hold their non-operating capital in joint
+        # ventures and net lease investments rather than in securities, and
+        # tag neither of the above.
+        "InvestmentsInAffiliatesSubsidiariesAssociatesAndJointVentures",
+        "RealEstateInvestmentsUnconsolidatedRealEstateAndOtherJointVentures",
+        "SalesTypeLeaseNetInvestmentInLeaseAfterAllowanceForCreditLoss",
     ),
     "totalCurrentAssets": (
         "AssetsCurrent",
@@ -484,13 +529,31 @@ BALANCE_TAGS: dict[str, tuple[str, ...]] = {
         "LoansAndLeasesReceivableNetReportedAmount",
         "NotesReceivableNet",
         "FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss",
+        # Net of the credit-loss allowance first, then gross: a loan book is
+        # worth what is expected back, and a zero on this field is how the
+        # router decides a company is not a lender.
+        "FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLossNoncurrent",
+        "FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLossCurrent",
+        "FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLossCurrent",
     ),
     "totalAssets": (
         "Assets",
     ),
     "minorityInterest": (
         "MinorityInterest",
-        "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+        # NOT StockholdersEquityIncludingPortionAttributableToNoncontrolling-
+        # Interest, which was here and is TOTAL equity including the
+        # minority, not the minority. Johnson & Johnson tags
+        # `MinorityInterest` once in its whole history and that tag in
+        # twenty periods, so for the LATEST period this chain returned
+        # $81.5bn - all of J&J's equity - as a minority interest to be
+        # subtracted in the equity bridge. Alphabet, Amazon, Microsoft and
+        # JPMorgan tag no minority interest at all and would have taken
+        # their whole equity the same way.
+        #
+        # An absent figure is the right answer here: a company with no
+        # material non-controlling interest does not report one, and the
+        # bridge reads absent as nil, which is what it is.
         "NoncontrollingInterests",                  # ifrs-full
     ),
 }
@@ -502,6 +565,10 @@ CASHFLOW_TAGS: dict[str, tuple[str, ...]] = {
         "DepreciationAndAmortization",
         "Depreciation",
         "DepreciationAmortisationAndImpairmentLossReversalOfImpairmentLossRecognisedInProfitOrLoss",  # ifrs-full
+        # Without impairment, which is the figure BP actually tags and the
+        # better one: an impairment is not a recurring capital charge, and
+        # D&A is used here as a proxy for one.
+        "DepreciationAndAmortisationExpense",       # ifrs-full
     ),
     "capitalExpenditure": (
         "PaymentsToAcquirePropertyPlantAndEquipment",
@@ -959,8 +1026,22 @@ def _latest_instant(facts: dict, chain: tuple[str, ...]
     A balance sheet is a snapshot, not a total, so the trailing year does
     not apply to it: the right figure is simply the newest one filed.
     """
-    for tag in chain:
-        best: tuple[str, float] | None = None
+    # The NEWEST figure across the whole chain, with chain order breaking a
+    # tie - not the first tag that answers.
+    #
+    # First-tag-wins is wrong for a balance sheet. A tag a filer stopped
+    # using keeps answering forever, and it then beats one filed last
+    # quarter: Exxon's `LongTermInvestments` last appeared on 2025-12-31 at
+    # $271m and was preferred over `LongTermInvestmentsAndReceivablesNet`
+    # at 2026-09-30 and $44,293m, and Alphabet's $376m from March 2025 beat
+    # $135,230m from September 2026. The equity bridge adds this back to
+    # shareholders, so the loss went straight into the valuation.
+    #
+    # It is the same mistake as the share count that came from 2013: a
+    # chain that falls back by preference rather than by date will reach
+    # into the past and not say so.
+    best: tuple[str, float, int] | None = None
+    for position, tag in enumerate(chain):
         for forms in (QUARTERLY_FORMS, ANNUAL_FORMS):
             for point in _points(facts, tag, forms=forms, days=None):
                 if point.get("start") is not None:
@@ -968,11 +1049,12 @@ def _latest_instant(facts: dict, chain: tuple[str, ...]
                 value = _money(point)
                 if value is None:
                     continue
-                if best is None or point["end"] > best[0]:
-                    best = (point["end"], value)
-        if best is not None:
-            return best[1], best[0]    # first tag in the chain that answers
-    return None
+                end = point["end"]
+                if best is None or (end, -position) > (best[0], -best[2]):
+                    best = (end, value, position)
+    if best is None:
+        return None
+    return best[1], best[0]
 
 
 def _ttm_weighted_average(facts: dict, chain: tuple[str, ...], *,
@@ -1090,7 +1172,6 @@ def edgar_ttm_base(facts: dict, currency: str | None):
         "shares_ordinary": ("EntityCommonStockSharesOutstanding",),
         "current_debt": BALANCE_TAGS["shortTermDebt"],
         "long_term_debt": BALANCE_TAGS["longTermDebt"],
-        "cash_and_short_term": BALANCE_TAGS["cashAndCashEquivalents"],
         "investments": BALANCE_TAGS["longTermInvestments"],
         "minority_interest": BALANCE_TAGS["minorityInterest"],
     }
@@ -1100,6 +1181,36 @@ def edgar_ttm_base(facts: dict, currency: str | None):
             notes.append(f"{name}: not reported in any quarterly filing")
             continue
         values[name], as_of[name] = found
+
+    # Cash AND short-term investments, summed, because that is what the
+    # field means and what the equity bridge adds back.
+    #
+    # This took cash alone, which silently dropped every marketable
+    # security a company holds. Alphabet came out with $56.7bn against the
+    # aggregator's $400.3bn, NVIDIA $22.4bn against $113.6bn, and the
+    # bridge subtracted the difference from shareholders - a 14% to 19%
+    # error in the headline figure with nothing on screen to show it. Two
+    # filers can also split the same money differently, so the sum is the
+    # only figure comparable across them.
+    cash_parts: list[float] = []
+    cash_dates: list[str] = []
+    for chain in (BALANCE_TAGS["cashAndCashEquivalents"],
+                  BALANCE_TAGS["shortTermInvestments"]):
+        found = _latest_instant(facts, chain)
+        if found is not None:
+            cash_parts.append(found[0])
+            cash_dates.append(found[1])
+    if cash_parts:
+        values["cash_and_short_term"] = sum(cash_parts)
+        # The newest of the two dates, so the staleness check sees the
+        # balance sheet this actually came from.
+        as_of["cash_and_short_term"] = max(cash_dates)
+        if len(cash_parts) == 1:
+            notes.append("cash_and_short_term: cash only; no short-term "
+                         "investments line was tagged")
+    else:
+        notes.append("cash_and_short_term: not reported in any quarterly "
+                     "filing")
 
     # Tied to the revenue's own fiscal year, so a company that stopped
     # tagging a diluted count cannot contribute a decade-old average.

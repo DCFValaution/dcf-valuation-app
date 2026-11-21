@@ -913,3 +913,104 @@ def test_a_basic_count_stands_in_only_where_no_diluted_tag_answers():
     got = E._ttm_weighted_average(both, chain, fy_end="2025-12-31")
     assert got is not None and got[0] == pytest.approx(4200.0), (
         "the diluted count wins where the filer reports one")
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: the tag chains, and the one that was dangerous
+# ---------------------------------------------------------------------------
+
+def test_total_equity_is_not_in_the_minority_interest_chain():
+    """The bug this found was live and would have been severe.
+
+    `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`
+    is TOTAL equity including the minority, not the minority. It was second
+    in the minorityInterest chain, and Johnson & Johnson tags
+    `MinorityInterest` once in its entire history against that tag in twenty
+    periods - so for the latest period the chain returned $81.5bn, all of
+    J&J's equity, as a minority interest for the equity bridge to subtract.
+    Alphabet, Amazon, Microsoft and JPMorgan tag no minority interest at all
+    and would have taken their whole equity the same way.
+    """
+    chain = E.BALANCE_TAGS["minorityInterest"]
+    assert "StockholdersEquityIncludingPortionAttributableToNoncontrolling" \
+           "Interest" not in chain
+    assert chain[0] == "MinorityInterest"
+
+
+def test_an_absent_minority_interest_reads_as_nil_not_as_total_equity():
+    f = {"facts": {"us-gaap": {
+        "Revenues": {"units": {"USD": [year(2025, 1000.0)]}},
+        # What J&J actually files: total equity tagged, no minority.
+        "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest":
+            {"units": {"USD": [point(81_500.0, None, "2025-12-31")]}},
+        "StockholdersEquity": {"units": {"USD": [
+            point(81_000.0, None, "2025-12-31")]}},
+    }}}
+    series = E._series(f, E.BALANCE_TAGS["minorityInterest"])
+    assert series == {}, (
+        "total equity was picked up as a minority interest to subtract")
+
+
+def test_an_operating_lease_is_not_short_term_debt():
+    """Refused in Stage 3 and recorded, because the VALUE matches for
+    Coinbase, Alphabet and Meta - which is why a value match cannot be the
+    whole test. total_debt_of() excludes leases deliberately."""
+    assert "OperatingLeaseLiabilityCurrent" not in \
+        E.BALANCE_TAGS["shortTermDebt"]
+
+
+def test_a_point_in_time_count_is_not_a_weighted_average():
+    """Also refused. The two measure different moments, and Tesla's
+    CommonStockSharesOutstanding happens to equal the aggregator's."""
+    for field in ("weightedAverageShsOut", "weightedAverageShsOutDil"):
+        assert "CommonStockSharesOutstanding" not in E.INCOME_TAGS[field], field
+
+
+def test_restricted_cash_is_not_preferred_over_plain_cash():
+    """Coinbase: 11,285m of cash and equivalents, 16,893m including
+    restricted. Restricted cash is not available to shareholders, so it
+    must not be what the equity bridge adds - and the plain tag has to come
+    first for that to hold."""
+    chain = E.BALANCE_TAGS["cashAndCashEquivalents"]
+    plain = chain.index("CashAndCashEquivalentsAtCarryingValue")
+    restricted = chain.index(
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents")
+    assert plain < restricted
+
+
+def test_the_debt_tags_that_include_current_maturities_come_last():
+    """`LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities`
+    was added for JPMorgan, which tags nothing else. Ahead of the
+    excluding-current tags it would count the short-term portion twice -
+    once here and once in shortTermDebt."""
+    chain = E.BALANCE_TAGS["longTermDebt"]
+    including = chain.index(
+        "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities")
+    assert including == len(chain) - 1
+    assert chain.index("LongTermDebtNoncurrent") < including
+
+
+def test_interest_income_covers_the_big_cash_piles():
+    """Apple, Alphabet and Microsoft each tag it differently and none used
+    a tag the chain had, so interest income read as nil for all three."""
+    chain = E.INCOME_TAGS["interestIncome"]
+    for tag in ("InvestmentIncomeInterestAndDividend",   # AAPL
+                "InterestIncomeOther",                   # GOOGL
+                "InvestmentIncomeNet"):                  # MSFT
+        assert tag in chain, tag
+
+
+def test_a_banks_operating_interest_expense_is_reachable():
+    """A bank's interest expense IS operating, which is why none of the
+    non-operating tags answered for JPMorgan."""
+    assert "InterestExpenseOperating" in E.INCOME_TAGS["interestExpense"]
+
+
+def test_the_net_loan_book_is_preferred_to_the_gross_one():
+    """A loan book is worth what is expected back, and a zero on this field
+    is how the router decides a company is not a lender."""
+    chain = E.BALANCE_TAGS["loans"]
+    after = min(i for i, t in enumerate(chain) if "AfterAllowance" in t)
+    before = min((i for i, t in enumerate(chain) if "BeforeAllowance" in t),
+                 default=len(chain))
+    assert after < before
