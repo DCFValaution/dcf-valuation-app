@@ -1014,3 +1014,133 @@ def test_the_net_loan_book_is_preferred_to_the_gross_one():
     before = min((i for i, t in enumerate(chain) if "BeforeAllowance" in t),
                  default=len(chain))
     assert after < before
+
+
+# ---------------------------------------------------------------------------
+# Which fiscal year a period belongs to
+# ---------------------------------------------------------------------------
+#
+# `fp == "FY"` means the fact appeared in an annual filing, NOT that its
+# period is fiscal year `fy`. A 10-K carries two or three comparative
+# columns and stamps all of them with the filing's own fiscal-year focus, so
+# trusting `fy` gave Exxon's 2024 and 2023 columns both the label FY2025 and
+# Microsoft's 2025 and 2024 columns both FY2026 - duplicate labels, naming
+# the wrong years in the provenance a reader sees.
+#
+# Two narrower rules were tried first and each broke the other's case, so
+# both of those cases have a test here.
+
+def _annual_revenue(periods):
+    """{end: revenue} as whole fiscal years, with the filer's own fy."""
+    points = []
+    for end, fy in periods:
+        start = f"{int(end[:4]) - 1}-{end[5:]}"
+        points.append(point(1000.0, start, end, fy=fy))
+    return facts(Revenues=("USD", points))
+
+
+def test_a_comparative_column_does_not_take_the_filings_own_year(monkeypatch):
+    """Exxon's shape: three columns in one 10-K, all stamped FY2025."""
+    f = _annual_revenue([("2025-12-31", 2025), ("2024-12-31", 2025),
+                         ("2023-12-31", 2025)])
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    years = [r["fiscalYear"] for r in fin.income]
+    assert years == [2025, 2024, 2023]
+    assert len(years) == len(set(years)), "two periods claimed one year"
+
+
+def test_a_fifty_two_week_year_ending_in_january_belongs_to_the_year_before(
+        monkeypatch):
+    """Johnson & Johnson's fiscal 2022 ENDED on 2023-01-01.
+
+    Requiring the filer's label to equal the period's end-year broke this:
+    FY2022 came out as 2023 and collided with the real FY2023.
+    """
+    # The real shape: a 52/53-week calendar whose years end 2024-12-29,
+    # 2024-01-01 and 2023-01-01 - two of them in January.
+    f = _annual_revenue([("2024-12-29", 2024), ("2024-01-01", 2023),
+                         ("2023-01-01", 2022)])
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    assert [r["fiscalYear"] for r in fin.income] == [2024, 2023, 2022]
+
+
+@pytest.mark.parametrize("newest_fy, expected", [
+    # Walmart calls the year ending 31 January 2026 fiscal 2026...
+    (2026, [2026, 2025]),
+    # ...and Target calls the equivalent year fiscal 2025. Both are real
+    # conventions, so no arithmetic on the date gets both - which is why
+    # the filer is believed for the newest period.
+    (2025, [2025, 2024]),
+])
+def test_a_january_year_end_is_whatever_the_filer_calls_it(
+        monkeypatch, newest_fy, expected):
+    f = _annual_revenue([("2026-01-31", newest_fy),
+                         ("2025-01-31", newest_fy)])
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    assert [r["fiscalYear"] for r in fin.income] == expected
+
+
+def test_a_september_year_end_is_the_year_it_ends_in(monkeypatch):
+    """Apple's fiscal 2026 ends 2026-09-26."""
+    f = _annual_revenue([("2026-09-26", 2026), ("2025-09-27", 2025)])
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    assert [r["fiscalYear"] for r in fin.income] == [2026, 2025]
+
+
+def test_a_june_year_end_is_the_year_it_ends_in(monkeypatch):
+    """Microsoft's fiscal 2026 ends 2026-06-30."""
+    f = _annual_revenue([("2026-06-30", 2026), ("2025-06-30", 2026)])
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    assert [r["fiscalYear"] for r in fin.income] == [2026, 2025]
+
+
+def test_a_gap_in_the_annual_series_stops_the_count_rather_than_shifting_it(
+        monkeypatch):
+    """Counting back only works while the years really are consecutive.
+
+    With 2023 missing, counting back from FY2025 would label the
+    2022-12-31 column FY2023 - a figure filed for one year reported under
+    another. Where the gap appears the label falls back to the period's own
+    end year, which is at worst not the filer's name for it and never the
+    wrong year.
+    """
+    f = _annual_revenue([("2025-12-31", 2025), ("2024-12-31", 2025),
+                         ("2022-12-31", 2025)])
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    assert [r["fiscalYear"] for r in fin.income] == [2025, 2024, 2022]
+
+
+def test_only_an_annual_filings_label_is_believed(monkeypatch):
+    """`fy` on a quarterly fact is the quarter's fiscal year, and the
+    period here is a whole year - so it is not a label for this period and
+    the date is used instead."""
+    points = [
+        point(1000.0, "2024-01-01", "2024-12-31", fy=2030, fp="Q3"),
+        point(900.0, "2023-01-01", "2023-12-31", fy=2029, fp="Q3"),
+    ]
+    f = facts(Revenues=("USD", points))
+    monkeypatch.setattr(E, "ciks_for",
+                        lambda t: (("0000000001", "Test Co"),))
+    monkeypatch.setattr(E, "company_facts", lambda cik: f)
+    fin = E.edgar_financials("TEST")
+    assert [r["fiscalYear"] for r in fin.income] == [2024, 2023], (
+        "a quarterly fiscal-year label was used for an annual period"
+    )

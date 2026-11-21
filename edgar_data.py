@@ -816,15 +816,60 @@ def edgar_financials(ticker: str, years: int = 5, *,
             "  Check whether the filing history sits under a different CIK "
             "and add it to edgar_data.CIK_OVERRIDES with a reason.")
 
+    # --- Fiscal-year labels ------------------------------------------------
+    #
+    # `fp == "FY"` means the fact appeared in an annual filing, NOT that its
+    # period is fiscal year `fy`. A 10-K carries two or three comparative
+    # columns and stamps every one of them with the filing's own fiscal-year
+    # focus, so trusting `fy` per period gave Exxon's 2024 and 2023 columns
+    # both the label FY2025, and Microsoft's 2025 and 2024 columns both
+    # FY2026 - duplicate labels naming the wrong years in the provenance a
+    # reader sees.
+    #
+    # Nor can the date decide it. Two rules were tried on the date and each
+    # broke a real case. Johnson & Johnson's 52/53-week fiscal 2022 ENDED on
+    # 2023-01-01, so the end year is a year ahead of the label. And for a
+    # January year-end the convention genuinely differs between filers:
+    # Walmart calls the year ending 31 January 2026 fiscal 2026, Target
+    # calls the equivalent year fiscal 2025. There is no arithmetic that
+    # gets both, because it is a naming choice rather than a fact.
+    #
+    # So the filer is believed exactly once - for the NEWEST period, which
+    # is the filing's own and the one `fy` actually describes - and the
+    # older periods are counted back from it. Annual periods are
+    # consecutive, so that is sound, and the step is only taken while the
+    # end dates really are about a year apart; where they are not, the
+    # label falls back to the period's own end year.
+    newest_point = income_series["revenue"][periods[0]]
+    base_fy = None
+    if newest_point.get("fy") and newest_point.get("fp") == "FY":
+        try:
+            base_fy = int(newest_point["fy"])
+        except (TypeError, ValueError):
+            base_fy = None
+
+    labels: dict[str, int] = {}
+    previous_end: date | None = None
+    offset = 0
+    for index, end in enumerate(periods):
+        end_date = date.fromisoformat(end)
+        if previous_end is not None:
+            gap = (previous_end - end_date).days
+            # A year, give or take a 52/53-week calendar. A bigger gap means
+            # a period is missing and counting back would mislabel
+            # everything after it.
+            if not (365 - PERIOD_TOLERANCE_DAYS
+                    <= gap <= 365 + PERIOD_TOLERANCE_DAYS):
+                base_fy = None
+            offset += 1
+        labels[end] = (base_fy - offset) if base_fy is not None \
+            else end_date.year
+        previous_end = end_date
+
     income, balance, cashflow = [], [], []
     for end in periods:
-        fiscal_year = int(end[:4])
+        fiscal_year = labels[end]
         point = income_series["revenue"][end]
-        # The filer's own fiscal-year label where it gave one; a December
-        # year-end makes these agree, and Apple's September one does not.
-        if point.get("fy") and point.get("fp") == "FY":
-            fiscal_year = int(point["fy"])
-
         row = _row(facts, INCOME_TAGS, end, income_series)
         row["fiscalYear"] = fiscal_year
         row["date"] = end
