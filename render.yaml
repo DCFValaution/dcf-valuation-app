@@ -7,9 +7,17 @@
 # service from "New > Blueprint" - no build or start command typed by hand,
 # and the settings live in version control alongside the code.
 #
-# NO SECRETS ARE NEEDED. The backend reads Yahoo Finance via yfinance, which
-# requires no credentials, so there is no environment variable to set and
-# nothing to leak. The previous FMP_API_KEY is gone entirely.
+# NO API KEYS ARE NEEDED. Prices come from Yahoo, which requires no
+# credentials; the statements come from SEC EDGAR, the risk-free rate from
+# the US Treasury and exchange rates from the ECB, none of which issue keys.
+# The previous FMP_API_KEY is gone entirely.
+#
+# ONE VALUE MUST BE SET BY HAND, and it is not a secret: PUBLIC_DATA_CONTACT.
+# The SEC requires an automated client to declare a contact address and
+# refuses one that does not, so EDGAR returns nothing without it. It is
+# marked `sync: false` below, which is Render's way of saying "the dashboard
+# owns this", and it is deliberately not in this file - a contact address in
+# a public repository is an address in a scraper's next crawl.
 
 services:
   - type: web
@@ -42,6 +50,36 @@ services:
       # Keeps pip from spending build minutes checking for its own upgrade.
       - key: PIP_DISABLE_PIP_VERSION_CHECK
         value: "1"
+
+      # The contact address the SEC requires of an automated client.
+      #
+      # `sync: false` means Render will not take a value from this file: it
+      # prompts for one when the blueprint is applied, and otherwise the
+      # value typed in the dashboard stands. Set it at
+      #
+      #     Render dashboard > dcf-valuation-api > Environment
+      #       Key:   PUBLIC_DATA_CONTACT
+      #       Value: a real address someone reads
+      #
+      # The SEC's own documented example is
+      # "Sample Company Name AdminContact@<domain>.com", and measurement on
+      # 16 November 2026 found they serve a User-Agent shaped like a contact
+      # and answer HTTP 403, "Your Request Originates from an Undeclared
+      # Automated Tool", to one shaped like a crawler. So the value has to
+      # be an address, not a project name.
+      #
+      # Treasury and the ECB do not require it and are unaffected either
+      # way. Nothing else in the app reads it.
+      - key: PUBLIC_DATA_CONTACT
+        sync: false
+
+      # Which price provider to use. "yahoo" is the only implementation
+      # today and is also the default in code, so this exists to make the
+      # switch a dashboard change rather than a deploy: adding Twelve Data
+      # is writing price_source.TwelveDataPriceSource, registering it in
+      # price_source._SOURCES, and changing this value.
+      - key: PRICE_SOURCE
+        value: yahoo
 
       # Which browser origins may read this API's responses.
       #

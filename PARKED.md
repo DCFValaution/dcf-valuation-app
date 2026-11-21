@@ -517,3 +517,138 @@ of each industry at
 cap-weighted industry beta could be computed from the member firms. That is
 the same infrastructure the parked Vasicek work needs, and doing either
 makes the other nearly free.
+
+## EDGAR Stage 3 findings, and what still blocks Stage 4
+
+November 2026. Stage 3 worked through the seventy-nine "tag chain wrong"
+findings: seventeen tags added, ten suggestions refused and recorded in
+`tools/edgar_compare.REJECTED_TAGS`, leaving twenty-two. **Stage 4 - the
+switch itself - is not recommended yet**, and the list below is why.
+
+### Three bugs found, all of the same shape: a chain reaching into the past
+
+Every one of these was a silent substitution of an old or wrong figure for a
+current one, and every one went straight into the headline.
+
+**1. Total equity read as a minority interest.**
+`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` was
+second in the `minorityInterest` chain and is total equity INCLUDING the
+minority. Johnson & Johnson tags `MinorityInterest` once in its whole
+history and that tag in twenty periods, so for the latest period the chain
+returned **$81.5bn - all of J&J's equity - for the equity bridge to
+subtract**. Alphabet, Amazon, Microsoft and JPMorgan tag no minority
+interest at all and would have taken their whole equity the same way. Fixed;
+an absent figure now reads as nil, which is what it is.
+
+**2. The trailing cash figure dropped every marketable security.**
+`edgar_ttm_base` built `cash_and_short_term` from the cash chain alone,
+where the field means cash AND short-term investments - which is what the
+equity bridge adds back. Alphabet came out at $56.7bn against $400.3bn,
+NVIDIA $22.4bn against $113.6bn, Exxon $12.4bn against $56.4bn. Fixed by
+summing both chains; Alphabet now agrees to the dollar.
+
+**3. A balance-sheet chain preferred the first tag that answered over the
+newest figure.** A tag a filer stopped using keeps answering forever.
+Exxon's `LongTermInvestments` last appeared on 2025-12-31 at **$271m** and
+beat `LongTermInvestmentsAndReceivablesNet` at 2026-09-30 and **$44,293m**;
+Alphabet's $376m from March 2025 beat $135,230m from September 2026. Fixed:
+`_latest_instant` now takes the newest date across the whole chain, with
+chain order breaking a tie only. This is the same mistake as the share count
+that came from 2013 - a chain that falls back by preference rather than by
+date reaches into the past and does not say so.
+
+### What a value match does not prove
+
+The tag finder matches by VALUE, so a suggestion means "this tag carries the
+aggregator's figure", never "this tag means the same thing". Ten were
+refused: an operating lease liability is not interest-bearing debt
+(Coinbase, Alphabet, Meta); a point-in-time share count is not a weighted
+average (Tesla); total equity is not common equity (J&J); and
+`AvailableForSaleSecuritiesDebtMaturitiesRollingYearTwoThroughFiveAmortizedCostBasis`
+matched depreciation on the word "amortized" (Microsoft). The keyword gate
+was tightened for the last one and the rest are recorded with their reasons
+so they are not re-suggested every run.
+
+### The twenty-two that remain, and why most are not missing tags
+
+Checked by hand: in most the tag the aggregator used is **already in our
+chain** and something earlier answered for that period. The classifier now
+says so rather than sending a reader to find a tag that does not exist.
+Three of them are cases where **ours is the better figure**:
+
+- **Coinbase's cash.** Ours $11.3bn excluding restricted cash; the
+  aggregator's $16.9bn includes it. Restricted cash is not available to
+  shareholders and must not be what the bridge adds back.
+- **Johnson & Johnson's short-term debt.** `DebtCurrent` $8,500m against
+  `ShortTermBorrowings` $8,495m. Ours is the broader, correct total.
+- **Meta's interest expense.** `InterestExpenseDebt` against the broader
+  non-operating figure. Interest on debt is what a cost of debt wants.
+
+`stockRepurchased` for BRK-B, O and TSM is genuinely unfixable by tags:
+**Berkshire has stopped buying back stock**, so nil is correct; Realty
+Income tags only *preferred* redemptions, which are not a return to common
+holders; TSM's IFRS treasury-share tag is ambiguous in sign and TSM is a
+20-F filer Stage 4 does not touch.
+
+### What blocks Stage 4
+
+**EDGAR lags the aggregator by up to a quarter.** NVIDIA's aggregator base
+is the October quarter and EDGAR's is July, because the Q3 10-Q is not
+indexed yet - a 16.3% revenue difference that is purely timing. A switch
+means the base period is sometimes a quarter behind, which is a decision
+rather than a bug, and it has to be said on screen.
+
+**Operating margin genuinely differs**, because the aggregator normalises
+operating income and EDGAR uses `OperatingIncomeLoss` as filed: Coca-Cola
+29.8% to 24.7%, Johnson & Johnson 25.8% to 19.6%, Exxon 11.7% to 14.3%.
+Already catalogued as definitional, and it moves answers by double digits.
+Whether a normalised margin or the filed one is the better base for a
+forecast is the real question and it has not been answered.
+
+**NVIDIA's long-term investments are not tagged in any form we can find** -
+the aggregator's $51.2bn appears nowhere in the filing as an instant, so it
+is assembled. Same class as the fifteen "EDGAR more correct" cases, in the
+other direction.
+
+**Coinbase's newest investments instant is from March 2022.** The newest-date
+rule now picks it correctly and it is still four years old. The staleness
+machinery in `TTMBase.stale` should be refusing it, and does not.
+
+**JPMorgan, Prologis and Berkshire are still wrong on EDGAR** and need their
+own look before anyone switches.
+
+### The dominant driver was our own, not EDGAR's
+
+Chased to the end, and it is one cause rather than several: **EDGAR supplies
+five years of annual history where the aggregator supplies four**, and the
+revenue growth assumption is a CAGR over "as many years as the source gave".
+So the window moves with the provider, and the extra year is 2021 - which
+was anomalous in opposite directions depending on the sector:
+
+| | aggregator window | EDGAR window | growth |
+| --- | --- | --- | --- |
+| **Coinbase** | FY2022-FY2025, 3.2 to 7.2bn | FY2021-FY2025, **7.8** to 7.2bn | +31% (clamped 15%) to **-2.2%** (clamped 0%) |
+| **Exxon** | FY2022-FY2025, 398.7 to 323.9bn | FY2021-FY2025, **276.7** to 332.2bn | -6.7% (clamped 0%) to **+4.68%** |
+| **Microsoft** | 3-year CAGR | 4-year CAGR | 16.1% (clamped 15%) to **13.74%** |
+
+2021 was Coinbase's crypto-boom peak and Exxon's post-COVID trough, so
+including it reverses the sign of the trend for both. That is the whole of
+Coinbase's -42.9% and Exxon's +55.4%.
+
+**This is a flaw in the derivation, not in either source.** A growth
+assumption whose measurement window depends on how much history a provider
+happens to return is not reproducible, and it would have been worth fixing
+with or without EDGAR. The fix is to fix the window - a stated number of
+years, with fewer than that being a refusal or a disclosed shortfall - and
+it should land BEFORE Stage 4, so the switch is measured against a stable
+derivation rather than being blamed for one.
+
+### Equity-method investments in the bridge
+
+`EquityMethodInvestments` was added to the `longTermInvestments` chain
+because the aggregator includes it and the chain's job is to be comparable.
+But Coca-Cola's $20.7bn of equity-method stakes is a bottling network, not a
+bank balance, and the equity bridge adds `investments` back to shareholders
+as though it were cash. That is the aggregator's choice inherited rather
+than a decision taken, and it is worth taking properly - for both sources at
+once, since it is not an EDGAR question.

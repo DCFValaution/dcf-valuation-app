@@ -223,7 +223,65 @@ aggregator computes but no filer reports (a single "total debt", a
 
 ---
 
-## 6. Price licence status
+## 6. Share prices — the one input still bought
+
+**Decision, 20 November 2026: the app launches publicly with prices from
+Yahoo.** Everything else has moved to a licensed primary source — statements
+to SEC EDGAR, the risk-free rate to the US Treasury, exchange rates to the
+ECB, industry betas to Damodaran with his permission. Prices are what is
+left, and §6b below is why there is no free licensed alternative to move
+them to.
+
+### Swapping the provider is one class and one setting
+
+Every price request in the app goes through `price_source.py`:
+
+| Question | Who asks |
+| --- | --- |
+| `latest_close(symbol)` | the company profile, the relative tab's figures, the FX fallback, the Treasury-yield fallback |
+| `monthly_closes(symbol)` | the beta regression, for the company and for `^GSPC` |
+| `dividend_events(symbol)` | the dividend discount model |
+| `daily_close(symbol)` | FX pairs and yield indices, behind their licensed primaries |
+
+`YahooPriceSource` is the only implementation. Adding Twelve Data means
+writing one class, adding it to `_SOURCES`, and setting `PRICE_SOURCE` on
+Render. A test (`test_price_source.test_no_other_module_fetches_a_price`)
+asserts that no other module reads a chart URL, a `regularMarketPrice` or a
+price history, so the single door cannot quietly grow a second one.
+
+What is **not** behind it, and so is separate work for a switch: symbol
+search, the "also watched" peer suggestions, and the fundamentals
+timeseries. Those are the same provider's endpoints but they are not prices,
+and folding them in would have made this "the Yahoo module" rather than
+"the price module".
+
+### Caching, and why on the market's clock
+
+A close is good until the next one exists, so the latest close is cached
+until the next US regular-session close rather than for a fixed period.
+Caching "for an hour" either serves a stale price after the bell or
+re-fetches an unchanged one all evening. Monthly histories are cached for a
+day; five years of month-end closes cannot move materially in less.
+
+Measured over a session of three companies, five valuations each, plus the
+relative tab, with Yahoo's quote endpoint unavailable as it is on Render:
+**46 price requests before, 7 after.**
+
+In memory, deliberately: the free Render instance restarts on its own
+schedule, so a disk or Redis cache would add a dependency to buy back
+something the platform takes away anyway.
+
+### Every price is dated
+
+`close as of 20 November 2026`, beside the price everywhere it appears. With
+a cache, the figure on screen is frequently a previous session's and nothing
+else would say so. The date is never defaulted to today — a price whose date
+the provider did not send reads "close date unavailable", because relabelling
+a stale price as current is the one mistake the field exists to prevent.
+
+---
+
+## 6b. Price licence status
 
 **As of 16 November 2026.**
 
