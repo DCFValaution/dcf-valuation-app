@@ -652,3 +652,56 @@ bank balance, and the equity bridge adds `investments` back to shareholders
 as though it were cash. That is the aggregator's choice inherited rather
 than a decision taken, and it is worth taking properly - for both sources at
 once, since it is not an EDGAR question.
+
+## Book-equity WACC weights: built, measured, rejected
+
+November 2026. When no share price can be obtained the WACC weights cannot
+be computed, and the discount rate falls back to a generic 8.5% with a
+serious warning saying the figure says little about the company. Weighting
+equity at BOOK value instead looked like an obvious improvement on that. It
+was built, measured on the one company where all three answers could be
+compared, and **it was worse than the thing it was meant to improve on.**
+
+Apple, with the price source blocked:
+
+| weights | WACC | distance from the truth |
+| --- | --- | --- |
+| market capitalisation (the truth, from a last-known price) | **9.38%** | - |
+| book common equity | 6.75% | **2.63 points** |
+| the generic rate, no weights at all | 8.50% | 0.88 points |
+
+The book weights were three times further out. So the tier was dropped and
+the generic rate kept, and `capital_values()` now carries only a market
+value.
+
+**Why, and why the threshold could not save it.** Apple has spent a decade
+buying its own shares back, and a buyback retires equity at market value
+while removing it from the balance sheet at book. After enough of them book
+equity bears no relation to what the equity is worth: Apple's book equity is
+a small fraction of its market capitalisation, so weighting on book put most
+of the capital structure into debt and handed the discount rate to the cost
+of debt - which is why the WACC came out nearly three points low.
+
+A guard was tried: use book equity only when it is at least 20% of book
+capital (`MIN_BOOK_EQUITY_SHARE`). It does not help, and cannot. The test it
+applies is book equity against book capital, and the thing that is wrong is
+book equity against MARKET equity - which is the figure that is missing. A
+threshold cannot measure the gap it was introduced because of.
+
+**What would work, and why it is not obviously worth it.** An industry
+median market-to-book ratio would let a book figure be scaled toward a
+market one, and Damodaran publishes exactly that alongside the industry
+betas already baked into `industry_beta_data.py`. But it is a third-party
+average standing in for the one number this whole situation is defined by
+not having, and the generic rate at least announces itself as generic. A
+reader told "8.5%, and this says little about your company" is better served
+than one told "6.75%" computed from a company's accounting history and
+someone else's industry average.
+
+**What shipped instead** is the cheaper half of the same idea, and it covers
+the common case: the last price this app obtained, however old, with its own
+date on screen and a caution-tier warning saying it is not today's. A real
+price from an earlier session gives real market-capitalisation weights, so
+the WACC is derived rather than generic and the comparison with the market
+survives. Only a company for which no price was ever obtained reaches the
+generic rate now.
