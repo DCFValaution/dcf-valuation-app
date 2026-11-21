@@ -1585,7 +1585,12 @@ class _SuccessCard extends StatelessWidget {
   /// Displayed figures, which may come from the local preview rather than
   /// from [result].
   final double intrinsicValue;
-  final double upsideDownside;
+
+  /// Null when there is no share price to compare the valuation with. The
+  /// valuation itself is unaffected, so the card shows it and drops only
+  /// the comparison - with a line saying why, from the backend's own
+  /// caveats rather than invented here.
+  final double? upsideDownside;
   final String note;
   final ValueStatus status;
 
@@ -1596,7 +1601,8 @@ class _SuccessCard extends StatelessWidget {
   /// Set when the backend overruled the local preview.
   final String? correctionNote;
 
-  String _money(double v) => '\$${v.toStringAsFixed(2)}';
+  String _money(double? v) =>
+      v == null ? 'unavailable' : '\$${v.toStringAsFixed(2)}';
 
   // Hand-rolled here once, and it rendered "+-0.0%": negative zero takes
   // the positive branch of a >= 0 test and then prints its own minus sign.
@@ -1605,9 +1611,16 @@ class _SuccessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final up = upsideDownside > 0;
-    final accent = up ? colors.positive : colors.negative;
-    final accentSurface = up ? colors.positiveSurface : colors.negativeSurface;
+    final comparable = upsideDownside != null;
+    final up = (upsideDownside ?? 0) > 0;
+    // Neutral where there is nothing to compare: a green badge on a missing
+    // comparison would read as good news.
+    final accent = !comparable
+        ? colors.textSecondary
+        : (up ? colors.positive : colors.negative);
+    final accentSurface = !comparable
+        ? colors.accentSurface
+        : (up ? colors.positiveSurface : colors.negativeSurface);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1687,6 +1700,7 @@ class _SuccessCard extends StatelessWidget {
                     child: _Metric(
                       label: 'Market price',
                       value: _money(result.currentPrice),
+                      footnote: result.priceAsOfText,
                     ),
                   ),
                   Container(width: 1, height: 40, color: colors.hairline),
@@ -1696,7 +1710,11 @@ class _SuccessCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          up ? 'IMPLIED UPSIDE' : 'IMPLIED DOWNSIDE',
+                          !comparable
+                              ? 'VS MARKET PRICE'
+                              : (up
+                                    ? 'IMPLIED UPSIDE'
+                                    : 'IMPLIED DOWNSIDE'),
                           style: context.text.labelMedium,
                         ),
                         const SizedBox(height: AppSpacing.sm),
@@ -1715,10 +1733,15 @@ class _SuccessCard extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              // An arrow is a direction, and with no price
+                              // there is no direction - so it becomes a
+                              // dash rather than pointing somewhere.
                               Icon(
-                                up
-                                    ? Icons.arrow_upward_rounded
-                                    : Icons.arrow_downward_rounded,
+                                !comparable
+                                    ? Icons.remove_rounded
+                                    : (up
+                                          ? Icons.arrow_upward_rounded
+                                          : Icons.arrow_downward_rounded),
                                 size: 15,
                                 color: accent,
                               ),
@@ -1729,7 +1752,9 @@ class _SuccessCard extends StatelessWidget {
                               // the row.
                               Flexible(
                                 child: Text(
-                                  _percent(upsideDownside),
+                                  upsideDownside == null
+                                      ? 'n/a'
+                                      : _percent(upsideDownside!),
                                   style: context.text.titleSmall?.copyWith(
                                     color: accent,
                                   ),
@@ -2701,13 +2726,20 @@ class _BaselineDelta extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
+  const _Metric({required this.label, required this.value, this.footnote});
 
   final String label;
   final String value;
 
+  /// A quieter line under the figure, for something the figure cannot say
+  /// about itself. The share price uses it for the date it closed on:
+  /// prices are cached until the next market close, so without a date a
+  /// Friday close reads as Sunday's price.
+  final String? footnote;
+
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2717,6 +2749,13 @@ class _Metric extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Text(value, style: context.text.titleSmall),
         ),
+        if (footnote != null && footnote!.isNotEmpty)
+          Text(
+            footnote!,
+            style: context.text.bodySmall?.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
       ],
     );
   }

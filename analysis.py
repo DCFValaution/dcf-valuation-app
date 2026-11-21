@@ -405,7 +405,8 @@ _METHOD_KINDS = {"method_fit", "dividends_only", "negative_equity",
                  "wacc_default", "cost_of_equity_default"}
 
 
-def input_source_warnings(derived, *, dcf: bool) -> list["Warning"]:
+def input_source_warnings(derived, *, dcf: bool,
+                          price_unavailable: bool = False) -> list["Warning"]:
     """Caveats about where the discount rate's own inputs came from.
 
     Every one of these was previously invisible. The provenance recorded
@@ -465,6 +466,24 @@ def input_source_warnings(derived, *, dcf: bool) -> list["Warning"]:
                       f"{cost_of_equity_prov.value:.1%} discount rate "
                       "because this company's own could not be worked out; "
                       "the figure says little about this company.")))
+
+    # --- The share price, which is not an input at all ---------------------
+    #
+    # Caution rather than serious, and the distinction is the point: every
+    # figure the model produces is unaffected, because the price is not an
+    # input to any of them. What is lost is the comparison a reader came
+    # for, and a percentage quietly missing from the screen is worse than a
+    # sentence saying why.
+    if price_unavailable:
+        out.append(Warning(
+            "The current market price could not be read just now, so there "
+            "is no comparison between this valuation and what the shares "
+            "actually cost. Every figure here is unaffected - the price is "
+            "not an input to the valuation.",
+            severity=SEVERITY_CAUTION, kind="price_unavailable",
+            headline=("The market price is unavailable right now, so this "
+                      "figure is not compared with it. The valuation itself "
+                      "is unaffected.")))
 
     # --- Beta: one term of the discount rate, not the whole of it ----------
     #
@@ -939,7 +958,8 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                           f"({a.revenue_growth:.1%}) than the perpetuity "
                           f"after it ({a.terminal_growth:.1%}).")))
 
-    warnings.extend(input_source_warnings(derived, dcf=True))
+    warnings.extend(input_source_warnings(
+        derived, dcf=True, price_unavailable=base.current_price is None))
 
     for prov in derived.provenance.values():
         if prov.source != "derived (clamped)":
@@ -1282,7 +1302,9 @@ def assess_ddm_suitability(fin: CompanyFinancials, dividends: DividendRecord,
 
     # The dividend model builds its cost of equity from the same CAPM
     # inputs, so it rests on the same stand-ins in the same way.
-    warnings.extend(input_source_warnings(derived, dcf=False))
+    warnings.extend(input_source_warnings(
+        derived, dcf=False,
+        price_unavailable=not getattr(inputs, "current_price", None)))
 
     for assumption, prov in derived.provenance.items():
         if prov.source == "derived (clamped)":

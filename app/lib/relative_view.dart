@@ -342,6 +342,7 @@ class _Figure extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             Text(
               'Market price ${_money(report.currentPrice!)}'
+              '${report.priceAsOfText == null ? '' : ' (${report.priceAsOfText})'}'
               '${vs == null ? '' : ' · relative value ${(vs.abs() * 100).toStringAsFixed(0)}% '
                         '${vs < 0 ? 'below' : 'above'} it'}',
               style: context.text.bodySmall?.copyWith(

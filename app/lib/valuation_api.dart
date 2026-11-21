@@ -379,10 +379,23 @@ class ValuationSuccess extends ValuationResult {
   }
 
   final double intrinsicValuePerShare;
-  final double currentPrice;
+  /// Null when the price source would not give us one. Every other figure
+  /// is unaffected: the price is not an input to the valuation, only to the
+  /// comparison with it.
+  final double? currentPrice;
 
-  /// Fraction, e.g. -0.674 means 67.4% downside.
-  final double upsideDownside;
+  /// The date the share price closed on, ready to display - "close as of
+  /// 20 November 2026", or "close date unavailable" when the source sent a
+  /// price without one.
+  ///
+  /// Never guessed. Prices are cached until the next US market close, so
+  /// the figure beside it is frequently a previous session's and nothing
+  /// else on screen would say so.
+  final String priceAsOfText;
+
+  /// Fraction, e.g. -0.674 means 67.4% downside. Null with no price:
+  /// there is nothing to compare the valuation with.
+  final double? upsideDownside;
 
   /// The backend's caveat that this figure follows from adjustable
   /// assumptions. Shown verbatim - it is not decoration.
@@ -472,6 +485,7 @@ class ValuationSuccess extends ValuationResult {
     required this.sector,
     required this.intrinsicValuePerShare,
     required this.currentPrice,
+    required this.priceAsOfText,
     required this.upsideDownside,
     required this.note,
     this.fxClause,
@@ -490,7 +504,7 @@ class ValuationSuccess extends ValuationResult {
     this.growthPath = const [],
   });
 
-  bool get isUndervalued => upsideDownside > 0;
+  bool get isUndervalued => (upsideDownside ?? 0) > 0;
 
   /// Whether the local engine can preview slider changes for this result.
   ///
@@ -545,8 +559,10 @@ class ValuationSuccess extends ValuationResult {
       sector: company['sector'] as String? ?? '',
       intrinsicValuePerShare: (json['intrinsic_value_per_share'] as num)
           .toDouble(),
-      currentPrice: (json['current_price'] as num).toDouble(),
-      upsideDownside: (json['upside_downside'] as num).toDouble(),
+      currentPrice: (json['current_price'] as num?)?.toDouble(),
+      priceAsOfText: company['price_as_of_text'] as String? ??
+          'close date unavailable',
+      upsideDownside: (json['upside_downside'] as num?)?.toDouble(),
       note: json['note'] as String? ?? '',
       fxClause: (json['fx_clause'] as String?)?.trim().isEmpty ?? true
           ? null
@@ -1040,6 +1056,10 @@ class RelativeReport {
   final double? high;
   final List<String> multiplesApplied;
   final double? currentPrice;
+
+  /// The date [currentPrice] closed on, ready to display. Null only when
+  /// the source sent a price with no date.
+  final String? priceAsOfText;
   final double? relativeVsPrice;
   final String framing;
 
@@ -1064,6 +1084,7 @@ class RelativeReport {
     this.high,
     this.multiplesApplied = const [],
     this.currentPrice,
+    this.priceAsOfText,
     this.relativeVsPrice,
     this.framing = '',
     this.note = '',
@@ -1106,6 +1127,7 @@ class RelativeReport {
       high: (value?['high'] as num?)?.toDouble(),
       multiplesApplied: _strings(value?['multiples_applied']),
       currentPrice: (rv['current_price'] as num?)?.toDouble(),
+      priceAsOfText: company['price_as_of_text'] as String?,
       relativeVsPrice: (rv['relative_value_vs_price'] as num?)?.toDouble(),
       framing: rv['framing'] as String? ?? '',
       note: rv['note'] as String? ?? '',

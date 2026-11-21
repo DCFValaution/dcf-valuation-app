@@ -73,6 +73,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+import price_source
 from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       DDMReport, RelativeNotApplicable, RelativeReport,
                       SpeculativeNotApplicable, SpeculativeReport, ValuationReport,
@@ -544,7 +545,7 @@ class BaseYearOut(BaseModel):
     total_debt: float
     cash: float
     shares: float
-    current_price: float
+    current_price: float | None = Field(None, description="Null when the price source would not give us one. Every other figure here is unaffected: the price is not an input to the valuation, only to the comparison with it.")
     fiscal_year: str
 
     # What the base year actually is, as a reader should see it: "TTM as of
@@ -586,6 +587,20 @@ class CompanyOut(BaseModel):
     company_name: str
     sector: str
     exchange: str
+    # The date the share price closed on, and that date written out. Every
+    # response carries this block, so putting the price's date here puts it
+    # beside the price wherever the price appears.
+    #
+    # It is here rather than optional-and-often-absent because a price with
+    # no date is the thing to avoid: prices are cached until the next market
+    # close, so the figure on screen is frequently a previous session's and
+    # nothing else on screen would say so.
+    price_as_of: str | None = Field(
+        None, description="ISO date the share price closed on, if known")
+    price_as_of_text: str = Field(
+        "close date unavailable",
+        description='Ready to display beside the price, e.g. "close as of '
+                    '20 November 2026"')
 
 
 class MarketSnapshotOut(BaseModel):
@@ -648,8 +663,9 @@ class ValuationResponse(BaseModel):
     company: CompanyOut
     suitable: bool = True
     intrinsic_value_per_share: float
-    current_price: float
-    upside_downside: float = Field(..., description="Fraction, e.g. -0.674 for -67.4%")
+    current_price: float | None = Field(None, description="Null when the price source would not give us one. Every other figure here is unaffected: the price is not an input to the valuation, only to the comparison with it.")
+    upside_downside: float | None = Field(
+        None, description="Fraction, e.g. -0.674 for -67.4%. Null with no price.")
     note: str = Field(..., description="Why this figure is not a measurement. Display it.")
     fx_clause: str | None = Field(
         None,
@@ -810,8 +826,9 @@ class DDMValuationResponse(BaseModel):
     company: CompanyOut
     suitable: bool = True
     intrinsic_value_per_share: float
-    current_price: float
-    upside_downside: float = Field(..., description="Fraction, e.g. -0.12 for -12%")
+    current_price: float | None = Field(None, description="Null when the price source would not give us one. Every other figure here is unaffected: the price is not an input to the valuation, only to the comparison with it.")
+    upside_downside: float | None = Field(
+        None, description="Fraction, e.g. -0.12 for -12%. Null with no price.")
     snapshot: MarketSnapshotOut | None = Field(
         None,
         description="Current market multiples, for reference beside the figure. "
@@ -1118,8 +1135,8 @@ class MarketFiguresOut(BaseModel):
 class IntrinsicSummaryOut(BaseModel):
     method: Literal["dcf", "ddm"]
     intrinsic_value_per_share: float
-    current_price: float
-    upside_downside: float
+    current_price: float | None = None
+    upside_downside: float | None = None
     note: str
     full_valuation: str = Field(..., description="Where the complete intrinsic valuation lives")
 
@@ -1286,9 +1303,28 @@ def _assumption_list(store: dict) -> list[AssumptionOut]:
     ]
 
 
-def _company_out(report: ValuationReport) -> CompanyOut:
+def _company_out(report) -> CompanyOut:
+    """The company block, for every kind of report.
+
+    Shared by the DCF, the dividend model, the relative view, the
+    speculative estimate and the hypothetical, and only the first of those
+    carries a `meta` - so the price's date is taken from meta where there is
+    one and from the price cache otherwise. The cache is read, never filled:
+    a serialiser must not make a network request, and every path through
+    here fetched the price moments earlier anyway.
+    """
+    meta = getattr(report, "meta", None) or {}
+    as_of = meta.get("price_as_of")
+    as_of_text = meta.get("price_as_of_text")
+    if not as_of_text:
+        cached = price_source.cached_close(report.ticker)
+        if cached is not None:
+            as_of, as_of_text = cached.as_of_iso, cached.as_of_text
     return CompanyOut(ticker=report.ticker, company_name=report.company_name,
-                      sector=report.sector, exchange=report.exchange)
+                      sector=report.sector, exchange=report.exchange,
+                      price_as_of=as_of,
+                      price_as_of_text=str(as_of_text
+                                           or "close date unavailable"))
 
 
 def _serialise(report: ValuationReport) -> ValuationResponse:

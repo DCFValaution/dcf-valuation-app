@@ -10,7 +10,15 @@ class BaseYearData:
     total_debt: float       # $mm
     cash: float             # $mm — cash & marketable securities
     shares: float           # millions
-    current_price: float    # $
+
+    # None when the price source would not give us one.
+    #
+    # A valuation does not need a price: it needs the statements, and the
+    # price only decides what to compare the answer with. Refusing the whole
+    # thing because the quote endpoint was blocked threw away work that was
+    # complete, so a missing price now costs the upside percentage and
+    # nothing else.
+    current_price: float | None    # $
 
     # Minority (non-controlling) interest, $mm.
     #
@@ -215,8 +223,10 @@ class DCFResult:
     enterprise_value: float
     equity_value: float
     intrinsic_value_per_share: float
-    current_price: float
-    upside_downside: float          # fraction, e.g. -0.457
+    # Both None together, and only when the price source had no price. The
+    # valuation above them is unaffected.
+    current_price: float | None
+    upside_downside: float | None   # fraction, e.g. -0.457
     tv_pct_of_ev: float             # fraction
     # [wacc_row][g_col] -> intrinsic value per share. A cell is None where that
     # combination is undefined (g >= WACC makes Gordon growth meaningless).
@@ -286,7 +296,12 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
                     - base.minority_interest)
     intrinsic_value_per_share = equity_value / base.shares
 
-    upside_downside = (intrinsic_value_per_share - base.current_price) / base.current_price
+    # No price, no comparison. The alternative - a zero price, or today's
+    # value expressed against nothing - would read as a figure rather than
+    # as an absence, which is the whole thing to avoid here.
+    upside_downside = (
+        None if not base.current_price
+        else (intrinsic_value_per_share - base.current_price) / base.current_price)
     tv_pct_of_ev = pv_terminal_value / enterprise_value
 
     # --- Sensitivity table, centred on this model's own WACC and g ---
