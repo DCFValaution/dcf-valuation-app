@@ -271,7 +271,12 @@ def test_a_complete_company_is_untouched():
     a = d.assumptions
     assert a.capex_pct == pytest.approx(0.04, abs=2e-3)
     assert a.da_pct == pytest.approx(0.0476, abs=1e-3)
-    assert a.operating_margin == pytest.approx(0.2381, abs=1e-3)
+    # 22.68%, the latest year, not the 23.81% median this used to assert.
+    # The fixture holds operating income flat at $2,500m on rising revenue,
+    # so its margin declines mechanically - 25.0%, 23.8%, 22.7% - and the
+    # margin rule reads a monotone decline as a level reached rather than a
+    # spike. That is the rule working, not the fixture changing.
+    assert a.operating_margin == pytest.approx(0.2268, abs=1e-3)
     assert a.nwc_pct == pytest.approx(0.05, abs=0.02)
     for name in ("capex_pct", "da_pct", "operating_margin", "nwc_pct"):
         assert d.provenance[name].source == "derived", name

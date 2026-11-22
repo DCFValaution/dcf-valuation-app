@@ -80,6 +80,7 @@ from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       fx_conversion_clause, honesty_note,
                       relative_comparison, relative_note,
                       hypothetical_available, hypothetical_disclaimer,
+                      hypothetical_framing_for, hypothetical_placeholders_for,
                       speculative_disclaimer, speculative_estimate_available,
                       value_company, value_company_relatively,
                       value_company_hypothetically, value_company_speculatively)
@@ -744,6 +745,31 @@ class NotSuitableResponse(BaseModel):
         description="True when an opt-in speculative estimate can be asked for at "
                     "/valuation/{ticker}/speculative - the company was refused only for losing "
                     "money. Never an endorsement of that estimate, only that one is available.")
+    hypothetical_available: bool = Field(
+        False,
+        description="True when a hypothetical built from the CALLER'S OWN assumptions can be "
+                    "asked for at /valuation/{ticker}/hypothetical, because this refusal has no "
+                    "step after it. A company refused for losing money is offered the "
+                    "speculative estimate first and this stays false; a company refused for "
+                    "outspending its profits has no such tier, and before this its screen "
+                    "ended the conversation. Never an endorsement: what comes back is not a "
+                    "valuation and is not derived from the company's data.")
+    hypothetical_placeholders: dict[str, float] | None = Field(
+        None,
+        description="The starting values for that screen. On a loss-making refusal they are "
+                    "deliberately neutral - no growth, no profit - so nothing flattering is "
+                    "pre-filled on the caller's behalf. On a refusal for outspending profits "
+                    "they are the company's OWN current growth and margin, because that "
+                    "question starts from what the company actually does. "
+                    "`hypothetical_framing` says which, and a client must label them "
+                    "accordingly.")
+    hypothetical_framing: str | None = Field(
+        None,
+        description="Which question that screen asks: 'path_to_profit' for a loss-maker, or "
+                    "'what_would_have_to_be_true' for a profitable company that outspends "
+                    "its profits. The two need different wording throughout, and a client "
+                    "that shows the loss-maker's framing for the second is saying something "
+                    "untrue about the company.")
 
 
 class AnnualDividendOut(BaseModel):
@@ -1034,6 +1060,17 @@ class HypotheticalResponse(BaseModel):
         False,
         description="Always false. The three drivers came from the caller; only the discount "
                     "rate, tax and reinvestment ratios come from the company's figures.")
+    framing: str = Field(
+        ...,
+        description="Which question this answers: 'path_to_profit' for a loss-maker, whose "
+                    "own figures point away from the profit being assumed, or "
+                    "'what_would_have_to_be_true' for a profitable company that outspends "
+                    "its profits, which starts from the company's own figures. A client "
+                    "must take its wording from this, not from the first route alone.")
+    investment_note: str = Field(
+        "",
+        description="What the model holds fixed while the caller sets the rest: the "
+                    "company's own capital spending. Empty when the figure was unavailable.")
     disclaimer_headline: str
     disclaimer: str = Field(
         ..., description="The strongest disclaimer this API produces. Must be displayed in "
@@ -1500,6 +1537,16 @@ def _not_suitable_body(report: "ValuationReport | DDMReport") -> dict:
         reasons=report.suitability.reasons,
         assumptions=_assumption_list(report.derived.provenance),
         speculative_estimate_available=speculative_estimate_available(report),
+        hypothetical_available=bool(getattr(report, "offer_hypothetical",
+                                            False)),
+        hypothetical_placeholders=(
+            hypothetical_placeholders_for(report)
+            if getattr(report, "offer_hypothetical", False) else None
+        ),
+        hypothetical_framing=(
+            hypothetical_framing_for(report.suitability.codes)
+            if getattr(report, "offer_hypothetical", False) else None
+        ),
     )
     return payload.model_dump()
 
@@ -2252,6 +2299,8 @@ def _serialise_hypothetical(report: Any) -> HypotheticalResponse:
     centre = len(r.sensitivity_margins) // 2
 
     return HypotheticalResponse(
+        framing=report.framing,
+        investment_note=report.investment_note,
         disclaimer_headline=HYPOTHETICAL_HEADLINE,
         disclaimer=hypothetical_disclaimer(report),
         company=_company_out(report),

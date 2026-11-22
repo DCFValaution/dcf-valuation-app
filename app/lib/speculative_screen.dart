@@ -309,6 +309,9 @@ class _SpeculativeScreenState extends State<SpeculativeScreen> {
                     ticker: widget.ticker,
                     companyName: widget.companyName,
                     placeholders: placeholders,
+                    // No route passed: this screen only ever refuses
+                    // loss-makers, so the path-to-profit framing is the
+                    // right one and is the default.
                   ),
                 ),
               ),

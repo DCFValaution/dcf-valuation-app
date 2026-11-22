@@ -8,6 +8,7 @@ import 'assumption_sliders.dart';
 import 'dcf_engine.dart';
 import 'export_button.dart';
 import 'formatting.dart';
+import 'hypothetical_screen.dart';
 import 'relative_controller.dart';
 import 'relative_view.dart';
 import 'ui.dart';
@@ -630,6 +631,32 @@ class _ValuationScreenState extends State<ValuationScreen> {
     );
   }
 
+  /// The user asked to set their own assumptions past a refusal that had no
+  /// other step after it.
+  ///
+  /// Reached only when the backend says so, which it does for a company
+  /// refused for outspending its profits rather than for losing money -
+  /// Tesla's case. The speculative tier does not serve those, so this screen
+  /// used to be unreachable and the refusal was a dead end.
+  ///
+  /// The starting values come from the backend, never from here, so the app
+  /// cannot quietly begin somewhere friendlier than it intended.
+  void _openHypothetical(ValuationNotSuitable refusal) {
+    final placeholders = refusal.hypotheticalPlaceholders;
+    if (placeholders == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HypotheticalScreen(
+          api: _api,
+          ticker: refusal.ticker.isNotEmpty ? refusal.ticker : _resultTicker,
+          companyName: refusal.companyName,
+          placeholders: placeholders,
+          framing: refusal.hypotheticalFraming,
+        ),
+      ),
+    );
+  }
+
   /// A company was picked from the dropdown: fill in its ticker and value it.
   void _selectSearchResult(CompanySearchResult result) {
     _controller.value = TextEditingValue(
@@ -1227,6 +1254,11 @@ class _ValuationScreenState extends State<ValuationScreen> {
             result: result,
             onShowSpeculative: result.speculativeEstimateAvailable
                 ? () => _openSpeculative(result)
+                : null,
+            onShowHypothetical:
+                result.hypotheticalAvailable &&
+                    result.hypotheticalPlaceholders != null
+                ? () => _openHypothetical(result)
                 : null,
           ),
           ValuationFailure() => _FailureCard(result: result),
@@ -2770,7 +2802,11 @@ class _Metric extends StatelessWidget {
 }
 
 class _NotSuitableCard extends StatelessWidget {
-  const _NotSuitableCard({required this.result, this.onShowSpeculative});
+  const _NotSuitableCard({
+    required this.result,
+    this.onShowSpeculative,
+    this.onShowHypothetical,
+  });
 
   final ValuationNotSuitable result;
 
@@ -2778,6 +2814,12 @@ class _NotSuitableCard extends StatelessWidget {
   /// exists for this refusal - a company refused only for losing money - and
   /// never for any other.
   final VoidCallback? onShowSpeculative;
+
+  /// Opens the hypothetical. Offered only where the backend says this
+  /// refusal has no step after it - a company refused for outspending its
+  /// profits rather than for losing money, which has no speculative tier
+  /// and whose screen used to end the conversation.
+  final VoidCallback? onShowHypothetical;
 
   @override
   Widget build(BuildContext context) {
@@ -2826,7 +2868,7 @@ class _NotSuitableCard extends StatelessWidget {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Text(
-                        'A standard DCF isn’t the right tool here',
+                        'A standard valuation isn’t the right tool here',
                         style: context.text.titleSmall?.copyWith(
                           color: colors.caution,
                         ),
@@ -2881,12 +2923,11 @@ class _NotSuitableCard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
-        Text(
-          'No intrinsic value is shown on purpose — for this company the model '
-          'would produce a confident figure with no economic meaning.',
-          style: context.text.bodySmall?.copyWith(color: colors.textSecondary),
-        ),
+
+        // The backend's own message, above, already says that no intrinsic
+        // value is reported deliberately and why - and it says it with the
+        // company's name in it. A second line here said the same thing again
+        // in weaker words, which read as insistence rather than explanation.
 
         // The opt-in. Below the refusal, visually quieter than it, and framed
         // as what it is before anyone taps: the refusal remains the answer,
@@ -2911,6 +2952,48 @@ class _NotSuitableCard extends StatelessWidget {
             onPressed: onShowSpeculative,
             icon: const Icon(Icons.science_outlined, size: 18),
             label: const Text('Show a speculative estimate anyway'),
+            style: TextButton.styleFrom(
+              foregroundColor: colors.textSecondary,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+        ],
+
+        // The other opt-in, for a refusal with no speculative tier behind
+        // it. Same shape and the same quietness, because it is the same
+        // kind of step: the refusal is still the answer.
+        if (result.hypotheticalAvailable && onShowHypothetical != null) ...[
+          const SizedBox(height: AppSpacing.xxl),
+          Divider(color: colors.hairline, height: 1),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            // "Nothing in it comes from its accounts" was written for the
+            // loss-maker's screen, which starts from zero. The screen this
+            // opens starts from the company's own current figures, so that
+            // sentence would be false about the very first thing the reader
+            // sees. What is true on both routes is that the figure is theirs
+            // and is not a valuation.
+            result.hypotheticalFraming == kFramingWhatWouldHaveToBeTrue
+                ? 'The model won’t put a value on this company. You can ask '
+                      'the other question instead: what would have to be true '
+                      'about its growth, margins and investment for it to be '
+                      'worth something? That is arithmetic on your '
+                      'assumptions, starting from the company’s own figures. '
+                      'It is not a valuation.'
+                : 'You can set your own assumptions and see what they would '
+                      'imply. That is arithmetic on your figures, not a '
+                      'valuation of this company, and nothing in it comes '
+                      'from its accounts.',
+            style: context.text.bodySmall?.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextButton.icon(
+            key: const Key('hypothetical-opt-in'),
+            onPressed: onShowHypothetical,
+            icon: const Icon(Icons.tune_outlined, size: 18),
+            label: const Text('Set my own assumptions instead'),
             style: TextButton.styleFrom(
               foregroundColor: colors.textSecondary,
               padding: EdgeInsets.zero,

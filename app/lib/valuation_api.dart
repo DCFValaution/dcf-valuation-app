@@ -630,12 +630,36 @@ class ValuationNotSuitable extends ValuationResult {
   /// for, nothing about whether it is worth anything. No UI acts on it yet.
   final bool speculativeEstimateAvailable;
 
+  /// True when this refusal has no step after it, so the hypothetical - the
+  /// reader's own assumptions - is the only thing left to offer.
+  ///
+  /// False where a speculative estimate is available, because that is the
+  /// gentler step and should be taken first. Both false means the refusal
+  /// really is the end, which is a fair answer for a company with no
+  /// revenue to assume anything about.
+  final bool hypotheticalAvailable;
+
+  /// The values that screen starts from, from the backend. Null when it is
+  /// not on offer, so the app cannot pick its own.
+  ///
+  /// Neutral on a loss-making refusal; the company's own current growth and
+  /// margin on one refused for outspending its profits. Which of the two,
+  /// and therefore how they must be labelled, is [hypotheticalFraming].
+  final HypotheticalInputs? hypotheticalPlaceholders;
+
+  /// Which question the hypothetical screen will ask for this refusal.
+  /// Empty when none is offered.
+  final String hypotheticalFraming;
+
   const ValuationNotSuitable({
     required this.ticker,
     required this.companyName,
     required this.message,
     required this.reasons,
     this.speculativeEstimateAvailable = false,
+    this.hypotheticalAvailable = false,
+    this.hypotheticalPlaceholders,
+    this.hypotheticalFraming = '',
   });
 
   factory ValuationNotSuitable.fromJson(Map<String, dynamic> json) {
@@ -643,12 +667,17 @@ class ValuationNotSuitable extends ValuationResult {
     return ValuationNotSuitable(
       ticker: company['ticker'] as String? ?? '',
       companyName: company['company_name'] as String? ?? '',
-      message: json['message'] as String? ?? 'A standard DCF is not suitable.',
+      message: json['message'] as String? ?? 'A standard valuation is not suitable.',
       reasons: (json['reasons'] as List<dynamic>? ?? const [])
           .map((r) => r.toString())
           .toList(),
       speculativeEstimateAvailable:
           json['speculative_estimate_available'] as bool? ?? false,
+      hypotheticalAvailable: json['hypothetical_available'] as bool? ?? false,
+      hypotheticalPlaceholders: HypotheticalInputs.fromPlaceholders(
+        json['hypothetical_placeholders'] as Map<String, dynamic>?,
+      ),
+      hypotheticalFraming: json['hypothetical_framing'] as String? ?? '',
     );
   }
 }
@@ -1316,6 +1345,20 @@ class HypotheticalInputs {
   /// True while this is still the neutral starting point rather than anything
   /// the user has claimed.
   bool get hasNoProfit => targetOperatingMargin <= 0;
+
+  /// The backend's neutral starting values, or null when it offered none.
+  ///
+  /// One parser for both refusal paths - the speculative one and the DCF one -
+  /// so neither can quietly start somewhere friendlier than the other.
+  static HypotheticalInputs? fromPlaceholders(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    return HypotheticalInputs(
+      revenueGrowth: (json['revenue_growth'] as num?)?.toDouble() ?? 0,
+      targetOperatingMargin:
+          (json['target_operating_margin'] as num?)?.toDouble() ?? 0,
+      yearsToTarget: (json['years_to_target'] as num?)?.round() ?? 5,
+    );
+  }
 }
 
 /// One assumed figure beside the company's actual one.
@@ -1377,6 +1420,22 @@ class Hypothetical {
   final List<String> warnings;
   final SensitivityGrid? sensitivity;
 
+  /// Which question this screen is asking, from the backend.
+  ///
+  /// Two routes reach it. A loss-maker is assuming a turnaround its own
+  /// figures point away from; a profitable company that outspends its
+  /// profits is not, and showing it the loss-maker's words would say
+  /// something untrue about it. Never inferred here.
+  final String framing;
+
+  /// What the model holds fixed while the reader sets the rest. Empty when
+  /// the backend had no figure for it.
+  final String investmentNote;
+
+  /// True on the route that opens from the company's own current figures.
+  bool get startsFromTheCompanysOwnFigures =>
+      framing == 'what_would_have_to_be_true';
+
   const Hypothetical({
     required this.ticker,
     required this.companyName,
@@ -1390,6 +1449,8 @@ class Hypothetical {
     required this.whySpeculativeRefused,
     required this.warnings,
     this.sensitivity,
+    this.framing = 'path_to_profit',
+    this.investmentNote = '',
   });
 
   bool get isNegative => valuePerShare < 0;
@@ -1427,6 +1488,8 @@ class Hypothetical {
       sensitivity: SensitivityGrid.fromSpeculative(
         json['sensitivity'] as Map<String, dynamic>?,
       ),
+      framing: json['framing'] as String? ?? 'path_to_profit',
+      investmentNote: json['investment_note'] as String? ?? '',
     );
   }
 }
@@ -1677,8 +1740,6 @@ class ValuationApi {
           );
         }
       case 422:
-        final placeholders =
-            body['hypothetical_placeholders'] as Map<String, dynamic>?;
         return SpeculativeRefused(
           message,
           (body['reasons'] as List<dynamic>? ?? const [])
@@ -1686,18 +1747,9 @@ class ValuationApi {
               .toList(),
           hypotheticalAvailable:
               body['hypothetical_available'] as bool? ?? false,
-          placeholders: placeholders == null
-              ? null
-              : HypotheticalInputs(
-                  revenueGrowth:
-                      (placeholders['revenue_growth'] as num?)?.toDouble() ?? 0,
-                  targetOperatingMargin:
-                      (placeholders['target_operating_margin'] as num?)
-                          ?.toDouble() ??
-                      0,
-                  yearsToTarget:
-                      (placeholders['years_to_target'] as num?)?.round() ?? 5,
-                ),
+          placeholders: HypotheticalInputs.fromPlaceholders(
+            body['hypothetical_placeholders'] as Map<String, dynamic>?,
+          ),
         );
       case 429:
         return const SpeculativeFailure(

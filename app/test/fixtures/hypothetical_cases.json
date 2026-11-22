@@ -842,5 +842,382 @@
       "method": "hypothetical",
       "reasons": []
     }
+  },
+  "tsla_opening": {
+    "status_code": 200,
+    "body": {
+      "method": "hypothetical",
+      "is_valuation": false,
+      "derived_from_company_data": false,
+      "framing": "what_would_have_to_be_true",
+      "investment_note": "Investment is not yours to set on this screen. Once the margin is reached the model spends 5.0% of revenue on capital investment, with depreciation assumed equal to it, so investment stops consuming cash. Tesla, Inc actually spends 14.9% today; 5.0% is a mature-business default, not this company's rate, and the gap between the two is most of why the figure is what it is. A company refused for spending past its profits is one where that figure decides the answer, so it is said here rather than left to be found in the assumptions list.",
+      "disclaimer_headline": "A HYPOTHETICAL YOU BUILT - NOT A VALUATION",
+      "disclaimer": "THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT TESLA, INC IS WORTH. It is arithmetic on assumptions you set. Tesla, Inc was refused a standard valuation because even by the last year of that forecast it would still be spending more cash than it brings in, so there was no positive cash flow to value. No speculative estimate is offered for that either: that path exists only to project a way out of losses, and this company is not losing money. So the question this screen answers is not what the company is worth, but what would have to be true about its growth, its margins and its investment for it to be worth something - and you are the one saying what that is. It opens on the company's own current figures and goes wherever you take them: you have assumed revenue grows +5.2% a year and that the operating margin reaches 5% from 5.1% today within 5 years, and the figure below is what those assumptions imply. Change any one of them and it moves by multiples or changes sign. Treat it as a way of seeing what your own beliefs would have to be worth, not as information about the company, and never as a reason to buy or sell.",
+      "company": {
+        "ticker": "TSLA",
+        "company_name": "Tesla, Inc.",
+        "sector": "Consumer Cyclical",
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
+      },
+      "hypothetical_value_per_share": 20.66572451348242,
+      "current_price": 345.82,
+      "your_assumptions": {
+        "revenue_growth": 0.051943257367141005,
+        "target_operating_margin": 0.05113522519957396,
+        "years_to_target": 5
+      },
+      "reality": [
+        {
+          "name": "revenue_growth",
+          "label": "Revenue growth",
+          "assumed": 0.051943257367141005,
+          "actual": 0.051943257367141005,
+          "statement": "You have assumed revenue grows +5.2% a year. Tesla, Inc's revenue has actually grown 5.2% a year, and -2.9% in the latest year alone.",
+          "contradicts": false
+        },
+        {
+          "name": "target_operating_margin",
+          "label": "Target operating margin",
+          "assumed": 0.05113522519957396,
+          "actual": 0.05113522519957396,
+          "statement": "You have assumed an operating margin of 5.1%. Tesla, Inc actually earned 5.1% in its 2025 financial year. Its gross margin - what is left before operating costs - was 18%.",
+          "contradicts": false
+        },
+        {
+          "name": "years_to_target",
+          "label": "Years to the target",
+          "assumed": 5.0,
+          "actual": 0.05113522519957396,
+          "statement": "You have not assumed the margin changes, so this setting does nothing yet. It starts to matter as soon as you move the target away from 5.1%.",
+          "contradicts": false
+        }
+      ],
+      "why_standard_valuation_refused": [
+        "Even by the last year of the forecast, the company would still be spending more cash than it brings in (-$87m that year). Its investment needs outweigh its profits, so there is no positive cash flow to put a long-term value on."
+      ],
+      "why_speculative_estimate_refused": [],
+      "starting_point": {
+        "fiscal_year": "2025",
+        "revenue": 103570.0,
+        "operating_margin": 0.05113522519957396,
+        "gross_margin": 0.18026511436616155,
+        "latest_revenue_growth": -0.02930699150373628,
+        "revenue_cagr": 0.051943257367141005,
+        "cash": 46178.0,
+        "total_debt": 9267.0,
+        "shares": 3540.0,
+        "history": [
+          {
+            "fiscal_year": "2025",
+            "revenue": 94827.0,
+            "operating_margin": 0.05113522519957396,
+            "gross_margin": 0.18026511436616155
+          },
+          {
+            "fiscal_year": "2024",
+            "revenue": 97690.0,
+            "operating_margin": 0.07943494728221927,
+            "gross_margin": 0.17862626676220697
+          },
+          {
+            "fiscal_year": "2023",
+            "revenue": 96773.0,
+            "operating_margin": 0.0918747997891974,
+            "gross_margin": 0.18248891736331416
+          },
+          {
+            "fiscal_year": "2022",
+            "revenue": 81462.0,
+            "operating_margin": 0.16979696054602145,
+            "gross_margin": 0.25598438535759005
+          }
+        ]
+      },
+      "path": [
+        {
+          "period": 1,
+          "revenue": 108949.7631655148,
+          "operating_margin": 0.05113522519957396,
+          "ebit": 5571.170674908847,
+          "ufcf": -3515.9053066450433,
+          "discount_factor": 0.8963449809104145,
+          "pv_ufcf": -3151.4640749675764
+        },
+        {
+          "period": 2,
+          "revenue": 114608.9687537102,
+          "operating_margin": 0.05113522519957396,
+          "ebit": 5860.555427111906,
+          "ufcf": -1616.4399637953488,
+          "discount_factor": 0.8034343248032912,
+          "pv_ufcf": -1298.7033508969726
+        },
+        {
+          "period": 3,
+          "revenue": 120562.13191426679,
+          "operating_margin": 0.05113522519957396,
+          "ebit": 6164.971765976776,
+          "ufcf": 489.84048447168345,
+          "discount_factor": 0.7201543245285779,
+          "pv_ufcf": 352.76074322145655
+        },
+        {
+          "period": 4,
+          "revenue": 126824.52176102076,
+          "operating_margin": 0.05113522519957396,
+          "ebit": 6485.200481078065,
+          "ufcf": 2819.2963874385564,
+          "discount_factor": 0.6455067142721206,
+          "pv_ufcf": 1819.874747614722
+        },
+        {
+          "period": 5,
+          "revenue": 133412.20053531803,
+          "operating_margin": 0.05113522519957396,
+          "ebit": 6822.062918744209,
+          "ufcf": 5389.429705807925,
+          "discount_factor": 0.5785967034817884,
+          "pv_ufcf": 3118.30626142729
+        }
+      ],
+      "valuation": {
+        "pv_path_sum": 840.7743263989191,
+        "cumulative_cash_burn": 5132.345270440392,
+        "revenue_at_profitability": 133412.20053531803,
+        "value_at_profitability": 61190.964687968095,
+        "pv_value_at_profitability": 35404.89045132886,
+        "enterprise_value": 36245.664777727776,
+        "equity_value": 73156.66477772777,
+        "share_from_after_profitability": 0.9768034513491513
+      },
+      "assumptions": [
+        {
+          "name": "speculative_revenue_growth",
+          "value": 0.051943257367141005,
+          "source": "override",
+          "detail": "supplied by caller (would have been 0 from derived (clamped))",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "target_operating_margin",
+          "value": 0.05113522519957396,
+          "source": "override",
+          "detail": "supplied by caller (would have been 0.1 from default)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "years_to_profitability",
+          "value": 5.0,
+          "source": "override",
+          "detail": "supplied by caller (would have been 2 from derived (clamped))",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "post_profitability_growth",
+          "value": 0.025971628683570502,
+          "source": "default",
+          "detail": "half the 5.2% assumed until profitability, as growth slows with scale; floored at terminal growth",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "mature_capex_pct",
+          "value": 0.05,
+          "source": "default",
+          "detail": "5% of revenue, typical of a mature business - today's build-out rate of 14.9% is not assumed to last. Depreciation is assumed to equal capex once mature",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "mature_nwc_pct",
+          "value": 0.0,
+          "source": "derived (clamped)",
+          "detail": "the company's working-capital investment of -6.2% of revenue growth, limited to [0%, 10%] once mature",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21,
+          "source": "default",
+          "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "wacc",
+          "value": 0.11564188041115986,
+          "source": "derived",
+          "detail": "CAPM: 4.92% + 1.52x4.41% = 11.61% equity; debt 5.12% (4.07% after tax); weights 99.4%E / 0.6%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.025,
+          "source": "default",
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "years of mature-company forecast after profitability, before the terminal value",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        }
+      ],
+      "wacc_inputs": [
+        {
+          "name": "risk_free_rate",
+          "value": 0.0492,
+          "source": "derived",
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "equity_risk_premium",
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
+        },
+        {
+          "name": "beta",
+          "value": 1.5167493306195459,
+          "source": "derived",
+          "detail": "Blume-adjusted from raw 1.77; computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "cost_of_debt",
+          "value": 0.05119845274770481,
+          "source": "derived",
+          "detail": "median interest expense / average debt (FY2025, FY2024, FY2023, FY2022)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        }
+      ],
+      "sensitivity": {
+        "target_operating_margins": [
+          -0.0488647748,
+          0.0011352252,
+          0.0511352252,
+          0.1011352252,
+          0.1511352252
+        ],
+        "years_to_profitability": [
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "grid": [
+          [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            9.357443399152652,
+            8.708600248365652,
+            8.08408360263599,
+            7.482863374183036,
+            6.9039560925516055
+          ],
+          [
+            22.373975886420542,
+            21.506334395370406,
+            20.665724513589627,
+            19.851237829198254,
+            19.06199621570728
+          ],
+          [
+            35.39050837368843,
+            34.30406854237515,
+            33.24736542454327,
+            32.21961228421348,
+            31.22003633886295
+          ],
+          [
+            48.407040860956315,
+            47.10180268937991,
+            45.829006335496906,
+            44.5879867392287,
+            43.37807646201863
+          ]
+        ],
+        "centre_row": 2,
+        "centre_col": 2
+      },
+      "warnings": [
+        "On your assumptions Tesla, Inc burns $5.1bn of cash before turning profitable, covered by today's $46.2bn only if nothing goes worse than you have assumed.",
+        "98% of this figure comes from after your assumed turn to profit, so it rests almost entirely on a future you have described."
+      ]
+    }
+  },
+  "tsla_no_margin": {
+    "status_code": 422,
+    "body": {
+      "code": "hypothetical_incomplete",
+      "message": "A company earning nothing on its sales produces no cash to put a value on, so there is no figure at this margin. Move it above 0% to see what your assumption implies.",
+      "method": "hypothetical",
+      "reasons": []
+    }
   }
 }

@@ -81,7 +81,9 @@
           "is_percent": false
         }
       ],
-      "speculative_estimate_available": true
+      "speculative_estimate_available": true,
+      "hypothetical_available": false,
+      "hypothetical_placeholders": null
     }
   },
   "rivn_speculative": {
@@ -723,7 +725,9 @@
           "is_percent": false
         }
       ],
-      "speculative_estimate_available": false
+      "speculative_estimate_available": false,
+      "hypothetical_available": false,
+      "hypothetical_placeholders": null
     }
   },
   "axp_refusal": {
@@ -808,7 +812,9 @@
           "is_percent": false
         }
       ],
-      "speculative_estimate_available": false
+      "speculative_estimate_available": false,
+      "hypothetical_available": false,
+      "hypothetical_placeholders": null
     }
   },
   "qs_speculative_refused": {
@@ -905,6 +911,328 @@
       "speculative_estimate_available": false,
       "hypothetical_available": false,
       "hypothetical_placeholders": null
+    }
+  },
+  "tsla_refusal": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "dcf",
+      "company": {
+        "ticker": "TSLA",
+        "company_name": "Tesla, Inc.",
+        "sector": "Consumer Cyclical",
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
+      },
+      "suitable": false,
+      "intrinsic_value_per_share": null,
+      "message": "A standard discounted cash flow valuation isn't suitable for Tesla, Inc. No intrinsic value is reported, deliberately: the model would produce a figure with no economic meaning.",
+      "reasons": [
+        "Even by the last year of the forecast, the company would still be spending more cash than it brings in (-$87m that year). Its investment needs outweigh its profits, so there is no positive cash flow to put a long-term value on."
+      ],
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.051943257367141005,
+          "source": "derived",
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (81.5bn -> 94.8bn)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "operating_margin",
+          "value": 0.05113522519957396,
+          "source": "derived",
+          "detail": "the latest year's 5.1%; the margin has moved one way for 4 years (declining) rather than spiking, so the level reached is used",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.20433815350389323,
+          "source": "derived",
+          "detail": "median effective rate over 3 profitable year(s)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "da_pct",
+          "value": 0.05494932951172075,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_terminal_pct",
+          "value": 0.09932702314269647,
+          "source": "derived",
+          "detail": "mean capex / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.14882688037076375,
+          "source": "derived",
+          "detail": "capex / revenue, trailing twelve months; fades from 14.9% (current) to 9.9% (3-yr mean) over the forecast",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "nwc_pct",
+          "value": -0.06162432205150687,
+          "source": "derived",
+          "detail": "median working capital as a share of revenue across FY2022-FY2025 (4 years)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "wacc",
+          "value": 0.11564188041115986,
+          "source": "derived",
+          "detail": "CAPM: 4.92% + 1.52x4.41% = 11.61% equity; debt 5.12% (4.07% after tax); weights 99.4%E / 0.6%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_enabled",
+          "value": 0.0,
+          "source": "default",
+          "detail": "off; growth is held flat across the forecast",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_start_year",
+          "value": 3.0,
+          "source": "default",
+          "detail": "last year at the full starting rate before the glide",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        }
+      ],
+      "speculative_estimate_available": false,
+      "hypothetical_available": true,
+      "hypothetical_placeholders": {
+        "revenue_growth": 0.051943257367141005,
+        "target_operating_margin": 0.05113522519957396,
+        "years_to_target": 5.0
+      },
+      "hypothetical_framing": "what_would_have_to_be_true"
+    }
+  },
+  "axp_no_steps": {
+    "status_code": 422,
+    "body": {
+      "code": "not_suitable",
+      "method": "dcf",
+      "company": {
+        "ticker": "AXP",
+        "company_name": "American Express Company",
+        "sector": "Financial Services",
+        "exchange": "NYSE",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
+      },
+      "suitable": false,
+      "intrinsic_value_per_share": null,
+      "message": "A standard discounted cash flow valuation isn't suitable for American Express Company. No intrinsic value is reported, deliberately: the model would produce a figure with no economic meaning.",
+      "reasons": [
+        "American Express Company is a Credit Services company with a loan book 3.1 times its annual revenue. Lending is part of how it earns that revenue rather than how it is financed, so - as for a bank - unlevered free cash flow and an enterprise-to-equity bridge are not meaningful, and a DCF would produce a figure with no economic meaning. A dividend discount model is not substituted either: it counts only dividends, and American Express Company returned $5.8bn through buybacks against $2.3bn in dividends in its 2025 financial year, so it would understate what shareholders receive. The appropriate tool is an excess-return model, which values a lender from its return on equity against its cost of equity. That model is not available yet, so no value is reported."
+      ],
+      "assumptions": [
+        {
+          "name": "revenue_growth",
+          "value": 0.10966360326420155,
+          "source": "derived",
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (52.9bn -> 72.2bn)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "operating_margin",
+          "value": 0.3049840786376852,
+          "source": "derived",
+          "detail": "the latest year's 30.5%, which sits inside the previous years' own range (23.4% to 32.1%)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "tax_rate",
+          "value": 0.21450174486234974,
+          "source": "derived",
+          "detail": "median effective rate over 3 profitable year(s)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "da_pct",
+          "value": 0.025413577158107024,
+          "source": "derived",
+          "detail": "median D&A / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_terminal_pct",
+          "value": 0.029459517081703076,
+          "source": "derived",
+          "detail": "mean capex / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_pct",
+          "value": 0.02897693672383205,
+          "source": "derived",
+          "detail": "median capex / revenue over 3 years (no trailing figure reported)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "nwc_pct",
+          "value": 0.0,
+          "source": "default",
+          "detail": "no balance sheet reported current assets and liabilities; working capital assumed to stay flat",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "wacc",
+          "value": 0.09961810013545522,
+          "source": "derived",
+          "detail": "CAPM: 4.92% + 1.03x4.41% = 9.46% equity; debt 14.92% (11.72% after tax); weights 77.8%E / 22.2%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "terminal_growth",
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "projection_years",
+          "value": 5.0,
+          "source": "default",
+          "detail": "modelling convention",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_enabled",
+          "value": 0.0,
+          "source": "default",
+          "detail": "off; growth is held flat across the forecast",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_start_year",
+          "value": 3.0,
+          "source": "default",
+          "detail": "last year at the full starting rate before the glide",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        }
+      ],
+      "speculative_estimate_available": false,
+      "hypothetical_available": false,
+      "hypothetical_placeholders": null,
+      "hypothetical_framing": null
     }
   }
 }

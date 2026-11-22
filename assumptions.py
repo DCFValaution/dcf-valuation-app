@@ -395,7 +395,36 @@ SANE_COST_OF_DEBT = (0.005, 0.25)
 SANE_WACC = (0.04, 0.20)
 
 # --- Clamps: (floor, ceiling) --------------------------------------------
-CLAMP_REVENUE_GROWTH = (0.00, 0.15)
+# Raised from 0.15, and the ceiling now caps the STARTING rate of a glide
+# rather than a rate held flat for the whole forecast. The two are different
+# assumptions wearing one number.
+#
+# At 15% held flat, half the companies with any growth hit the ceiling - six
+# of twelve - and each was modelled as growing 15% for five years and then
+# 4% forever. An eleven-point cliff, with 69% to 88% of the value in the
+# terminal figure on the far side of it. Palantir growing 33% and Nvidia
+# 100% got the same 15% as Microsoft's 16%.
+#
+# 25% rather than higher because Nvidia is the constraint: its three-year
+# CAGR is 100%, and at a 35% start it values a $126 share at $259. A model
+# whose whole purpose is sobriety should not make that claim on a growth
+# rate nobody expects to persist. At 25% it lands at $183, and Coinbase -
+# the other hypergrower with a real business - lands within 3% of its price.
+CLAMP_REVENUE_GROWTH = (0.00, 0.25)
+
+# Above this starting rate a company gets the fade and a ten-year forecast,
+# so the deceleration has somewhere to happen. Below it, five years flat,
+# which is what has always shipped and is right for a company whose growth
+# is already near its terminal rate.
+#
+# Ten years rather than five because a 25% grower decelerating to 4% over
+# five years falls 4.2 points a year, which is a crash and not a fade, and
+# it still leaves a cliff. Over ten it is 2.1 points a year. The cost is
+# that more value sits in years six to ten, which are the least knowable -
+# but they are discounted hardest, and the alternative puts that value in
+# the terminal figure, which is less knowable still.
+FAST_GROWTH_THRESHOLD = 0.15
+FAST_GROWTH_YEARS = 10
 CLAMP_OPERATING_MARGIN = (-1.00, 0.60)
 # Raised from 0.35, which was below what real companies pay. Chevron's
 # three-year median is 35.5%, Shell's 39.8%, and BP's is 81.9% - two years
@@ -429,6 +458,39 @@ CLAMP_CAPEX_PCT = (0.00, 1.00)
 CLAMP_NWC_PCT = (-0.40, 0.60)
 
 RATIO_WINDOW = 3  # years of history used for median ratios
+# --- The operating margin rule -------------------------------------------
+#
+# Three steps, in order, over MARGIN_WINDOW years of history:
+#
+#   1. monotone across the window -> the LATEST year. A margin that has
+#      moved one way for four years has reached a level, not spiked to one.
+#   2. otherwise, the latest inside the previous years' own range -> the
+#      LATEST. Nothing unusual happened in it.
+#   3. otherwise -> the MEDIAN of the window. One year broke the pattern,
+#      and a median is the figure a single extreme year cannot move.
+#
+# A three-year median shipped before this and dragged improving companies
+# back to their past: Palantir's margin went -8.5% -> 5.4% -> 10.8% ->
+# 31.6% and the median handed the forecast 8.1%.
+#
+# A three-year MEAN was considered and is the worst of the candidates, not
+# the safest. One extreme year drags it anywhere: 3M's four-year mean
+# operating margin is 0.6% against a current 19.2%, because a PFAS and
+# earplug charge put -43.6% two years back, and valuing 3M on the mean
+# gives MINUS $25.62 a share.
+#
+# The window is four years rather than three because a one-off is almost
+# never in the latest year - 3M's, Merck's and Pfizer's all sit two years
+# back - and three years is too few to tell a pattern from its exception.
+MARGIN_WINDOW = 4
+
+# A move of more than this across the window is steep enough that the
+# reader should be told the forecast assumes the latest level holds. It is
+# not a reason to use a different figure: a company that has improved for
+# four years is more likely to hold its gain than to hand it back. It is a
+# reason to say so.
+MARGIN_TREND_DISCLOSE = 0.10
+
 
 # Years spanned by the revenue growth CAGR: FY-3 to the latest fiscal year,
 # which is four observations and three periods of growth.
@@ -571,6 +633,54 @@ def _cost_of_debt_history(fin: CompanyFinancials) -> list[tuple[str, float]]:
         rates.append((str(income_row.get("fiscalYear", "?")), interest / debt))
     return rates
 
+
+
+def margin_from_history(series: list[float]) -> tuple[float, str, str]:
+    """(margin, rule, why) from *series*, newest first.
+
+    See the note on MARGIN_WINDOW for the three steps and what each is for.
+    """
+    latest = series[0]
+    if len(series) < 3:
+        return (latest, "latest",
+                f"the latest year's {latest:.1%}; only {len(series)} "
+                f"year{'s' if len(series) > 1 else ''} of history")
+
+    prior = series[1:]
+    middle = median(series)
+    improving = all(a >= b for a, b in zip(series, series[1:]))
+    declining = all(a <= b for a, b in zip(series, series[1:]))
+
+    if improving or declining:
+        return (latest, "latest",
+                f"the latest year's {latest:.1%}; the margin has moved one "
+                f"way for {len(series)} years "
+                f"({'improving' if improving else 'declining'}) rather than "
+                f"spiking, so the level reached is used")
+    if min(prior) <= latest <= max(prior):
+        return (latest, "latest",
+                f"the latest year's {latest:.1%}, which sits inside the "
+                f"previous years' own range ({min(prior):.1%} to "
+                f"{max(prior):.1%})")
+    return (middle, "median",
+            f"the {len(series)}-year median {middle:.1%}; the latest year's "
+            f"{latest:.1%} broke a pattern that was otherwise "
+            f"{min(prior):.1%} to {max(prior):.1%}")
+
+
+def margin_trend_span(series: list[float]) -> float | None:
+    """How far the margin moved across the window, if it moved one way.
+
+    None where it did not, because a company that went up and then down has
+    no trend for a reader to be warned about.
+    """
+    if len(series) < 3:
+        return None
+    improving = all(a >= b for a, b in zip(series, series[1:]))
+    declining = all(a <= b for a, b in zip(series, series[1:]))
+    if not (improving or declining):
+        return None
+    return series[0] - series[-1]
 
 def capital_values(fin: CompanyFinancials) -> tuple[float, float]:
     """(market value of equity, book value of debt) for *fin*.
@@ -976,17 +1086,30 @@ def derive_assumptions(fin: CompanyFinancials,
             return f"{detail}; {skipped} more reported no figure"
         return detail
 
-    # Operating margin
-    margin_value, margin_years, margin_skipped = median_ratio(
-        window, "operatingIncome", window)
+    # Operating margin, over its OWN window - wider than RATIO_WINDOW,
+    # because a one-off charge is almost never in the latest year and three
+    # years is too few to tell a pattern from its exception.
+    margin_history = [
+        (reported(row, "operatingIncome") or 0.0) / num(row, "revenue")
+        for row in income[:MARGIN_WINDOW]
+        if num(row, "revenue") > 0
+        and reported(row, "operatingIncome") is not None
+    ]
+    margin_skipped = len(income[:MARGIN_WINDOW]) - len(margin_history)
+    if margin_history:
+        margin_value, margin_rule, margin_why = margin_from_history(
+            margin_history)
+        diagnostics["operating_margin_rule"] = margin_rule
+        diagnostics["operating_margin_window"] = list(margin_history)
+        diagnostics["operating_margin_trend_span"] = margin_trend_span(
+            margin_history)
+        if margin_skipped:
+            margin_why += f"; {margin_skipped} more reported no figure"
+    else:
+        margin_value, margin_why = None, ""
     operating_margin = derive(
-        "operating_margin", margin_value, CLAMP_OPERATING_MARGIN,
-        measured(f"median operatingIncome / revenue over {margin_years} "
-                 f"years", margin_years, margin_skipped),
+        "operating_margin", margin_value, CLAMP_OPERATING_MARGIN, margin_why,
         0.0,
-        # A zero margin is a company that earns nothing, which is a claim,
-        # and the old wording made it in the model's voice. Say instead
-        # which of the two absences caused it.
         ("operating income not reported in any year; assumed nil"
          if margin_skipped else "no usable revenue history; assumed nil"),
     )
@@ -1333,15 +1456,57 @@ def derive_assumptions(fin: CompanyFinancials,
     diagnostics["terminal_growth_ceiling"] = ceiling
 
     # --- Global defaults ---------------------------------------------------
-    projection_years = record("projection_years", DEFAULT_PROJECTION_YEARS, "default",
-                              "modelling convention")
+    #
+    # A company growing faster than FAST_GROWTH_THRESHOLD is projected over
+    # ten years with the growth rate gliding down to its terminal rate.
+    # Everything slower keeps the five flat years that have always shipped.
+    #
+    # The two go together and must not be separated: the fade without a
+    # longer forecast makes a fast grower WORSE than the flat projection,
+    # because it decelerates from the same starting rate over the same five
+    # years - Palantir $7.14 flat against $6.89 faded. It is the pair that
+    # helps, not the fade.
+    fast_grower = revenue_growth > FAST_GROWTH_THRESHOLD
+    if fast_grower:
+        projection_years = record(
+            "projection_years", FAST_GROWTH_YEARS, "derived",
+            f"ten years rather than five, because {revenue_growth:.1%} "
+            f"growth needs room to slow to the "
+            f"{terminal_growth:.1%} it ends at")
+    else:
+        projection_years = record("projection_years",
+                                  DEFAULT_PROJECTION_YEARS, "default",
+                                  "modelling convention")
 
-    # The fade: off unless asked for. Recorded like any other assumption so
-    # that when it is on, the screen can say so and say where it came from.
-    fade_enabled = record("fade_enabled", DEFAULT_FADE_ENABLED, "default",
-                          "off; growth is held flat across the forecast")
-    fade_start_year = record("fade_start_year", DEFAULT_FADE_START_YEAR, "default",
-                             "last year at the full starting rate before the glide")
+    # The fade: on for a fast grower, off otherwise. Recorded like any other
+    # assumption so that when it is on, the screen can say so and say where
+    # it came from.
+    if fast_grower:
+        fade_enabled = record(
+            "fade_enabled", True, "derived",
+            f"on; growth glides from {revenue_growth:.1%} down to "
+            f"{terminal_growth:.1%} across the forecast rather than "
+            f"dropping to it in one step at the end")
+    else:
+        fade_enabled = record("fade_enabled", DEFAULT_FADE_ENABLED, "default",
+                              "off; growth is held flat across the forecast")
+    # A fast grower starts gliding immediately. The default holds the full
+    # rate for three years, which for a 25% starter means compounding 25%
+    # three times before any deceleration - and that is a strong assumption
+    # to make silently: it puts Nvidia 64% above its market price against
+    # 45% when the glide starts at once. The longer hold is still available
+    # as an override; it is not the default for a company whose growth is
+    # the thing most likely to disappoint.
+    if fast_grower:
+        fade_start_year = record(
+            "fade_start_year", 1, "derived",
+            f"the glide starts immediately, so {revenue_growth:.1%} is this "
+            f"year's rate rather than the next three years' rate")
+    else:
+        fade_start_year = record("fade_start_year", DEFAULT_FADE_START_YEAR,
+                                 "default",
+                                 "last year at the full starting rate before "
+                                 "the glide")
     # The shape of the glide is a choice between two named curves, not a
     # quantity, so it is kept out of the numeric provenance channel - which
     # exists to say where a *number* came from - and recorded as a

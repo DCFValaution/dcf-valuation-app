@@ -159,8 +159,15 @@ class TestTheArithmetic:
         assert prov.source == "default"
 
     def test_the_window_matches_the_ratio_window(self):
-        """The margin, tax rate and capex ratios are medians over
-        RATIO_WINDOW years. A growth rate measured over a different span
-        from the margins it multiplies is harder to reason about than one
-        measured over the same span."""
+        """The tax rate and the capex and working-capital ratios are medians
+        over RATIO_WINDOW years. A growth rate measured over a different span
+        from the ratios it multiplies is harder to reason about than one
+        measured over the same span.
+
+        The operating margin is the exception and no longer one of these: it
+        has its own four-year window, because a one-off charge is almost
+        never in the latest year and three years is too few to tell a pattern
+        from its exception. See the note on MARGIN_WINDOW.
+        """
         assert GROWTH_WINDOW_YEARS == A.RATIO_WINDOW
+        assert A.MARGIN_WINDOW > A.RATIO_WINDOW

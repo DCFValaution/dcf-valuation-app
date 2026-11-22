@@ -239,7 +239,7 @@ void main() {
       await value(tester, 'RIVN');
 
       expect(
-        find.text('A standard DCF isn’t the right tool here'),
+        find.text('A standard valuation isn’t the right tool here'),
         findsOneWidget,
       );
       expect(find.byKey(const Key('lens-switcher')), findsNothing);

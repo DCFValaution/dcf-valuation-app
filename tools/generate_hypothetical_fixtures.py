@@ -78,6 +78,32 @@ def main() -> int:
     # A company the speculative estimate already serves is sent back to it.
     record("rivn_hypothetical_refused", hypothetical("RIVN", ASSUMED), 422)
 
+    # --- The other route: a profitable company that outspends its profits --
+    #
+    # Tesla's screen opens on its OWN current growth and margin, so the first
+    # thing a reader sees is what today implies rather than a prompt. The
+    # loss-maker's words are false about it, and these recordings are what
+    # the app's tests hold that against.
+    start = (client.get("/valuation/TSLA").json()
+             .get("hypothetical_placeholders") or {})
+    opening = {"revenue_growth": start.get("revenue_growth", 0),
+               "target_operating_margin": start.get(
+                   "target_operating_margin", 0),
+               "years_to_target": int(start.get("years_to_target", 5))}
+    record("tsla_opening", hypothetical("TSLA", opening), 200,
+           lambda b: b.get("framing") == "what_would_have_to_be_true"
+           and b.get("investment_note", "") != ""
+           and "Nothing here is derived from the company's data"
+           not in b.get("disclaimer", ""))
+
+    # And a margin of nil says so in this route's words, not the
+    # loss-maker's.
+    record("tsla_no_margin",
+           hypothetical("TSLA", {**opening, "target_operating_margin": 0.0}),
+           422,
+           lambda b: b.get("code") == "hypothetical_incomplete"
+           and "path to profitability" not in b.get("message", ""))
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(cases, indent=2), encoding="utf-8")
     print(f"\nWrote {len(cases)} cases to {OUT}")

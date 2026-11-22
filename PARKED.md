@@ -705,3 +705,43 @@ price from an earlier session gives real market-capitalisation weights, so
 the WACC is derived rather than generic and the comparison with the market
 survives. Only a company for which no price was ever obtained reaches the
 generic rate now.
+
+## The operating-margin window should be 5-7 years, once EDGAR lands
+
+The rule that ships picks the margin from a four-year window: the latest
+year when it is monotone across the window or sits inside the earlier
+years' own range, and the median otherwise. Four years is what Yahoo's
+statements reliably carry, not what the rule wants.
+
+Four is enough to tell a trend from an exception most of the time and not
+always. 3M is the case that shows the edge: the PFAS and earplug charge put
+-43.6% two years back, and with a four-year window the charge is still
+inside it, so the rule has to reason around an outlier that a longer window
+would have left behind. Merck's and Pfizer's one-offs sit at the same
+distance. A five-to-seven-year window would let a single bad year be a
+single bad year rather than a quarter of the evidence.
+
+Yahoo gives four years of income statements and EDGAR gives ten or more, so
+this is a Stage 4 follow-up rather than a change that can be made now.
+Widening the window on four years of data changes nothing; widening it on
+ten changes which companies take the median, and that needs its own
+before/after across the scan.
+
+## Exclude one-off charges by their own tag, rather than inferring them
+
+The margin rule detects a one-off by its shape - a year outside the range
+of the years around it. That is an inference, and it is wrong in both
+directions: a genuine step change in profitability looks like a one-off for
+one year, and a charge spread over two years looks like a trend.
+
+The filings say so directly. US GAAP has tags for the things that cause
+these years - `LitigationSettlementExpense`,
+`RestructuringCharges`, `GoodwillImpairmentLoss`,
+`AssetImpairmentCharges` - and a company that took a litigation charge
+reported it under one. Reading them turns "this year looks unusual" into
+"this year contains $10.3bn of litigation settlement", which is both more
+accurate and sayable in provenance.
+
+Needs EDGAR as the statement source (Stage 4), and needs care about
+double-counting: some of those tags are already inside operating income and
+some are not, and the answer differs by filer.

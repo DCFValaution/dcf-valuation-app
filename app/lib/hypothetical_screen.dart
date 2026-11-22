@@ -39,38 +39,66 @@ import 'valuation_api.dart';
 /// Wide bounds, because the hypothetical belongs to the person building it;
 /// the honesty comes from showing what the company actually did beside each
 /// one, not from narrowing what they may assume.
-const List<AdjustableAssumption> kHypotheticalDrivers = [
-  AdjustableAssumption(
-    name: 'revenue_growth',
-    label: 'Revenue growth',
-    help:
-        'How fast you are assuming revenue grows, every year, until the '
-        'target margin is reached.',
-    min: -0.50,
-    max: 1.00,
-    step: 0.0025,
-  ),
-  AdjustableAssumption(
-    name: 'target_operating_margin',
-    label: 'Target operating margin',
-    help:
-        'The operating margin you are assuming the company reaches. There '
-        'is no figure until this is above zero: a path to profitability '
-        'needs a profit, and choosing it is your call, not the app\'s.',
-    min: 0.0,
-    max: 0.60,
-    step: 0.0025,
-  ),
-  AdjustableAssumption(
-    name: 'years_to_target',
-    label: 'Years to the target',
-    help: 'How long you are assuming the turnaround takes.',
-    min: 1,
-    max: 15,
-    step: 1,
-    isPercent: false,
-  ),
-];
+/// The route this screen is on, as the backend names it.
+///
+/// A loss-maker is assuming a turnaround; a profitable company that outspends
+/// its profits is not. The words differ throughout, and using the first set
+/// for the second says something untrue about the company.
+const String kFramingPathToProfit = 'path_to_profit';
+const String kFramingWhatWouldHaveToBeTrue = 'what_would_have_to_be_true';
+
+bool _isWhatWouldHaveToBeTrue(String framing) =>
+    framing == kFramingWhatWouldHaveToBeTrue;
+
+List<AdjustableAssumption> hypotheticalDrivers(String framing) {
+  final profitable = _isWhatWouldHaveToBeTrue(framing);
+  return [
+    AdjustableAssumption(
+      name: 'revenue_growth',
+      label: 'Revenue growth',
+      help: profitable
+          ? 'How fast you are assuming revenue grows, every year. It starts '
+                'at the company’s own recent rate.'
+          : 'How fast you are assuming revenue grows, every year, until the '
+                'target margin is reached.',
+      min: -0.50,
+      max: 1.00,
+      step: 0.0025,
+    ),
+    AdjustableAssumption(
+      name: 'target_operating_margin',
+      label: profitable ? 'Operating margin' : 'Target operating margin',
+      help: profitable
+          ? 'The operating margin you are assuming the company earns. It '
+                'starts at what it earns today; move it to see what a '
+                'different one would imply.'
+          : 'The operating margin you are assuming the company reaches. '
+                'There is no figure until this is above zero: a path to '
+                'profitability needs a profit, and choosing it is your call, '
+                'not the app’s.',
+      min: 0.0,
+      max: 0.60,
+      step: 0.0025,
+    ),
+    AdjustableAssumption(
+      name: 'years_to_target',
+      label: profitable ? 'Years to reach that margin' : 'Years to the target',
+      help: profitable
+          ? 'How long you are assuming the margin takes to get there. It '
+                'changes nothing while the margin is left where it is.'
+          : 'How long you are assuming the turnaround takes.',
+      min: 1,
+      max: 15,
+      step: 1,
+      isPercent: false,
+    ),
+  ];
+}
+
+/// The loss-maker's set, for callers with no route to hand.
+final List<AdjustableAssumption> kHypotheticalDrivers = hypotheticalDrivers(
+  kFramingPathToProfit,
+);
 
 class HypotheticalScreen extends StatefulWidget {
   const HypotheticalScreen({
@@ -79,15 +107,22 @@ class HypotheticalScreen extends StatefulWidget {
     required this.ticker,
     required this.companyName,
     required this.placeholders,
+    this.framing = kFramingPathToProfit,
   });
 
   final ValuationApi api;
   final String ticker;
   final String companyName;
 
-  /// The neutral starting values, from the backend. Not chosen here, so the
-  /// app cannot quietly start somewhere friendlier.
+  /// The starting values, from the backend. Not chosen here, so the app
+  /// cannot quietly start somewhere friendlier. Neutral on the loss-maker
+  /// route; the company's own current figures on the other.
   final HypotheticalInputs placeholders;
+
+  /// Which question this screen asks, carried from the refusal that opened
+  /// it, so the wording is right on the first frame rather than after the
+  /// first response. Never decided here.
+  final String framing;
 
   @override
   State<HypotheticalScreen> createState() => _HypotheticalScreenState();
@@ -152,11 +187,35 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
     'years_to_target': _inputs.yearsToTarget.toDouble(),
   };
 
-  Map<String, double> get _neutralValues => {
+  /// What the screen opened on, from the backend. Neutral zeros on the
+  /// loss-maker route; the company's own current figures on the other.
+  Map<String, double> get _startingValues => {
     'revenue_growth': widget.placeholders.revenueGrowth,
     'target_operating_margin': widget.placeholders.targetOperatingMargin,
     'years_to_target': widget.placeholders.yearsToTarget.toDouble(),
   };
+
+  /// Whose figure each slider is showing right now.
+  ///
+  /// "You set this" is true of every slider on the loss-maker route, because
+  /// nothing was pre-filled. It is not true on the other route until the
+  /// reader has moved one: until then the screen is showing the company's
+  /// own figure, and claiming otherwise would hide exactly the thing that
+  /// makes the starting answer meaningful.
+  Map<String, String> get _sources {
+    final starting = _startingValues;
+    final now = _sliderValues;
+    return {
+      for (final name in starting.keys)
+        name:
+            (_isWhatWouldHaveToBeTrue(widget.framing) &&
+                now[name] == starting[name])
+            ? (name == 'years_to_target'
+                  ? 'unchanged - the margin is the company’s own'
+                  : 'the company’s own figure, until you move it')
+            : 'you set this',
+    };
+  }
 
   Future<void> _request() async {
     final seq = ++_seq;
@@ -242,25 +301,31 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
               ),
               const SizedBox(height: AppSpacing.xl),
 
-              _Disclaimer(outcome: _outcome, companyName: widget.companyName),
+              _Disclaimer(
+                outcome: _outcome,
+                companyName: widget.companyName,
+                framing: widget.framing,
+              ),
               const SizedBox(height: AppGap.section),
 
               ..._figureSection(context),
 
               const SizedBox(height: AppGap.section),
               AssumptionSliders(
-                specs: kHypotheticalDrivers,
-                subtitle:
-                    'These are yours. Nothing here is derived from the '
-                    'company, and nothing will be filled in for you — what '
-                    'the company actually did is shown under each one.',
-                derived: _neutralValues,
+                specs: hypotheticalDrivers(widget.framing),
+                subtitle: _isWhatWouldHaveToBeTrue(widget.framing)
+                    ? 'These are yours. They start at the company’s own '
+                          'current figures, so the first answer you see is '
+                          'what today implies — move them to see what would '
+                          'have to be true instead. What the company '
+                          'actually did stays under each one.'
+                    : 'These are yours. Nothing here is derived from the '
+                          'company, and nothing will be filled in for you — '
+                          'what the company actually did is shown under each '
+                          'one.',
+                derived: _startingValues,
                 current: _sliderValues,
-                sources: const {
-                  'revenue_growth': 'you set this',
-                  'target_operating_margin': 'you set this',
-                  'years_to_target': 'you set this',
-                },
+                sources: _sources,
                 busy: _busy,
                 onChanged: _onChanged,
                 onChangeEnd: _onChangeEnd,
@@ -301,6 +366,19 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
     return switch (_outcome) {
       HypotheticalBuilt(:final hypothetical) => [
         _Figure(hypothetical: hypothetical),
+        // What the reader is NOT setting, said beside the figure rather than
+        // left in the assumptions list. On the route that asks what would
+        // have to be true about growth, margins and investment, the third of
+        // those is the one held fixed, and silence about it would be the
+        // most misleading part of the screen.
+        if (hypothetical.investmentNote.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          NoteList(
+            key: const Key('hypothetical-investment-note'),
+            title: 'What you are not setting',
+            notes: [hypothetical.investmentNote],
+          ),
+        ],
         if (hypothetical.warnings.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
           NoteList(title: 'What this would take', notes: hypothetical.warnings),
@@ -342,7 +420,16 @@ String _money(double v) => '${v < 0 ? '−' : ''}\$${v.abs().toStringAsFixed(2)}
 /// Drawn louder than the speculative one on purpose: that figure at least
 /// extends a company's own trajectory. This one contradicts it.
 class _Disclaimer extends StatelessWidget {
-  const _Disclaimer({required this.outcome, required this.companyName});
+  const _Disclaimer({
+    required this.outcome,
+    required this.companyName,
+    this.framing = kFramingPathToProfit,
+  });
+
+  /// Which of the two questions this screen is asking. The second bullet is
+  /// a plain statement about the company, and the loss-maker's version of it
+  /// is false of a profitable one.
+  final String framing;
 
   final HypotheticalOutcome? outcome;
   final String companyName;
@@ -412,10 +499,18 @@ class _Disclaimer extends StatelessWidget {
                       'below are the ones you choose.',
                 ),
                 _Point(
-                  text:
-                      'Nothing here is derived from '
-                      '${companyName.replaceAll(RegExp(r"\.$"), "")}\'s '
-                      'figures — its own figures point the other way.',
+                  text: _isWhatWouldHaveToBeTrue(framing)
+                      // "Its own figures point the other way" is simply
+                      // false here: the company makes a profit, and the
+                      // numbers below START as its own. What is true is that
+                      // the figure follows whatever the reader sets.
+                      ? 'The numbers start at '
+                            '${companyName.replaceAll(RegExp(r"\.$"), "")}\'s '
+                            'own current figures. Everything past that point '
+                            'is what you have assumed, not what it has done.'
+                      : 'Nothing here is derived from '
+                            '${companyName.replaceAll(RegExp(r"\.$"), "")}\'s '
+                            'figures — its own figures point the other way.',
                 ),
                 _Point(text: 'It is not a valuation and not a price target.'),
                 if (built != null) ...[

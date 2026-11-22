@@ -206,6 +206,10 @@ def derive_speculative_assumptions(fin: CompanyFinancials, base: BaseYearData,
         "floored at terminal growth" + (f" and capped at {CLAMP_REVENUE_GROWTH[1]:.0%}" if bit else ""))
 
     current_capex = dcf.assumptions.capex_pct
+    # Recorded so callers can state what the company spends TODAY beside what
+    # the model assumes it settles at. The two differ for exactly the
+    # companies where the difference decides the answer.
+    diagnostics["current_capex_pct"] = current_capex
     if current_capex <= DEFAULT_MATURE_CAPEX_PCT:
         mature_capex = record(
             "mature_capex_pct", current_capex, "derived",

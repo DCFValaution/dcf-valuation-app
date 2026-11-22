@@ -19,6 +19,7 @@ from statistics import median
 
 from assumptions import (DAMODARAN_ERP_AS_OF, DAMODARAN_IMPLIED_ERP,
                          LONG_RUN_GROWTH_AS_OF, LONG_RUN_NOMINAL_GROWTH,
+                         MARGIN_TREND_DISCLOSE,
                          DerivedAssumptions, derive_assumptions,
                          erp_age_days, erp_is_stale, risk_free_as_of_text,
                          risk_free_is_stale, sep_age_days, sep_is_stale)
@@ -43,8 +44,13 @@ from relative import (FINANCIAL_MULTIPLES, MAX_AUTO_PEERS, MAX_PEERS,
                       MIN_APPLICABLE_MULTIPLES, MIN_PEERS, SIZE_BAND,
                       STANDARD_MULTIPLES, WIDE_RANGE_RATIO, RelativeResult,
                       peer_exclusion, run_relative)
-from hypothetical import (HYPOTHETICAL_HEADLINE, HypotheticalRefused,
-                          UserAssumptions, validate)
+from hypothetical import (FRAMING_PATH_TO_PROFIT,
+                          FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE,
+                          HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
+                          NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
+                          REVENUE_GROWTH_BOUNDS, TARGET_MARGIN_BOUNDS,
+                          HypotheticalRefused, UserAssumptions,
+                          require_a_profit, validate)
 from speculative import SpeculativeResult, run_speculative
 from speculative_assumptions import (MARGIN_IMPROVEMENT_PACE,
                                      DerivedSpeculativeAssumptions,
@@ -322,6 +328,11 @@ class ValuationReport:
     # assumption rises. None where it does not, and on every refusal.
     growth_cost_note: str | None = None
 
+    # True on a refusal that has no step after it, so the screen can offer
+    # the hypothetical rather than ending the conversation. See
+    # hypothetical_available_after_dcf for when that is.
+    offer_hypothetical: bool = False
+
     # Current market multiples, beside the model's estimate rather than
     # part of it. Reference only; nothing here is an input.
     snapshot: MarketSnapshot | None = None
@@ -483,6 +494,35 @@ def input_source_warnings(derived, *, dcf: bool,
                       f"{cost_of_equity_prov.value:.1%} discount rate "
                       "because this company's own could not be worked out; "
                       "the figure says little about this company.")))
+
+    # --- A margin that followed a steep trend ------------------------------
+    #
+    # The rule takes the latest year where the margin has moved one way for
+    # the whole window, because a level reached over four years is more
+    # likely to hold than to be handed back. That is a judgement, and a
+    # reader who disagrees with it has to be able to see it: a company whose
+    # margin went from -8.5% to 31.6% is being forecast at 31.6% forever.
+    span = (derived.diagnostics or {}).get("operating_margin_trend_span")
+    window = (derived.diagnostics or {}).get("operating_margin_window") or []
+    rule = (derived.diagnostics or {}).get("operating_margin_rule")
+    if (rule == "latest" and span is not None and window
+            and abs(span) > MARGIN_TREND_DISCLOSE):
+        latest, oldest = window[0], window[-1]
+        out.append(Warning(
+            f"The forecast assumes the latest operating margin of "
+            f"{latest:.1%} holds. It has moved steadily from {oldest:.1%} "
+            f"over {len(window)} years, so the figure rests on that gain "
+            f"being kept rather than on a long record of earning it."
+            if span > 0 else
+            f"The forecast assumes the latest operating margin of "
+            f"{latest:.1%} holds. It has fallen steadily from {oldest:.1%} "
+            f"over {len(window)} years, so the figure assumes the decline "
+            f"stops here rather than continuing.",
+            severity=SEVERITY_CAUTION, kind="margin_trend",
+            detail={"latest": latest, "oldest": oldest,
+                    "window": list(window)},
+            headline=(f"The forecast holds the latest {latest:.1%} margin, "
+                      f"which has moved steadily from {oldest:.1%}.")))
 
     # --- An annual base where a trailing one was wanted --------------------
     #
@@ -1129,6 +1169,9 @@ def value_company(ticker: str,
     # company a second time at a slightly higher growth rate.
     report.growth_cost_note = growth_cost_note(report)
     report.snapshot = market_snapshot(fin, base.current_price)
+    # Needs the finished report too, and the statements, which only this
+    # function has both of.
+    report.offer_hypothetical = hypothetical_available_after_dcf(report, fin)
     return report
 
 
@@ -1737,10 +1780,24 @@ class HypotheticalReport:
     why_speculative_refused: list[str]
     reality: list[RealityContrast]
     warnings: list[str]
+    # The machine-readable refusal that led here. The disclaimer has to name
+    # the right one: a company refused for outspending its profits is not a
+    # loss-maker, and calling it one in the app's loudest paragraph would be
+    # a plain untruth about the company.
+    standard_codes: list[str] = field(default_factory=list)
+    # Investment is not one of the three drivers: the model keeps the
+    # company's own capital spending. On the route that asks what would have
+    # to be true about growth, margins AND investment, that has to be said
+    # rather than left as a silent default.
+    investment_note: str = ""
 
     @property
     def method(self) -> str:
         return "hypothetical"
+
+    @property
+    def framing(self) -> str:
+        return hypothetical_framing_for(self.standard_codes)
 
 
 def hypothetical_available(report: SpeculativeReport) -> bool:
@@ -1755,6 +1812,161 @@ def hypothetical_available(report: SpeculativeReport) -> bool:
     if report.suitable:
         return False
     return not _hypothetical_blocks(report.derived)
+
+
+
+# Refusals the reader's own assumptions genuinely answer, and so the only
+# ones the hypothetical is offered past.
+#
+# The hypothetical screen gives the reader three figures: revenue growth, a
+# target operating margin, and how long the company takes to reach it. A
+# refusal belongs here only when those three are what stood in the way.
+#
+#   negative_fcf          the forecast never turns cash positive. Tesla's
+#                         case: a higher margin or faster growth is exactly
+#                         the claim a reader might want to make.
+#   negative_median_margin  the company has typically lost money on its
+#                         day-to-day business. The margin is the user's input.
+#   operating_loss        a loss in the latest year. Reached here only
+#                         alongside another code, since a loss on its own
+#                         sends the reader to the speculative tier first.
+#
+# Deliberately a whitelist rather than a list of exclusions, because the cost
+# of the two mistakes is not symmetric. Leaving a code out only withholds an
+# opt-in. Letting one in offers a door that opens onto arithmetic as
+# meaningless as the refusal - and the figure behind the door looks like an
+# answer. So a refusal code added later is not offered until someone decides
+# it should be.
+#
+# What is excluded, and why no assumption reaches it:
+#   financial             American Express is refused because interest is how
+#                         it earns revenue rather than how it is financed, so
+#                         unlevered free cash flow and the enterprise-to-equity
+#                         bridge mean nothing for it. The hypothetical builds
+#                         that same bridge. No margin the reader types fixes
+#                         the shape of the model.
+#   growth_exceeds_wacc   terminal growth is at or above the discount rate, so
+#                         the perpetuity diverges. Neither figure is on that
+#                         screen, so the reader cannot repair it.
+#   no_revenue /          there is no business to assume things about. The
+#   short_history         hypothetical refuses these in its own terms anyway;
+#                         they are also checked directly below, because the
+#                         thresholds there are the ones that screen applies.
+HYPOTHETICAL_REFUSAL_CODES = frozenset({
+    "negative_fcf", "negative_median_margin", "operating_loss",
+})
+
+# Codes that may accompany those without sending the reader to the generic
+# "your assumptions do not reach this" refusal. They are not waived: no
+# revenue and too little history are both refused on the hypothetical screen
+# itself, in its own and better terms - "growth of any rate applied to nothing
+# is still nothing" says why no hypothetical can be built, where a message
+# about the model not fitting would only say why the DCF could not.
+#
+# So the screen's own guard answers them, and the opt-in above is never
+# offered for them: the door is decided by HYPOTHETICAL_REFUSAL_CODES, which
+# is the narrower set. A reader who reaches this screen another way still
+# gets the considered answer.
+HYPOTHETICAL_ELIGIBLE_CODES = (
+    HYPOTHETICAL_REFUSAL_CODES | {"no_revenue", "short_history"})
+
+
+def hypothetical_framing_for(codes: "list[str] | set[str]") -> str:
+    """Which of the two questions this refusal asks.
+
+    `negative_fcf` is a company that makes a profit and spends past it, so
+    there is no turnaround to assume and nothing in its figures pointing the
+    other way. Every other refusal that reaches this screen is a loss.
+    """
+    return (FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE if "negative_fcf" in set(codes)
+            else FRAMING_PATH_TO_PROFIT)
+
+
+def hypothetical_placeholders_for(report: "ValuationReport") -> dict:
+    """The figures the screen opens on when a DCF refusal offers it.
+
+    The reader here is not assuming a turnaround. They are asking what would
+    have to be true for a profitable company that outspends its profits to be
+    worth something, and that question starts from what the company actually
+    does. So the screen opens on its OWN current growth and margin, which it
+    labels as its own - a neutral zero there would not be modest, it would be
+    wrong about the company.
+
+    The loss-maker's neutral zeros are NOT produced here, and there is no
+    branch for them. Every refusal that reaches this function is on the
+    `what_would_have_to_be_true` route, because a refusal for losing money
+    has the speculative tier in front of it and never offers this step
+    directly - `hypothetical_available_after_dcf` returns False for it. A
+    neutral branch here would be code no caller could reach, and a mutation
+    run that removed it changed nothing. The screen reached THROUGH the
+    speculative refusal gets its neutral values from that response instead.
+
+    `test_only_the_profitable_route_reaches_these_placeholders` holds that
+    invariant, so widening the whitelist of refusal codes fails loudly here
+    rather than opening a loss-maker's screen on figures chosen for someone
+    else.
+
+    Clamped into the screen's own bounds, and a figure that will not fit
+    falls back to the neutral one rather than arriving out of range.
+    """
+    a = report.derived.assumptions
+    growth_low, growth_high = REVENUE_GROWTH_BOUNDS
+    margin_low, margin_high = TARGET_MARGIN_BOUNDS
+    growth = min(max(a.revenue_growth, growth_low), growth_high)
+    margin = min(max(a.operating_margin, margin_low), margin_high)
+    return {
+        "revenue_growth": growth,
+        # A margin of nil would land the reader on the "no profit in it"
+        # screen immediately, which is not where this route starts.
+        "target_operating_margin": (margin if margin > 0
+                                    else NEUTRAL_TARGET_MARGIN),
+        "years_to_target": float(NEUTRAL_YEARS_TO_TARGET),
+    }
+
+
+def hypothetical_available_after_dcf(report: "ValuationReport",
+                                     fin: CompanyFinancials) -> bool:
+    """Whether the user-built hypothetical should be offered on a DCF refusal.
+
+    The tiers are deliberately ordered - a standard valuation, then a
+    speculative estimate for a loss-maker on a path to profitability, then a
+    hypothetical built from the caller's own assumptions - and a screen must
+    not skip a step by offering the last one while an earlier one is still
+    on the table.
+
+    But a refusal with no step after it is a dead end, and Tesla found one.
+    It is refused by the DCF because its investment outspends its profits,
+    not because it loses money, so no speculative estimate is offered - and
+    the hypothetical was reachable only from a speculative refusal. The
+    screen said why the model would not value the company and stopped.
+
+    So: offered when the DCF has refused, a speculative estimate is NOT on
+    offer, every blocking reason is one the reader's own three figures
+    actually answer, and there is a business to assume them about. The last
+    two matter for the same reason - offering a door that opens onto another
+    refusal, or onto a figure as meaningless as the one withheld, is worse
+    than offering none.
+    """
+    if speculative_estimate_available(report):
+        return False          # the earlier tier is still on the table
+
+    # An empty set of codes carries two cases, and both must withhold the
+    # offer. A company the model valued has none, so there is nothing to step
+    # past. And a refusal whose reason carried no code is one this whitelist
+    # has never seen - it would be offered by `codes <= ...` alone, since the
+    # empty set is a subset of everything.
+    #
+    # A `report.suitable` guard stood here too and was removed: today
+    # Suitability appends a code beside every reason, so it decided nothing
+    # this line does not, and no test could tell the two apart. This is the
+    # stronger of the pair, because it still holds if a reason is ever added
+    # without one.
+    codes = set(report.suitability.codes)
+    if not codes or not codes <= HYPOTHETICAL_REFUSAL_CODES:
+        return False
+    if (report.base.revenue if report.base else 0.0) <= MIN_SPECULATIVE_REVENUE_MM:
+        return False
+    return fin.years_available >= MIN_HISTORY_YEARS
 
 
 def _hypothetical_blocks(derived: DerivedSpeculativeAssumptions,
@@ -1853,8 +2065,13 @@ def _reality_contrast(user: UserAssumptions,
         gross_note = ("" if gross is None else
                       f" Its gross margin - what is left before operating costs - was "
                       f"{gross:.0%}.")
+        # Both to one decimal place. They were printed to different
+        # precisions, which on the route that OPENS with the two equal made
+        # 5.11% read as "you have assumed 5%" beside "it actually earned
+        # 5.1%" - a difference that is not there.
         margin_statement = (
-            f"You have assumed an operating margin of {user.target_operating_margin:.0%}. "
+            f"You have assumed an operating margin of "
+            f"{user.target_operating_margin:.1%}. "
             f"{short} actually earned {actual_margin:.1%} in its {fiscal_year} financial "
             f"year.{gross_note}")
         contradicts = user.target_operating_margin > actual_margin
@@ -1876,12 +2093,25 @@ def _reality_contrast(user: UserAssumptions,
         contradicts = False
     else:
         pace = (user.target_operating_margin - actual_margin) / user.years_to_target
-        years_statement = (
-            f"Reaching it in {_count(user.years_to_target, 'year')} means the operating margin "
-            f"improving by about {pace * 100:.1f} percentage points every year, every year, "
-            f"starting from {actual_margin:.1%}. Nothing in {short}'s figures says that "
-            "happens.")
-        contradicts = True
+        if abs(pace) * 100 < 0.05:
+            # The target is the company's own margin, which is where the
+            # second route opens. There is no journey to take and nothing to
+            # contradict, and the old sentence claimed both - it told a
+            # reader assuming no change at all that "nothing in the company's
+            # figures says that happens", about its own figures.
+            years_statement = (
+                f"You have not assumed the margin changes, so this setting does nothing yet. "
+                f"It starts to matter as soon as you move the target away from "
+                f"{actual_margin:.1%}.")
+            contradicts = False
+        else:
+            direction = "improving" if pace > 0 else "falling"
+            years_statement = (
+                f"Reaching it in {_count(user.years_to_target, 'year')} means the operating "
+                f"margin {direction} by about {abs(pace) * 100:.1f} percentage points every "
+                f"year, every year, starting from {actual_margin:.1%}. Nothing in "
+                f"{short}'s figures says that happens.")
+            contradicts = True
 
     out.append(RealityContrast(
         name="years_to_target",
@@ -1908,34 +2138,84 @@ def value_company_hypothetically(ticker: str,
     Raises HypotheticalRefused when the company is not one this applies to, or
     when the assumptions are not yet a hypothetical about a profit.
     """
+
+    # The bounds are a property of the controls, so they are checked before
+    # anything is fetched. Whether a profit has been assumed is checked once
+    # the route is known, because that message is written per route.
     validate(user)
 
-    # Eligibility is judged by the speculative path itself, so this can never
-    # become a way around a refusal the speculative engine did not make.
-    try:
-        speculative = value_company_speculatively(ticker)
-    except SpeculativeNotApplicable as e:
-        raise HypotheticalRefused(
-            f"{str(e).rstrip()} A hypothetical is offered only where a speculative estimate "
-            "was, and was then refused for the shape of the company's trajectory.",
-            reasons=e.reasons) from e
-
-    name = speculative.company_name
-    if speculative.suitable:
-        raise HypotheticalRefused(
-            f"A speculative estimate is already produced for {name.rstrip('.')} from its own "
-            "figures, so there is no need to build one by hand. Adjust that estimate's "
-            "assumptions instead.")
-
     fin = fetch_financials(ticker)
-    blocks = _hypothetical_blocks(speculative.derived, name, fin.years_available)
+    name = fin.company_name
+
+    # Banks and insurers first, before any DCF machinery is pointed at them.
+    # Their statements do not answer the questions base_year_from and
+    # derive_assumptions ask, so running those produces an upstream-looking
+    # failure rather than the refusal this is.
+    if uses_dividend_discount_model(fin):
+        raise HypotheticalRefused(
+            f"{name} is a bank or insurer and is valued with the dividend discount model. "
+            "Unlevered free cash flow means nothing for it, whoever supplies the "
+            "assumptions, so there is no hypothetical of this shape to build.")
+
+    base, _ = base_year_from(fin)
+
+    # Eligibility rests on the untouched standard assessment, judged by the
+    # same whitelist the refusal screen uses to decide whether to offer the
+    # door. One rule for the door and for what is behind it, so the opt-in
+    # can never appear over a refusal this function then makes.
+    standard = assess_suitability(fin, derive_assumptions(fin), base)
+    if standard.suitable:
+        raise HypotheticalRefused(
+            f"{name.rstrip('.')} can be valued from its own figures, so there is nothing to "
+            "build by hand. Adjust that valuation's assumptions instead.")
+
+    codes = set(standard.codes)
+    framing = hypothetical_framing_for(codes)
+    require_a_profit(user, framing)
+
+    if not codes or not codes <= HYPOTHETICAL_ELIGIBLE_CODES:
+        raise HypotheticalRefused(
+            f"{name} was refused a standard valuation for reasons your assumptions here do "
+            "not reach. This screen offers three figures - growth, a target margin and how "
+            "long it takes - and none of them answers why the model does not fit this "
+            "company.",
+            reasons=standard.reasons)
+
+    # Two routes arrive here, and the ordering between the tiers has to hold
+    # on both.
+    #
+    # A loss-maker is served by the speculative estimate first, so for one of
+    # those the hypothetical is offered only where that estimate was itself
+    # refused - otherwise this becomes a way of skipping a figure the model
+    # was willing to produce. Tesla's route has no such tier: it is profitable
+    # and refused for cash flow, so there is no earlier step to defer to.
+    speculative = None
+    why_speculative_refused: list[str] = []
+    if codes & LOSS_REFUSAL_CODES:
+        try:
+            speculative = value_company_speculatively(ticker)
+        except SpeculativeNotApplicable as e:
+            raise HypotheticalRefused(
+                f"{str(e).rstrip()} A hypothetical is offered only where a speculative "
+                "estimate was, and was then refused for the shape of the company's "
+                "trajectory.",
+                reasons=e.reasons) from e
+        if speculative.suitable:
+            raise HypotheticalRefused(
+                f"A speculative estimate is already produced for {name.rstrip('.')} from its "
+                "own figures, so there is no need to build one by hand. Adjust that "
+                "estimate's assumptions instead.")
+        why_speculative_refused = speculative.suitability.reasons
+
+    probe = (speculative.derived if speculative is not None
+             else derive_speculative_assumptions(fin, base))
+    blocks = _hypothetical_blocks(probe, name, fin.years_available)
     if blocks:
         raise HypotheticalRefused(
             f"No hypothetical is built for {name.rstrip('.')}, even on assumptions you supply "
             "yourself.",
             reasons=blocks)
 
-    base, _ = base_year_from(fin)
     derived = derive_speculative_assumptions(fin, base, overrides={
         "speculative_revenue_growth": user.revenue_growth,
         "target_operating_margin": user.target_operating_margin,
@@ -1994,11 +2274,48 @@ def value_company_hypothetically(ticker: str,
         user=user,
         derived=derived,
         result=result,
-        why_standard_refused=speculative.why_standard_refused,
-        why_speculative_refused=speculative.suitability.reasons,
+        why_standard_refused=standard.reasons,
+        why_speculative_refused=why_speculative_refused,
         reality=_reality_contrast(user, derived, name),
         warnings=warnings,
+        standard_codes=list(standard.codes),
+        investment_note=_investment_note(derived, short),
     )
+
+
+def _investment_note(derived: DerivedSpeculativeAssumptions,
+                     short: str) -> str:
+    """What the model holds fixed while the reader argues about the rest.
+
+    Growth and margin are the reader's. Investment is not, and on the route
+    that asks what would have to be true about growth, margins AND investment
+    that silence would be the most misleading part of the screen - a company
+    refused for outspending its profits is one whose capital spending is the
+    whole point.
+
+    So it is stated: the rate used, that it is the company's own, and that it
+    cannot be changed here.
+    """
+    prov = derived.provenance.get("mature_capex_pct")
+    if prov is None:
+        return ""
+    today = derived.diagnostics.get("current_capex_pct")
+    assumed = (
+        f"Once the margin is reached the model spends {prov.value:.1%} of "
+        f"revenue on capital investment, with depreciation assumed equal to "
+        f"it, so investment stops consuming cash.")
+    if today is None or abs(today - prov.value) < 0.0005:
+        whose = f" That is {short}'s own current rate."
+    else:
+        whose = (
+            f" {short} actually spends {today:.1%} today; {prov.value:.1%} is "
+            f"a mature-business default, not this company's rate, and the gap "
+            f"between the two is most of why the figure is what it is.")
+    return (
+        f"Investment is not yours to set on this screen. {assumed}{whose} A "
+        f"company refused for spending past its profits is one where that "
+        f"figure decides the answer, so it is said here rather than left to "
+        f"be found in the assumptions list.")
 
 
 def hypothetical_disclaimer(report: HypotheticalReport) -> str:
@@ -2007,9 +2324,14 @@ def hypothetical_disclaimer(report: HypotheticalReport) -> str:
 
     Stronger than the speculative one, and differently so: that figure rests on
     assumptions the model derived from the company's own trajectory. This one
-    rests on assumptions the user supplied, for a company whose actual figures
-    point the other way. The text says both, names the numbers, and never once
-    calls the output an estimate of value.
+    rests on assumptions the user supplied. The text says so, names the
+    numbers, and never once calls the output an estimate of value.
+
+    Written per route. On the loss-maker route the company's actual figures
+    point the other way, and the text says that. On the other route they do
+    not - the company makes a profit - and the question is what would have to
+    be true about growth, margins and investment, which is a different
+    sentence and not a softer one.
     """
     u = report.user
     d = report.derived.diagnostics
@@ -2026,19 +2348,54 @@ def hypothetical_disclaimer(report: HypotheticalReport) -> str:
             "this figure assumes a reversal the company's own figures do not show.")
     margin_clause = f" from {margin:.1%} today" if margin is not None else ""
 
+    # Which refusal brought the reader here. Two routes reach this screen and
+    # they are not the same company: one loses money, the other makes a profit
+    # and spends past it. The old wording said "loses money" for both, which
+    # was false of the second in the app's loudest paragraph.
+    if "negative_fcf" in report.standard_codes:
+        route = (
+            f"{short} was refused a standard valuation because even by the last year of that "
+            "forecast it would still be spending more cash than it brings in, so there was no "
+            "positive cash flow to value. No speculative estimate is offered for that either: "
+            "that path exists only to project a way out of losses, and this company is not "
+            "losing money.")
+    else:
+        route = (
+            f"{short} loses money and was refused a standard valuation; it was then refused a "
+            "speculative estimate as well, because its own figures show no path to "
+            "profitability to project.")
+
+    assumed = (
+        f"you have assumed revenue grows {signed_pct(u.revenue_growth)} a year and that the "
+        f"operating margin reaches {u.target_operating_margin:.0%}{margin_clause} within "
+        f"{_count(u.years_to_target, 'year')}, and the figure below is what those "
+        f"assumptions imply.")
+
+    if report.framing == FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE:
+        # "Nothing here is derived from the company's data" is false on this
+        # route: the screen opens on the company's own growth and margin,
+        # because the question is what would have to CHANGE about them. So
+        # this says where the figures start and whose they are once they
+        # move, which is the honest version of the same warning.
+        return (
+            f"THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT {short.upper()} IS "
+            f"WORTH. It is arithmetic on assumptions you set. {route} So the question this "
+            f"screen answers is not what the company is worth, but what would have to be "
+            f"true about its growth, its margins and its investment for it to be worth "
+            f"something - and you are the one saying what that is. It opens on the company's "
+            f"own current figures and goes wherever you take them: {assumed}{contradiction} "
+            f"Change any one of them and it moves by multiples or changes sign. Treat it as "
+            f"a way of seeing what your own beliefs would have to be worth, not as "
+            f"information about the company, and never as a reason to buy or sell."
+        )
+
     return (
         f"THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT {short.upper()} IS "
-        f"WORTH. It is arithmetic on assumptions you typed in. {short} loses money and was "
-        "refused a standard valuation; it was then refused a speculative estimate as well, "
-        "because its own figures show no path to profitability to project. Nothing here is "
-        f"derived from the company's data: you have assumed revenue grows "
-        f"{signed_pct(u.revenue_growth)} "
-        f"a year and that the operating margin reaches {u.target_operating_margin:.0%}"
-        f"{margin_clause} within {_count(u.years_to_target, 'year')}, and the figure below is "
-        f"what those assumptions imply.{contradiction} Change any one of them and it moves by "
-        "multiples or changes sign. Treat it as a way of seeing what your own beliefs would "
-        "have to be worth, not as information about the company, and never as a reason to buy "
-        "or sell."
+        f"WORTH. It is arithmetic on assumptions you typed in. {route} Nothing here is "
+        f"derived from the company's data: {assumed}{contradiction} Change any one of them "
+        "and it moves by multiples or changes sign. Treat it as a way of seeing what your "
+        "own beliefs would have to be worth, not as information about the company, and "
+        "never as a reason to buy or sell."
     )
 
 

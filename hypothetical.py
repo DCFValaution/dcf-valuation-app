@@ -49,6 +49,27 @@ YEARS_TO_TARGET_BOUNDS = (1, 15)
 
 HYPOTHETICAL_HEADLINE = "A HYPOTHETICAL YOU BUILT - NOT A VALUATION"
 
+# Two routes reach this screen, and they are not the same question.
+#
+#   PATH_TO_PROFIT is the original: a company that loses money, whose own
+#   figures point away from the profit being assumed. Everything starts
+#   neutral - no growth, no profit - because any pre-filled figure would be
+#   the app suggesting a turnaround on the reader's behalf.
+#
+#   WHAT_WOULD_HAVE_TO_BE_TRUE is the second, and Tesla is the case. It makes
+#   a profit; it was refused because its investment outspends that profit.
+#   There is no turnaround to assume and nothing pointing the other way, so
+#   the loss-maker's framing is simply false about it - and starting from zero
+#   growth and zero margin would be a worse lie than starting from the
+#   company's own figures, which is where the question actually begins: what
+#   would have to be true about growth, margins and investment for this to be
+#   worth something?
+#
+# So on that route the screen opens on the company's own current figures,
+# labelled as its own, and the reader changes what they want to argue with.
+FRAMING_PATH_TO_PROFIT = "path_to_profit"
+FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE = "what_would_have_to_be_true"
+
 USER_INPUT_NAMES = ("revenue_growth", "target_operating_margin", "years_to_target")
 
 
@@ -74,9 +95,14 @@ def validate(user: UserAssumptions) -> None:
     """
     Check the three inputs before anything is computed.
 
-    A target margin of zero is not an error the user made - it is the neutral
-    placeholder they start from - so it is reported as an unfinished
-    hypothetical rather than a bad request.
+    Bounds only: these are properties of the controls, so they can be
+    checked before anything about the company is known or fetched.
+
+    Whether a profit has been assumed is NOT checked here. A target margin of
+    zero is not an error the user made - on the loss-maker route it is the
+    neutral placeholder they start from - and the message explaining it is
+    written per route, so it lives in `require_a_profit`, which the caller
+    runs once it knows which route this is.
     """
     low, high = REVENUE_GROWTH_BOUNDS
     if not low <= user.revenue_growth <= high:
@@ -98,9 +124,24 @@ def validate(user: UserAssumptions) -> None:
             "handful of companies have ever sustained.",
             code="hypothetical_out_of_bounds")
 
+
+
+def require_a_profit(user: UserAssumptions,
+                     framing: str = FRAMING_PATH_TO_PROFIT) -> None:
+    """No profit assumed, so there is nothing to put a value on.
+
+    Separate from the bounds checks because it is the one message written per
+    route, and the route is not known until the company has been looked up -
+    while the bounds are a property of the controls and can be checked before
+    anything is fetched.
+    """
     if user.target_operating_margin <= 0:
         raise HypotheticalRefused(
-            "This hypothetical has no profit in it yet. A path to profitability needs a "
-            "target operating margin above 0%, and choosing it is the point of this "
-            "screen: nothing here will pick one for you.",
+            ("A company earning nothing on its sales produces no cash to put a value on, so "
+             "there is no figure at this margin. Move it above 0% to see what your "
+             "assumption implies."
+             if framing == FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE else
+             "This hypothetical has no profit in it yet. A path to profitability needs a "
+             "target operating margin above 0%, and choosing it is the point of this "
+             "screen: nothing here will pick one for you."),
             code="hypothetical_incomplete")

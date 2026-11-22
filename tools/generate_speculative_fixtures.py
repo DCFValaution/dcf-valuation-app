@@ -56,6 +56,25 @@ def main() -> int:
     record("axp_refusal", client.get("/valuation/AXP"), 422,
            lambda b: b.get("speculative_estimate_available") is False)
 
+    # A refusal with no speculative tier behind it: Tesla is profitable but
+    # outspends its profits, so it is refused for cash flow rather than for
+    # losing money. The only step left is the reader's own assumptions, and
+    # before this case existed that screen was unreachable from here.
+    record("tsla_refusal", client.get("/valuation/TSLA"), 422,
+           lambda b: b.get("speculative_estimate_available") is False
+           and b.get("hypothetical_available") is True
+           # And on this route the screen opens on the company's OWN
+           # figures, not the loss-maker's neutral zeros.
+           and b.get("hypothetical_framing") == "what_would_have_to_be_true"
+           and (b.get("hypothetical_placeholders") or {})
+           .get("target_operating_margin", 0) > 0)
+
+    # And one that is structurally unsuited, so neither step is offered:
+    # American Express earns through interest, which no assumption on that
+    # screen repairs.
+    record("axp_no_steps", client.get("/valuation/AXP"), 422,
+           lambda b: b.get("hypothetical_available") is False)
+
     # Even the speculative path refuses: a no-revenue company.
     record("qs_speculative_refused", client.get("/valuation/QS/speculative"), 422)
 

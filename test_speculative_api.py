@@ -33,8 +33,10 @@ TINY = "TINY"              # a few $mm of revenue
 SHRINKER = "SHRINK"        # Beyond Meat-like: revenue falling
 DEEPLOSS = "DEEP"          # Lucid-like depth: -200% margin
 UNDERWATER = "UNDERW"      # loses money on every sale
+OUTSPENDER = "OUTSPEND"    # Tesla-like: profitable, but capex outruns the profit
 BANK = "BANKX"             # valued with the DDM
 LENDERLOSS = "LENDLOSS"    # a loss-making lender: refused for more than losses
+LENDER = "LENDPROF"        # a profitable lender: refused for nothing BUT its shape
 
 
 def reshape(fin, *, revenues=None, margin=None, gross=None, operating_income=None):
@@ -69,9 +71,23 @@ BUILDERS = {
                              margin=-0.30, gross=0.30),
     DEEPLOSS: lambda: grower(DEEPLOSS, margin=-2.00, gross=0.20),
     UNDERWATER: lambda: grower(UNDERWATER, margin=-0.40, gross=-0.10),
+    # Shaped like Tesla as measured: a real profit (6% operating margin, 18%
+    # gross) on growing revenue, and capex at 10% of it, so the forecast never
+    # turns cash positive. Refused for `negative_fcf` alone - which is the
+    # refusal no earlier tier serves, since the speculative estimate exists
+    # for losses and this company is not making one.
+    OUTSPENDER: lambda: grower(OUTSPENDER, margin=0.06, gross=0.18,
+                               revenues=[90_000e6 / 1.05 ** i for i in range(4)],
+                               capex_share=0.10),
     BANK: lambda: make_bank(BANK),
     LENDERLOSS: lambda: reshape(financial("Credit Services", interest_share=0.35,
                                           ticker=LENDERLOSS), margin=-0.30),
+    # Profitable, and still refused: interest is 35% of its revenue, so it
+    # earns through borrowing rather than being financed by it. The only
+    # refusal code is `financial`, which makes it the case that separates "no
+    # loss to project a way out of" from "the model does not fit at all".
+    LENDER: lambda: financial("Credit Services", interest_share=0.35,
+                              ticker=LENDER),
 }
 
 
@@ -121,9 +137,21 @@ def test_a_loss_maker_is_still_refused_by_default_exactly_as_before(client, monk
     assert body["method"] == "dcf"
     assert body["intrinsic_value_per_share"] is None
     # The standard refusal's shape, and no speculative figure smuggled into it -
-    # only the flag saying one could be asked for.
+    # only the flags saying which onward step, if any, could be asked for.
+    #
+    # `hypothetical_available` and `hypothetical_placeholders` were added when
+    # Tesla turned up a refusal with nothing after it: profitable, so no
+    # speculative estimate, and refused for cash flow, so the screen ended the
+    # conversation. The assertion is kept exact rather than loosened, because
+    # its job is to catch a figure appearing in a refusal - and it still would.
     assert set(body) == {"code", "method", "company", "suitable", "intrinsic_value_per_share",
-                         "message", "reasons", "assumptions", "speculative_estimate_available"}
+                         "message", "reasons", "assumptions", "speculative_estimate_available",
+                         "hypothetical_available", "hypothetical_placeholders",
+                         "hypothetical_framing"}
+    # Nothing speculative or hypothetical was computed to say so.
+    assert body["hypothetical_available"] is False
+    assert body["hypothetical_placeholders"] is None
+    assert body["hypothetical_framing"] is None
 
 
 @pytest.mark.parametrize("ticker, available, why", [

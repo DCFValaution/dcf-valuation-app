@@ -100,7 +100,7 @@ void main() {
       await valueTicker(tester, 'RIVN');
 
       expect(
-        find.text('A standard DCF isn’t the right tool here'),
+        find.text('A standard valuation isn’t the right tool here'),
         findsOneWidget,
       );
       expect(find.textContaining('loss-making'), findsWidgets);
@@ -125,7 +125,7 @@ void main() {
         await valueTicker(tester, ticker);
 
         expect(
-          find.text('A standard DCF isn’t the right tool here'),
+          find.text('A standard valuation isn’t the right tool here'),
           findsOneWidget,
         );
         expect(_optIn, findsNothing);
@@ -377,7 +377,7 @@ void main() {
 
         expect(find.byType(SpeculativeScreen), findsNothing);
         expect(
-          find.text('A standard DCF isn’t the right tool here'),
+          find.text('A standard valuation isn’t the right tool here'),
           findsOneWidget,
         );
         expect(_optIn, findsOneWidget);
@@ -406,7 +406,7 @@ void main() {
 
       expect(find.byType(SpeculativeScreen), findsNothing);
       expect(
-        find.text('A standard DCF isn’t the right tool here'),
+        find.text('A standard valuation isn’t the right tool here'),
         findsOneWidget,
       );
       // Still on the company, not back at an empty search.
