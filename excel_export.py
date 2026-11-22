@@ -310,7 +310,18 @@ def build_workbook(report: ValuationReport) -> Workbook:
     # --- 2. Base-year data -------------------------------------------------
     _section(ws, R_BASE_HEAD, f"2.  BASE-YEAR DATA & MARKET   ({fy_text} actuals)", layout)
     meta = report.meta
-    source_note = f"Source: Financial Modeling Prep, {today}"
+    # The provider is not named, here or anywhere a reader sees - and it was
+    # named WRONGLY: this line credited Financial Modeling Prep long after
+    # the backend stopped using it, on a spreadsheet people download, keep
+    # and act on. A false attribution is worse than none, because a reader
+    # who checks the figures against that provider finds different numbers
+    # and has no way to tell which of us is wrong.
+    #
+    # The app already answers the question a reader actually has - whose
+    # arithmetic is this, and how old is it - without advertising whose API
+    # it came from, and this uses the same words.
+    # test_provider_attribution.py holds it for every exporter.
+    source_note = f"Reported by the market data provider, as at {today}"
 
     base_rows = [
         (R_REVENUE_IN, f"Revenue - {fy_text} ($mm)", base.revenue, CURRENCY,
@@ -531,8 +542,9 @@ def build_workbook(report: ValuationReport) -> Workbook:
     for warning in report.suitability.warnings:
         notes.append(f"Warning: {warning}")
     notes.append(
-        f"Generated {today} from Financial Modeling Prep data. Assumption sources "
-        "are shown beside each input in section 1."
+        f"Generated {today} from a third-party market data provider's "
+        "figures. Assumption sources are shown beside each input in "
+        "section 1."
     )
     for index, text in enumerate(notes):
         _style(ws.cell(row=R_NOTES_HEAD + 1 + index, column=1, value=f"-  {text}"),

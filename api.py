@@ -688,8 +688,8 @@ class ValuationResponse(BaseModel):
     wacc_inputs: list[AssumptionOut] = Field(
         ...,
         description="Where each WACC input came from - notably whether beta "
-                    "was computed from price history, quoted by Yahoo, or "
-                    "defaulted.",
+                    "was computed from price history, quoted by the market "
+                    "data provider, or defaulted.",
     )
     sensitivity: SensitivityOut
     projection: list[ProjectionYearOut]
