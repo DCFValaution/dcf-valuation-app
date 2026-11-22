@@ -344,16 +344,25 @@ void main() {
       );
     });
 
-    testWidgets('asks what would have to be true, and says what is held '
-        'fixed', (tester) async {
+    testWidgets('puts investment on a slider rather than taking it', (
+      tester,
+    ) async {
       await open(tester, Backend());
 
-      expect(find.textContaining('what would have to be true'), findsWidgets);
-      final note = find.byKey(const Key('hypothetical-investment-note'));
-      await tester.ensureVisible(note);
-      expect(note, findsOneWidget);
+      // It used to be held fixed, and worse than fixed: the engine
+      // substituted a 5% mature rate for whatever the company spends, which
+      // for a company refused FOR spending past its profits was most of the
+      // answer. The note explaining that is gone, because there is nothing
+      // left to explain - it is a control like the others.
       expect(
-        find.textContaining('Investment is not yours to set'),
+        find.byKey(const Key('hypothetical-investment-note')),
+        findsNothing,
+      );
+      final investment = find.text('Investment');
+      await tester.ensureVisible(investment);
+      expect(investment, findsOneWidget);
+      expect(
+        find.textContaining('starts at what the company spends today'),
         findsOneWidget,
       );
     });

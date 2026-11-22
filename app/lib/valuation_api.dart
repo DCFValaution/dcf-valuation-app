@@ -1326,20 +1326,33 @@ class HypotheticalInputs {
   final double targetOperatingMargin;
   final int yearsToTarget;
 
+  /// Capital investment as a share of revenue once the target margin is
+  /// reached, gliding there from what the company spends today.
+  ///
+  /// It starts at the company's own current rate on both routes. There is
+  /// no neutral rate of capital spending to start from, and the constant
+  /// that used to be substituted - 5% of revenue, "typical of a mature
+  /// business" - was most of the answer for a company refused precisely
+  /// for spending past its profits.
+  final double capexPct;
+
   const HypotheticalInputs({
     required this.revenueGrowth,
     required this.targetOperatingMargin,
     required this.yearsToTarget,
+    required this.capexPct,
   });
 
   HypotheticalInputs copyWith({
     double? revenueGrowth,
     double? targetOperatingMargin,
     int? yearsToTarget,
+    double? capexPct,
   }) => HypotheticalInputs(
     revenueGrowth: revenueGrowth ?? this.revenueGrowth,
     targetOperatingMargin: targetOperatingMargin ?? this.targetOperatingMargin,
     yearsToTarget: yearsToTarget ?? this.yearsToTarget,
+    capexPct: capexPct ?? this.capexPct,
   );
 
   /// True while this is still the neutral starting point rather than anything
@@ -1357,6 +1370,7 @@ class HypotheticalInputs {
       targetOperatingMargin:
           (json['target_operating_margin'] as num?)?.toDouble() ?? 0,
       yearsToTarget: (json['years_to_target'] as num?)?.round() ?? 5,
+      capexPct: (json['capex_pct'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -1428,10 +1442,6 @@ class Hypothetical {
   /// something untrue about it. Never inferred here.
   final String framing;
 
-  /// What the model holds fixed while the reader sets the rest. Empty when
-  /// the backend had no figure for it.
-  final String investmentNote;
-
   /// True on the route that opens from the company's own current figures.
   bool get startsFromTheCompanysOwnFigures =>
       framing == 'what_would_have_to_be_true';
@@ -1450,7 +1460,6 @@ class Hypothetical {
     required this.warnings,
     this.sensitivity,
     this.framing = 'path_to_profit',
-    this.investmentNote = '',
   });
 
   bool get isNegative => valuePerShare < 0;
@@ -1478,6 +1487,7 @@ class Hypothetical {
         targetOperatingMargin:
             (assumed['target_operating_margin'] as num?)?.toDouble() ?? 0,
         yearsToTarget: (assumed['years_to_target'] as num?)?.round() ?? 0,
+        capexPct: (assumed['capex_pct'] as num?)?.toDouble() ?? 0,
       ),
       reality: (json['reality'] as List<dynamic>? ?? const [])
           .map((r) => RealityContrast.fromJson(r as Map<String, dynamic>))
@@ -1489,7 +1499,6 @@ class Hypothetical {
         json['sensitivity'] as Map<String, dynamic>?,
       ),
       framing: json['framing'] as String? ?? 'path_to_profit',
-      investmentNote: json['investment_note'] as String? ?? '',
     );
   }
 }
@@ -1784,6 +1793,7 @@ class ValuationApi {
                 'target_operating_margin': inputs.targetOperatingMargin
                     .toString(),
                 'years_to_target': inputs.yearsToTarget.toString(),
+                'capex_pct': inputs.capexPct.toString(),
               },
             ),
           )
@@ -2136,6 +2146,7 @@ class ValuationApi {
     required double revenueGrowth,
     required double targetOperatingMargin,
     required int yearsToTarget,
+    required double capexPct,
   }) async {
     final cleaned = ticker.trim().toUpperCase();
     if (cleaned.isEmpty) {
@@ -2152,6 +2163,7 @@ class ValuationApi {
             'revenue_growth': revenueGrowth.toString(),
             'target_operating_margin': targetOperatingMargin.toString(),
             'years_to_target': yearsToTarget.toString(),
+            'capex_pct': capexPct.toString(),
           },
         );
     return _downloadWorkbook(uri, cleaned);

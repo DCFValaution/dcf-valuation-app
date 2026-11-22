@@ -92,6 +92,25 @@ List<AdjustableAssumption> hypotheticalDrivers(String framing) {
       step: 1,
       isPercent: false,
     ),
+    // Investment, which used to be taken without asking.
+    //
+    // The engine substituted 5% of revenue - "typical of a mature
+    // business" - for whatever the company actually spends, and for a
+    // company refused BECAUSE its investment outspends its profits that one
+    // substitution was most of the answer. It starts at the company's own
+    // rate and glides to whatever the reader sets, over the same years as
+    // the margin.
+    AdjustableAssumption(
+      name: 'capex_pct',
+      label: 'Investment',
+      help:
+          'Capital spending as a share of revenue, once the margin is '
+          'reached. It starts at what the company spends today and gets '
+          'there over the same years as the margin.',
+      min: 0.0,
+      max: 0.50,
+      step: 0.0025,
+    ),
   ];
 }
 
@@ -159,6 +178,7 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
         revenueGrowth: _inputs.revenueGrowth,
         targetOperatingMargin: _inputs.targetOperatingMargin,
         yearsToTarget: _inputs.yearsToTarget,
+        capexPct: _inputs.capexPct,
       ),
       ticker: widget.ticker,
       showMessage: _showMessage,
@@ -185,6 +205,7 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
     'revenue_growth': _inputs.revenueGrowth,
     'target_operating_margin': _inputs.targetOperatingMargin,
     'years_to_target': _inputs.yearsToTarget.toDouble(),
+    'capex_pct': _inputs.capexPct,
   };
 
   /// What the screen opened on, from the backend. Neutral zeros on the
@@ -193,6 +214,7 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
     'revenue_growth': widget.placeholders.revenueGrowth,
     'target_operating_margin': widget.placeholders.targetOperatingMargin,
     'years_to_target': widget.placeholders.yearsToTarget.toDouble(),
+    'capex_pct': widget.placeholders.capexPct,
   };
 
   /// Whose figure each slider is showing right now.
@@ -205,16 +227,26 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
   Map<String, String> get _sources {
     final starting = _startingValues;
     final now = _sliderValues;
-    return {
-      for (final name in starting.keys)
-        name:
-            (_isWhatWouldHaveToBeTrue(widget.framing) &&
-                now[name] == starting[name])
-            ? (name == 'years_to_target'
-                  ? 'unchanged - the margin is the company’s own'
-                  : 'the company’s own figure, until you move it')
-            : 'you set this',
-    };
+    final profitable = _isWhatWouldHaveToBeTrue(widget.framing);
+
+    String sourceOf(String name) {
+      if (now[name] != starting[name]) return 'you set this';
+      // Investment starts at the company's own rate on BOTH routes: there
+      // is no neutral rate of capital spending to start from, and the
+      // constant that used to stand in for one was most of the answer.
+      if (name == 'capex_pct') {
+        return 'the company’s own figure, until you move it';
+      }
+      // Growth and the margin start neutral on the loss-maker's route, so
+      // there they really are the reader's from the first frame.
+      if (!profitable) return 'you set this';
+      if (name == 'years_to_target') {
+        return 'unchanged - the margin is the company’s own';
+      }
+      return 'the company’s own figure, until you move it';
+    }
+
+    return {for (final name in starting.keys) name: sourceOf(name)};
   }
 
   Future<void> _request() async {
@@ -236,6 +268,7 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
           targetOperatingMargin: value,
         ),
         'years_to_target' => _inputs.copyWith(yearsToTarget: value.round()),
+        'capex_pct' => _inputs.copyWith(capexPct: value),
         _ => _inputs,
       };
     });
@@ -366,19 +399,6 @@ class _HypotheticalScreenState extends State<HypotheticalScreen> {
     return switch (_outcome) {
       HypotheticalBuilt(:final hypothetical) => [
         _Figure(hypothetical: hypothetical),
-        // What the reader is NOT setting, said beside the figure rather than
-        // left in the assumptions list. On the route that asks what would
-        // have to be true about growth, margins and investment, the third of
-        // those is the one held fixed, and silence about it would be the
-        // most misleading part of the screen.
-        if (hypothetical.investmentNote.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.md),
-          NoteList(
-            key: const Key('hypothetical-investment-note'),
-            title: 'What you are not setting',
-            notes: [hypothetical.investmentNote],
-          ),
-        ],
         if (hypothetical.warnings.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
           NoteList(title: 'What this would take', notes: hypothetical.warnings),
@@ -848,9 +868,15 @@ class _StatusLine extends StatelessWidget {
               Icons.check_rounded,
               'The figure above is your assumptions, nothing else',
             ),
+            // Two things leave the screen without a figure, and they are
+            // not the same: no profit assumed yet, or assumptions that
+            // produce no value. "Assume a profit above 0%" is wrong and
+            // confusing for the second, where a profit IS assumed and the
+            // investment is what swallows it. The backend's own message
+            // says which; this line just points at it rather than guessing.
             HypotheticalIncomplete() => (
               Icons.edit_outlined,
-              'Assume a profit above 0% to see what it would imply',
+              'Move an assumption to see what it would imply',
             ),
             _ => (Icons.pending_outlined, 'No figure'),
           };

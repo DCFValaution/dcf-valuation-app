@@ -70,15 +70,36 @@ HYPOTHETICAL_HEADLINE = "A HYPOTHETICAL YOU BUILT - NOT A VALUATION"
 FRAMING_PATH_TO_PROFIT = "path_to_profit"
 FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE = "what_would_have_to_be_true"
 
-USER_INPUT_NAMES = ("revenue_growth", "target_operating_margin", "years_to_target")
+USER_INPUT_NAMES = ("revenue_growth", "target_operating_margin",
+                    "years_to_target", "capex_pct")
+
+# What a person may assume about capital investment, as a share of revenue.
+# Zero is allowed: a company that stops investing is a real thing to assume,
+# and the arithmetic handles it. The ceiling is well above any sustained
+# rate - Rivian's build-out ran at 23% - because the point of the control is
+# to let someone argue that investment stays high, not only that it falls.
+CAPEX_PCT_BOUNDS = (0.00, 0.50)
 
 
 @dataclass
 class UserAssumptions:
-    """The three drivers, as supplied by the person asking."""
+    """The four drivers, as supplied by the person asking.
+
+    `capex_pct` is the share of revenue the company is assumed to settle at
+    once the target margin is reached; investment glides there from what it
+    spends today, on the same path and over the same years as the margin.
+
+    None means "whatever the company spends today" - the company's own
+    figure, not a number this code chose. That distinction is the whole
+    reason the field is optional rather than defaulted to a constant: a
+    mature-business default of 5% used to be substituted silently here, and
+    for a company refused FOR spending past its profits that one substitution
+    decided the answer.
+    """
     revenue_growth: float
     target_operating_margin: float
     years_to_target: int
+    capex_pct: float | None = None
 
 
 class HypotheticalRefused(Exception):
@@ -122,6 +143,13 @@ def validate(user: UserAssumptions) -> None:
         raise HypotheticalRefused(
             f"A target operating margin above {high:.0%} is higher than all but a "
             "handful of companies have ever sustained.",
+            code="hypothetical_out_of_bounds")
+
+    low, high = CAPEX_PCT_BOUNDS
+    if user.capex_pct is not None and not low <= user.capex_pct <= high:
+        raise HypotheticalRefused(
+            f"Assumed capital investment must be between {low:.0%} and {high:.0%} of "
+            "revenue. Outside that the arithmetic stops describing a company.",
             code="hypothetical_out_of_bounds")
 
 

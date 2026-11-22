@@ -39,7 +39,10 @@ from assumptions import (CLAMP_REVENUE_GROWTH, DEFAULT_PROJECTION_YEARS,
                          DEFAULT_TERMINAL_GROWTH, FALLBACK_TAX_RATE, Provenance,
                          _clamp, derive_assumptions)
 from dcf import BaseYearData
+from industry_betas import industry_capex_for
 from market_data import CompanyFinancials, num
+from reinvestment import (MATURE_CAPEX_CEILING, depreciation_cover,
+                          derived_mature_capex, mature_investment)
 from speculative import SpeculativeAssumptions, SpeculativeInputs
 
 SPECULATIVE_GROWTH_CLAMP = (0.00, 0.30)
@@ -47,13 +50,13 @@ DEFAULT_TARGET_OPERATING_MARGIN = 0.10
 MARGIN_IMPROVEMENT_PACE = 0.15                # percentage points a year, as a fraction
 YEARS_TO_PROFITABILITY_BOUNDS = (2, 10)
 DEFAULT_YEARS_TO_PROFITABILITY = 5
-DEFAULT_MATURE_CAPEX_PCT = 0.05
 MATURE_NWC_CLAMP = (0.00, 0.10)
 MIN_SPECULATIVE_WACC = 0.10
 
 SPECULATIVE_ASSUMPTION_NAMES = (
     "speculative_revenue_growth", "target_operating_margin", "years_to_profitability",
-    "post_profitability_growth", "mature_capex_pct", "mature_nwc_pct", "tax_rate",
+    "post_profitability_growth", "mature_capex_pct", "mature_da_pct",
+    "mature_nwc_pct", "tax_rate",
     "wacc", "terminal_growth", "projection_years",
 )
 # Inputs to the DCF's own discount-rate build-up, passed through to it.
@@ -206,21 +209,48 @@ def derive_speculative_assumptions(fin: CompanyFinancials, base: BaseYearData,
         "floored at terminal growth" + (f" and capped at {CLAMP_REVENUE_GROWTH[1]:.0%}" if bit else ""))
 
     current_capex = dcf.assumptions.capex_pct
+    current_da = dcf.assumptions.da_pct
     # Recorded so callers can state what the company spends TODAY beside what
     # the model assumes it settles at. The two differ for exactly the
     # companies where the difference decides the answer.
     diagnostics["current_capex_pct"] = current_capex
-    if current_capex <= DEFAULT_MATURE_CAPEX_PCT:
-        mature_capex = record(
-            "mature_capex_pct", current_capex, "derived",
-            f"the company's current capex of {current_capex:.1%} of revenue, already at a "
-            "mature level; depreciation is assumed to equal it")
-    else:
-        mature_capex = record(
-            "mature_capex_pct", DEFAULT_MATURE_CAPEX_PCT, "default",
-            f"{DEFAULT_MATURE_CAPEX_PCT:.0%} of revenue, typical of a mature business - today's "
-            f"build-out rate of {current_capex:.1%} is not assumed to last. Depreciation is "
-            "assumed to equal capex once mature")
+    diagnostics["current_da_pct"] = current_da
+
+    # Where investment settles, and what depreciation settles at beside it.
+    #
+    # Two wrong answers shipped here before. A flat 5% of revenue, called
+    # "typical of a mature business", was substituted for any company
+    # spending more - which handed Lucid 67 points of revenue a year and
+    # Rivian 19, silently, and was most of their figures. Replacing it with
+    # "hold today's rate forever" was no better: a build-out rate carried to
+    # the terminal year says the company never finishes building.
+    #
+    # Now it glides to a level derived from the company's own figures, and
+    # depreciation glides to its covered share of that level, so the two
+    # converge without meeting. See `reinvestment.py` for the whole argument.
+    industry_capex = industry_capex_for(fin.ticker)
+    mature = mature_investment(
+        derived_mature_capex(current_capex, current_da), industry_capex,
+        chosen_by=(
+            f"moderated down from today's {current_capex:.1%}"
+            if current_capex > MATURE_CAPEX_CEILING else
+            "the company's own current rate"
+            if current_capex >= current_da else
+            f"its own depreciation, above today's {current_capex:.1%} spend"))
+    mature_capex = record("mature_capex_pct", mature.capex_pct, "derived",
+                          mature.detail)
+    # Recomputed from whatever capex ended up being, so an override of the
+    # investment rate carries depreciation with it rather than leaving the
+    # two describing different companies.
+    cover, cover_industry = depreciation_cover(industry_capex)
+    mature_da = record(
+        "mature_da_pct", mature_capex * cover, "derived",
+        f"{cover:.0%} of the {mature_capex:.1%} invested, which is what "
+        f"{cover_industry} companies cover out of depreciation (Damodaran). "
+        f"The {mature_capex * (1 - cover):.1%} gap is net investment, and it "
+        f"does not go away")
+    diagnostics["mature_cover"] = cover
+    diagnostics["mature_cover_industry"] = cover_industry
 
     current_nwc = dcf.assumptions.nwc_pct
     nwc, bit = _clamp(current_nwc, MATURE_NWC_CLAMP)
@@ -259,6 +289,7 @@ def derive_speculative_assumptions(fin: CompanyFinancials, base: BaseYearData,
             speculative_revenue_growth=growth,
             post_profitability_growth=post_growth,
             mature_capex_pct=mature_capex,
+            mature_da_pct=mature_da,
             mature_nwc_pct=mature_nwc,
             tax_rate=tax,
             wacc=wacc,

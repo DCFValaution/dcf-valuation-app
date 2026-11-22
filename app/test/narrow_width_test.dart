@@ -316,6 +316,8 @@ void main() {
                           .toDouble(),
                   yearsToTarget:
                       (placeholders['years_to_target'] as num).round(),
+                  capexPct:
+                      (placeholders['capex_pct'] as num?)?.toDouble() ?? 0,
                 ),
               ),
             ),

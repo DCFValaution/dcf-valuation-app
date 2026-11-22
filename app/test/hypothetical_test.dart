@@ -85,6 +85,7 @@ HypotheticalInputs get _placeholders {
     revenueGrowth: (p['revenue_growth'] as num).toDouble(),
     targetOperatingMargin: (p['target_operating_margin'] as num).toDouble(),
     yearsToTarget: (p['years_to_target'] as num).round(),
+    capexPct: (p['capex_pct'] as num?)?.toDouble() ?? 0,
   );
 }
 

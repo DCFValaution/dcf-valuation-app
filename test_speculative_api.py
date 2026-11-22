@@ -21,7 +21,9 @@ from fastapi.testclient import TestClient
 import analysis
 import api
 import assumptions as A
+import reinvestment as R
 import speculative_assumptions as S
+from speculative import run_speculative
 from api import XLSX_MEDIA_TYPE, app
 from market_data import base_year_from
 from test_api import PROFITABLE, fake_fetch_financials, make_fin
@@ -411,14 +413,48 @@ def test_years_to_profitability_come_from_the_distance_to_the_target():
 
 
 def test_todays_build_out_capex_is_not_assumed_to_last():
-    heavy = derive(grower(capex_share=0.23)).provenance["mature_capex_pct"]
-    assert heavy.value == pytest.approx(S.DEFAULT_MATURE_CAPEX_PCT)
-    assert heavy.source == "default"
-    assert "not assumed to last" in heavy.detail
+    """A build-out rate is moderated, but to the ceiling - not to a flat 5%.
 
-    light = derive(grower()).provenance["mature_capex_pct"]   # already spends 4%
-    assert light.value == pytest.approx(0.04)
+    The flat rate was the bug: it handed Lucid 67 points of revenue a year
+    and Rivian 19, silently, and was most of their figures. The ceiling is
+    above the highest industry AVERAGE Damodaran publishes, so it moderates
+    only companies that are outliers against their own industry.
+    """
+    heavy = derive(grower(capex_share=0.23)).provenance["mature_capex_pct"]
+    assert heavy.value == pytest.approx(R.MATURE_CAPEX_CEILING)
+    assert heavy.source == "derived"
+    assert "moderated down from today's 23.0%" in heavy.detail
+
+    # This one spends 4% and depreciates 5%, so it is floored at its own
+    # depreciation: a company that invests less than its assets lose is
+    # shrinking, and a forecast cannot assume that forever.
+    light = derive(grower()).provenance["mature_capex_pct"]
+    assert light.value == pytest.approx(0.05)
     assert light.source == "derived"
+    assert "its own depreciation" in light.detail
+
+    # A company already spending between the two keeps its own rate.
+    middling = derive(grower(capex_share=0.08)).provenance["mature_capex_pct"]
+    assert middling.value == pytest.approx(0.08)
+    assert "own current rate" in middling.detail
+
+
+def test_depreciation_rises_toward_investment_without_reaching_it():
+    """The gap between them is net investment, and it does not go away.
+
+    Setting them equal was the other bug: it made investment free, so the
+    rate could be anything and the figure never moved.
+    """
+    derived = derive(grower(capex_share=0.23))
+    capex = derived.provenance["mature_capex_pct"].value
+    da = derived.provenance["mature_da_pct"].value
+
+    assert 0 < da < capex, (da, capex)
+    assert derived.provenance["mature_da_pct"].source == "derived"
+    assert "cover out of depreciation" in derived.provenance["mature_da_pct"].detail
+    # And the cover is the industry's own published ratio, not a constant.
+    cover = derived.diagnostics["mature_cover"]
+    assert da == pytest.approx(capex * cover)
 
 
 def test_a_low_discount_rate_is_floored_for_a_company_never_profitable(client):
@@ -466,3 +502,72 @@ def test_a_company_a_valuation_applies_to_gets_no_speculative_workbook(client):
     r = client.get("/valuation/GOOD/speculative/excel")
     assert r.status_code == 422
     assert r.json()["code"] == "speculative_not_applicable"
+
+
+def test_the_phase_after_profitability_keeps_paying_for_its_investment():
+    """The forecast's two halves have to agree.
+
+    Years one to N glide investment and depreciation toward each other; from
+    year N the standard DCF takes over, and it was handed capex and
+    depreciation set EQUAL - so net investment fell to nothing exactly where
+    most of the value sits. The glide then bought nothing: a company paid
+    for its assets during the visible years and was given them free forever
+    after.
+    """
+    derived = derive(grower(capex_share=0.23))
+    result = run_speculative(derived.inputs, derived.assumptions)
+
+    mature_capex = derived.assumptions.mature_capex_pct
+    mature_da = derived.assumptions.mature_da_pct
+    assert mature_da is not None and mature_da < mature_capex
+
+    # The DCF phase's own projection must show investment costing something.
+    year = result.after_profitability.years[-1]
+    assert year.capex > year.da > 0, (year.capex, year.da)
+    assert year.capex / year.revenue == pytest.approx(mature_capex, abs=1e-9)
+    assert year.da / year.revenue == pytest.approx(mature_da, abs=1e-9)
+
+
+def test_a_known_company_uses_its_own_industrys_cover_not_the_markets():
+    """The lookup is wired to the SIC map, and it is worth proving: falling
+    back to the whole market for everything would be invisible in a figure
+    and wrong in every provenance line."""
+    import industry_betas as IB
+    import reinvestment as Rv
+    from industry_capex_data import INDUSTRY_CAPEX
+
+    semiconductor = Rv.depreciation_cover(INDUSTRY_CAPEX["Semiconductor"])[0]
+    market = Rv.depreciation_cover(INDUSTRY_CAPEX[Rv.FALLBACK_INDUSTRY])[0]
+    assert semiconductor != pytest.approx(market), "fixture sanity"
+
+    found = IB.industry_capex_for("NVDA")
+    assert found is not None and found.name == "Semiconductor"
+    assert Rv.depreciation_cover(found)[0] == pytest.approx(semiconductor)
+
+
+def test_the_derivation_is_wired_to_the_ticker_s_own_industry():
+    """Not just the lookup - the wiring.
+
+    A synthetic company carrying a real ticker is enough, because the
+    industry is found from the ticker's SIC code and nothing else. Without
+    this, replacing the lookup with None leaves every figure unchanged on
+    the fixtures, which have no SIC codes at all - so the wiring could be
+    cut and no test would notice.
+    """
+    import reinvestment as Rv
+    from industry_capex_data import INDUSTRY_CAPEX
+
+    semiconductor = Rv.depreciation_cover(INDUSTRY_CAPEX["Semiconductor"])[0]
+    market = Rv.depreciation_cover(INDUSTRY_CAPEX[Rv.FALLBACK_INDUSTRY])[0]
+    assert semiconductor != pytest.approx(market), "fixture sanity"
+
+    chipmaker = derive(grower("NVDA", capex_share=0.10))
+    assert chipmaker.diagnostics["mature_cover"] == pytest.approx(semiconductor)
+    assert chipmaker.diagnostics["mature_cover_industry"] == "Semiconductor"
+    assert "Semiconductor" in chipmaker.provenance["mature_da_pct"].detail
+
+    # And a company whose ticker is in no map gets the market's, labelled
+    # as the market's rather than quietly passed off as its own.
+    unknown = derive(grower("ZZZZ", capex_share=0.10))
+    assert unknown.diagnostics["mature_cover"] == pytest.approx(market)
+    assert unknown.diagnostics["mature_cover_industry"] == Rv.FALLBACK_INDUSTRY

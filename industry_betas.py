@@ -434,6 +434,24 @@ def relevered_beta(industry: IndustryBeta, debt_to_equity: float) -> float:
 MAX_DEBT_TO_EQUITY = 3.0
 
 
+def industry_capex_for(ticker: str):
+    """Damodaran's investment intensities for *ticker*'s industry.
+
+    The same SIC map as `industry_for`, because they are the same
+    industries - the two tables are different columns of the same annual
+    exercise. Returns None where the company's industry is unknown, so the
+    caller can say so rather than quietly using the whole market's.
+    """
+    from industry_capex_data import INDUSTRY_CAPEX
+
+    code = COMPANY_SIC.get((ticker or "").upper().strip())
+    if code:
+        name = SIC_TO_INDUSTRY.get(code)
+        if name:
+            return INDUSTRY_CAPEX.get(name)
+    return None
+
+
 def industry_for(ticker: str) -> tuple[IndustryBeta, str | None, bool]:
     """The industry beta to use for *ticker*.
 

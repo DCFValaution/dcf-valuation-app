@@ -165,7 +165,9 @@ def test_the_sheet_reproduces_the_engines_path(speculative):
         margin = i.operating_margin + (a.target_operating_margin - i.operating_margin) * progress
         ebit = revenue * margin
         tax = max(ebit, 0.0) * a.tax_rate
-        da = revenue * (i.da_pct + (a.mature_capex_pct - i.da_pct) * progress)
+        mature_da = (a.mature_da_pct if a.mature_da_pct is not None
+                     else a.mature_capex_pct)
+        da = revenue * (i.da_pct + (mature_da - i.da_pct) * progress)
         capex = revenue * (i.capex_pct + (a.mature_capex_pct - i.capex_pct) * progress)
         nwc = (revenue - previous) * (i.nwc_pct + (a.mature_nwc_pct - i.nwc_pct) * progress)
         pv_sum += (ebit - tax + da - capex - nwc) / (1 + a.wacc) ** t

@@ -44,7 +44,7 @@ from relative import (FINANCIAL_MULTIPLES, MAX_AUTO_PEERS, MAX_PEERS,
                       MIN_APPLICABLE_MULTIPLES, MIN_PEERS, SIZE_BAND,
                       STANDARD_MULTIPLES, WIDE_RANGE_RATIO, RelativeResult,
                       peer_exclusion, run_relative)
-from hypothetical import (FRAMING_PATH_TO_PROFIT,
+from hypothetical import (CAPEX_PCT_BOUNDS, FRAMING_PATH_TO_PROFIT,
                           FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE,
                           HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
                           NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
@@ -1785,11 +1785,10 @@ class HypotheticalReport:
     # loss-maker, and calling it one in the app's loudest paragraph would be
     # a plain untruth about the company.
     standard_codes: list[str] = field(default_factory=list)
-    # Investment is not one of the three drivers: the model keeps the
-    # company's own capital spending. On the route that asks what would have
-    # to be true about growth, margins AND investment, that has to be said
-    # rather than left as a silent default.
-    investment_note: str = ""
+    # The capital investment actually used - the caller's figure, or the
+    # company's own where they supplied none. Reported back so a reader
+    # always sees the rate the arithmetic ran on.
+    capex_pct: float = 0.0
 
     @property
     def method(self) -> str:
@@ -1912,6 +1911,7 @@ def hypothetical_placeholders_for(report: "ValuationReport") -> dict:
     a = report.derived.assumptions
     growth_low, growth_high = REVENUE_GROWTH_BOUNDS
     margin_low, margin_high = TARGET_MARGIN_BOUNDS
+    capex_low, capex_high = CAPEX_PCT_BOUNDS
     growth = min(max(a.revenue_growth, growth_low), growth_high)
     margin = min(max(a.operating_margin, margin_low), margin_high)
     return {
@@ -1921,6 +1921,10 @@ def hypothetical_placeholders_for(report: "ValuationReport") -> dict:
         "target_operating_margin": (margin if margin > 0
                                     else NEUTRAL_TARGET_MARGIN),
         "years_to_target": float(NEUTRAL_YEARS_TO_TARGET),
+        # What the company spends on investment today. The one figure the
+        # screen used to take without asking, and the one that decides the
+        # answer for a company refused for spending past its profits.
+        "capex_pct": min(max(a.capex_pct, capex_low), capex_high),
     }
 
 
@@ -2125,6 +2129,11 @@ def _reality_contrast(user: UserAssumptions,
     return out
 
 
+def short_of(name: str) -> str:
+    """A company name without its trailing full stop, for mid-sentence use."""
+    return name.rstrip(".")
+
+
 def value_company_hypothetically(ticker: str,
                                  user: UserAssumptions) -> HypotheticalReport:
     """
@@ -2216,12 +2225,54 @@ def value_company_hypothetically(ticker: str,
             "yourself.",
             reasons=blocks)
 
-    derived = derive_speculative_assumptions(fin, base, overrides={
+    # Investment is the reader's too, and it is the input that used to be
+    # taken quietly. The engine substituted a 5%-of-revenue
+    # "mature business" rate for whatever the company actually spends - a
+    # gift of 10 points of revenue a year to Tesla, 18 to Rivian - and for a
+    # company refused FOR spending past its profits that single substitution
+    # decided the answer.
+    #
+    # So it is set here, and where the reader has not moved it, it is set to
+    # what the company spends TODAY. The engine already glides capex and D&A
+    # from today's rate to this one over `years_to_profitability`, on the
+    # same path as the margin, so "by the year it reaches that margin it is
+    # spending this much" needs no new machinery.
+    own_capex = probe.diagnostics.get("current_capex_pct")
+    capex_pct = user.capex_pct if user.capex_pct is not None else own_capex
+    overrides = {
         "speculative_revenue_growth": user.revenue_growth,
         "target_operating_margin": user.target_operating_margin,
         "years_to_profitability": user.years_to_target,
-    })
+    }
+    if capex_pct is not None:
+        overrides["mature_capex_pct"] = capex_pct
+    derived = derive_speculative_assumptions(fin, base, overrides=overrides)
     result = run_speculative(derived.inputs, derived.assumptions)
+
+    # No value in it, on the route where the figures started as the
+    # company's own.
+    #
+    # A negative number here is not information, it is the refusal restated
+    # with a decimal point on it - and a reader who has changed nothing
+    # would be looking at what reads like a price target for a company the
+    # model has just declined to value. The two levers that move it are
+    # named instead.
+    #
+    # The loss-maker's route keeps its negative figure, because there it IS
+    # the finding: the losses on the way and the debt outweigh the
+    # profitable business the reader has assumed at the end, and the screen
+    # says so in those words.
+    if (framing == FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE
+            and result.value_per_share <= 0):
+        spending = (f"{capex_pct:.1%} of revenue on investment"
+                    if capex_pct is not None else "what it invests")
+        raise HypotheticalRefused(
+            f"On these assumptions there is no value to show. {short_of(name)} earning "
+            f"{user.target_operating_margin:.1%} and spending {spending} does not "
+            f"produce cash to put a value on - which is why the model would not value "
+            f"it either. Raise the margin, or lower the investment, to see what would "
+            f"have to be true.",
+            code="hypothetical_incomplete")
 
     # What this path would take, in the same terms the speculative estimate
     # uses - the arithmetic does not care who chose the numbers.
@@ -2279,124 +2330,42 @@ def value_company_hypothetically(ticker: str,
         reality=_reality_contrast(user, derived, name),
         warnings=warnings,
         standard_codes=list(standard.codes),
-        investment_note=_investment_note(derived, short),
+        capex_pct=derived.assumptions.mature_capex_pct,
     )
-
-
-def _investment_note(derived: DerivedSpeculativeAssumptions,
-                     short: str) -> str:
-    """What the model holds fixed while the reader argues about the rest.
-
-    Growth and margin are the reader's. Investment is not, and on the route
-    that asks what would have to be true about growth, margins AND investment
-    that silence would be the most misleading part of the screen - a company
-    refused for outspending its profits is one whose capital spending is the
-    whole point.
-
-    So it is stated: the rate used, that it is the company's own, and that it
-    cannot be changed here.
-    """
-    prov = derived.provenance.get("mature_capex_pct")
-    if prov is None:
-        return ""
-    today = derived.diagnostics.get("current_capex_pct")
-    assumed = (
-        f"Once the margin is reached the model spends {prov.value:.1%} of "
-        f"revenue on capital investment, with depreciation assumed equal to "
-        f"it, so investment stops consuming cash.")
-    if today is None or abs(today - prov.value) < 0.0005:
-        whose = f" That is {short}'s own current rate."
-    else:
-        whose = (
-            f" {short} actually spends {today:.1%} today; {prov.value:.1%} is "
-            f"a mature-business default, not this company's rate, and the gap "
-            f"between the two is most of why the figure is what it is.")
-    return (
-        f"Investment is not yours to set on this screen. {assumed}{whose} A "
-        f"company refused for spending past its profits is one where that "
-        f"figure decides the answer, so it is said here rather than left to "
-        f"be found in the assumptions list.")
 
 
 def hypothetical_disclaimer(report: HypotheticalReport) -> str:
+    """One sentence, in normal case.
+
+    This used to be a paragraph opening in capitals, and it was read by
+    nobody. It sat under three bullets that already said the same thing, in
+    fewer words and in the second person, and the screen's whole top half
+    was a wall of red shouting - which is how a warning stops being a
+    warning. Loudness is not honesty; the bullets and the headline carry the
+    force, and this says the one thing they do not.
+
+    Written per route. A loss-maker's own figures point away from the profit
+    being assumed, and that is worth a clause. A profitable company's do
+    not, and saying so would be false.
     """
-    The strongest disclaimer in the app.
-
-    Stronger than the speculative one, and differently so: that figure rests on
-    assumptions the model derived from the company's own trajectory. This one
-    rests on assumptions the user supplied. The text says so, names the
-    numbers, and never once calls the output an estimate of value.
-
-    Written per route. On the loss-maker route the company's actual figures
-    point the other way, and the text says that. On the other route they do
-    not - the company makes a profit - and the question is what would have to
-    be true about growth, margins and investment, which is a different
-    sentence and not a softer one.
-    """
-    u = report.user
-    d = report.derived.diagnostics
-    short = report.company_name.rstrip(".")
-    cagr, latest = d["revenue_cagr"], d["latest_revenue_growth"]
-    actual_growth = cagr if cagr is not None else latest
-    margin = d["operating_margin"]
-
-    contradiction = ""
-    if actual_growth is not None and u.revenue_growth > actual_growth:
-        direction = "falling" if actual_growth < 0 else "growing"
-        contradiction = (
-            f" {short}'s revenue is actually {direction} {abs(actual_growth):.1%} a year, so "
-            "this figure assumes a reversal the company's own figures do not show.")
-    margin_clause = f" from {margin:.1%} today" if margin is not None else ""
-
-    # Which refusal brought the reader here. Two routes reach this screen and
-    # they are not the same company: one loses money, the other makes a profit
-    # and spends past it. The old wording said "loses money" for both, which
-    # was false of the second in the app's loudest paragraph.
-    if "negative_fcf" in report.standard_codes:
-        route = (
-            f"{short} was refused a standard valuation because even by the last year of that "
-            "forecast it would still be spending more cash than it brings in, so there was no "
-            "positive cash flow to value. No speculative estimate is offered for that either: "
-            "that path exists only to project a way out of losses, and this company is not "
-            "losing money.")
-    else:
-        route = (
-            f"{short} loses money and was refused a standard valuation; it was then refused a "
-            "speculative estimate as well, because its own figures show no path to "
-            "profitability to project.")
-
-    assumed = (
-        f"you have assumed revenue grows {signed_pct(u.revenue_growth)} a year and that the "
-        f"operating margin reaches {u.target_operating_margin:.0%}{margin_clause} within "
-        f"{_count(u.years_to_target, 'year')}, and the figure below is what those "
-        f"assumptions imply.")
-
+    u, short = report.user, short_of(report.company_name)
     if report.framing == FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE:
-        # "Nothing here is derived from the company's data" is false on this
-        # route: the screen opens on the company's own growth and margin,
-        # because the question is what would have to CHANGE about them. So
-        # this says where the figures start and whose they are once they
-        # move, which is the honest version of the same warning.
         return (
-            f"THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT {short.upper()} IS "
-            f"WORTH. It is arithmetic on assumptions you set. {route} So the question this "
-            f"screen answers is not what the company is worth, but what would have to be "
-            f"true about its growth, its margins and its investment for it to be worth "
-            f"something - and you are the one saying what that is. It opens on the company's "
-            f"own current figures and goes wherever you take them: {assumed}{contradiction} "
-            f"Change any one of them and it moves by multiples or changes sign. Treat it as "
-            f"a way of seeing what your own beliefs would have to be worth, not as "
-            f"information about the company, and never as a reason to buy or sell."
-        )
+            f"These are your assumptions about {short}, not its results: on "
+            f"{signed_pct(u.revenue_growth)} growth, a "
+            f"{u.target_operating_margin:.1%} margin and "
+            f"{report.capex_pct:.1%} of revenue invested, this is the "
+            f"arithmetic - not a valuation, and not a price target.")
 
+    actual = report.derived.diagnostics.get("operating_margin")
+    actually = ("" if actual is None
+                else f", which actually earned {actual:.1%} last year")
     return (
-        f"THIS IS NOT A VALUATION, AND IT IS NOT AN ESTIMATE OF WHAT {short.upper()} IS "
-        f"WORTH. It is arithmetic on assumptions you typed in. {route} Nothing here is "
-        f"derived from the company's data: {assumed}{contradiction} Change any one of them "
-        "and it moves by multiples or changes sign. Treat it as a way of seeing what your "
-        "own beliefs would have to be worth, not as information about the company, and "
-        "never as a reason to buy or sell."
-    )
+        f"These are your assumptions about {short}{actually}, not its "
+        f"results: on {signed_pct(u.revenue_growth)} growth reaching a "
+        f"{u.target_operating_margin:.1%} margin within "
+        f"{_count(u.years_to_target, 'year')}, this is the arithmetic - not "
+        f"a valuation, and not a price target.")
 
 
 # ---------------------------------------------------------------------------

@@ -37,6 +37,24 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from dcf import Assumptions, BaseYearData, DCFResult, run_dcf
+from reinvestment import MatureInvestment, investment_path
+
+
+def mature_pair(a: "SpeculativeAssumptions") -> MatureInvestment:
+    """Where investment and depreciation settle, as the shared type.
+
+    `mature_da_pct` unset means the old rule - depreciation equal to
+    investment once mature, so net investment is nil. That is the right end
+    state only when the investment rate was DERIVED rather than chosen, and
+    `speculative_assumptions` now always sets both; the fallback is kept so
+    a caller constructing assumptions by hand still gets a coherent pair
+    rather than a crash.
+    """
+    da = a.mature_da_pct if a.mature_da_pct is not None else a.mature_capex_pct
+    return MatureInvestment(
+        capex_pct=a.mature_capex_pct, da_pct=da,
+        cover=(da / a.mature_capex_pct) if a.mature_capex_pct else 0.0,
+        industry="", detail="")
 
 SENSITIVITY_OFFSETS = (-2, -1, 0, 1, 2)
 SENSITIVITY_MARGIN_STEP = 0.05      # target operating margin, 5 points a step
@@ -67,12 +85,31 @@ class SpeculativeAssumptions:
     target_operating_margin: float
     speculative_revenue_growth: float   # until profitability
     post_profitability_growth: float    # the DCF's growth from year N
-    mature_capex_pct: float             # D&A is taken to equal capex once mature
+    mature_capex_pct: float
     mature_nwc_pct: float
     tax_rate: float
     wacc: float
     terminal_growth: float
     projection_years: int = 5           # the DCF's forecast after year N
+    # Depreciation once mature, as a share of revenue.
+    #
+    # None keeps the old rule, which is the right one when capex was DERIVED:
+    # a mature business reinvests about what it depreciates, so the two are
+    # taken as equal and net investment settles at nothing.
+    #
+    # That rule becomes a lie the moment someone SETS capex. "I assume it
+    # invests 25% of revenue" must not quietly also mean "and depreciates
+    # 25%", because then the two cancel in the cash flow and the assumption
+    # changes nothing at all - which is exactly what happened when capital
+    # investment was first put on a slider: moving it from 14.9% to 5% left
+    # Tesla's figure identical to the cent.
+    #
+    # So a caller who sets capex sets this too, normally to the company's own
+    # depreciation. That understates it - assets built at 25% of revenue do
+    # eventually depreciate at more than today's rate - and the honest
+    # version is D&A rising toward capex across the forecast, which is its
+    # own change with its own before/after.
+    mature_da_pct: float | None = None
 
 
 @dataclass
@@ -139,14 +176,22 @@ def _simulate(inputs: SpeculativeInputs, a: SpeculativeAssumptions,
     previous = inputs.revenue
     pv_sum = 0.0
 
+    # Investment and depreciation come from the shared mechanism rather than
+    # being glided here, so this path, the user-built hypothetical and the
+    # main DCF cannot drift into three different answers to one question.
+    # See `reinvestment.py`.
+    investment = investment_path(
+        capex_start=inputs.capex_pct, da_start=inputs.da_pct,
+        mature=mature_pair(a), years=years)
+
     for t in range(1, years + 1):
         progress = t / years
         revenue = previous * (1 + a.speculative_revenue_growth)
         margin = inputs.operating_margin + (target - inputs.operating_margin) * progress
         ebit = revenue * margin
         tax = max(ebit, 0.0) * a.tax_rate
-        da = revenue * (inputs.da_pct + (a.mature_capex_pct - inputs.da_pct) * progress)
-        capex = revenue * (inputs.capex_pct + (a.mature_capex_pct - inputs.capex_pct) * progress)
+        da = revenue * investment.da[t - 1]
+        capex = revenue * investment.capex[t - 1]
         nwc_pct = inputs.nwc_pct + (a.mature_nwc_pct - inputs.nwc_pct) * progress
         delta_nwc = (revenue - previous) * nwc_pct
         ufcf = ebit - tax + da - capex - delta_nwc
@@ -163,7 +208,8 @@ def _simulate(inputs: SpeculativeInputs, a: SpeculativeAssumptions,
         BaseYearData(revenue=previous, total_debt=inputs.total_debt, cash=inputs.cash,
                      shares=inputs.shares, current_price=inputs.current_price),
         Assumptions(revenue_growth=a.post_profitability_growth, operating_margin=target,
-                    tax_rate=a.tax_rate, da_pct=a.mature_capex_pct,
+                    tax_rate=a.tax_rate,
+                    da_pct=mature_pair(a).da_pct,
                     capex_pct=a.mature_capex_pct, nwc_pct=a.mature_nwc_pct,
                     wacc=a.wacc, terminal_growth=a.terminal_growth,
                     projection_years=a.projection_years),

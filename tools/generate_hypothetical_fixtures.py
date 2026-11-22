@@ -89,12 +89,14 @@ def main() -> int:
     opening = {"revenue_growth": start.get("revenue_growth", 0),
                "target_operating_margin": start.get(
                    "target_operating_margin", 0),
-               "years_to_target": int(start.get("years_to_target", 5))}
+               "years_to_target": int(start.get("years_to_target", 5)),
+               "capex_pct": start.get("capex_pct", 0)}
     record("tsla_opening", hypothetical("TSLA", opening), 200,
            lambda b: b.get("framing") == "what_would_have_to_be_true"
-           and b.get("investment_note", "") != ""
-           and "Nothing here is derived from the company's data"
-           not in b.get("disclaimer", ""))
+           # Investment is a driver on this screen, reported back at the
+           # rate actually used.
+           and b["your_assumptions"]["capex_pct"] > 0
+           and "NOT A VALUATION" not in b.get("disclaimer", ""))
 
     # And a margin of nil says so in this route's words, not the
     # loss-maker's.

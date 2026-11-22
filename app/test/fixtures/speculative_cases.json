@@ -8,7 +8,9 @@
         "ticker": "RIVN",
         "company_name": "Rivian Automotive, Inc.",
         "sector": "Consumer Cyclical",
-        "exchange": "NasdaqGS"
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
       "suitable": false,
       "intrinsic_value_per_share": null,
@@ -19,71 +21,141 @@
       "assumptions": [
         {
           "name": "revenue_growth",
-          "value": 0.15,
+          "value": 0.25,
           "source": "derived (clamped)",
-          "detail": "3-year revenue CAGR, FY2022-FY2025 (1.7bn -> 5.4bn); raw 48.1% clamped to [0%, 15%]",
-          "is_percent": true
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (1.7bn -> 5.4bn); raw 48.1% clamped to [0%, 25%]",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "operating_margin",
-          "value": -0.9434607645875251,
+          "value": -0.6654909968442547,
           "source": "derived",
-          "detail": "median operatingIncome / revenue over 3 years",
-          "is_percent": true
+          "detail": "the latest year's -66.5%; the margin has moved one way for 4 years (improving) rather than spiking, so the level reached is used",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "tax_rate",
-          "value": 0.21,
-          "source": "default",
-          "detail": "no profitable year in window; used US statutory rate",
-          "is_percent": true
+          "value": 0.2563,
+          "source": "derived",
+          "detail": "normalized effective rate as published, median over 3 year(s), because no profitable year in the window",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "da_pct",
           "value": 0.20744466800804828,
           "source": "derived",
           "detail": "median D&A / revenue over 3 years",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_terminal_pct",
+          "value": 0.2594673640706971,
+          "source": "derived",
+          "detail": "mean capex / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "capex_pct",
-          "value": 0.2313937753721245,
+          "value": 0.2412037037037037,
           "source": "derived",
-          "detail": "median capex / revenue over 3 years",
-          "is_percent": true
+          "detail": "capex / revenue, trailing twelve months; fades from 24.1% (current) to 25.9% (3-yr mean) over the forecast",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "nwc_pct",
-          "value": 0.2866720300348619,
+          "value": -0.02615096556693046,
           "source": "derived",
-          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025",
-          "is_percent": true
+          "detail": "median working capital as a share of revenue across FY2022-FY2025 (4 years)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "wacc",
-          "value": 0.12221178196914914,
+          "value": 0.09303828886980865,
           "source": "derived",
-          "detail": "CAPM: 5.01% + 1.67x5.50% = 14.17% equity; debt 6.56% (5.19% after tax); weights 78.3%E / 21.7%D",
-          "is_percent": true
+          "detail": "CAPM: 4.18% + 1.45x4.41% = 10.58% equity; debt 6.84% (5.09% after tax); weights 76.8%E / 23.2%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
-          "value": 0.025,
-          "source": "default",
-          "detail": "global default (~long-run nominal GDP growth)",
-          "is_percent": true
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.18% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "projection_years",
-          "value": 5.0,
-          "source": "default",
-          "detail": "modelling convention",
-          "is_percent": false
+          "value": 10.0,
+          "source": "derived",
+          "detail": "ten years rather than five, because 25.0% growth needs room to slow to the 4.0% it ends at",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_enabled",
+          "value": 1.0,
+          "source": "derived",
+          "detail": "on; growth glides from 25.0% down to 4.0% across the forecast rather than dropping to it in one step at the end",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_start_year",
+          "value": 1.0,
+          "source": "derived",
+          "detail": "the glide starts immediately, so 25.0% is this year's rate rather than the next three years' rate",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "speculative_estimate_available": true,
       "hypothetical_available": false,
-      "hypothetical_placeholders": null
+      "hypothetical_placeholders": null,
+      "hypothetical_framing": null
     }
   },
   "rivn_speculative": {
@@ -92,29 +164,31 @@
       "method": "speculative",
       "is_valuation": false,
       "disclaimer_headline": "SPECULATIVE ESTIMATE - NOT A VALUATION",
-      "disclaimer": "Rivian Automotive, Inc. loses money, so a standard valuation was refused: it has no profits to project. This figure is not a valuation and must not be treated as one. It was produced only because it was explicitly requested, and it rests entirely on assumptions about a future that has not happened: that revenue grows 8.4% a year, that the operating margin climbs from -67% to 10% within 6 years, that the company can fund about $9.9bn of losses along the way, and that it then performs like an established, profitable business indefinitely. Loss-making companies often never reach sustained profitability; many raise money on terms that dilute existing shareholders, and some fail outright, in which case shareholders can lose everything. Modest changes to these assumptions move this figure by multiples, not percentages - the sensitivity table shows how far. It is not investment advice, a price target, or a reason to buy or sell.",
+      "disclaimer": "Rivian Automotive, Inc. loses money, so a standard valuation was refused: it has no profits to project. This figure is not a valuation and must not be treated as one. It was produced only because it was explicitly requested, and it rests entirely on assumptions about a future that has not happened: that revenue grows 8.4% a year, that the operating margin climbs from -67% to 10% within 6 years, that the company can fund about $12.9bn of losses along the way, and that it then performs like an established, profitable business indefinitely. Loss-making companies often never reach sustained profitability; many raise money on terms that dilute existing shareholders, and some fail outright, in which case shareholders can lose everything. Modest changes to these assumptions move this figure by multiples, not percentages - the sensitivity table shows how far. It is not investment advice, a price target, or a reason to buy or sell.",
       "company": {
         "ticker": "RIVN",
         "company_name": "Rivian Automotive, Inc.",
         "sector": "Consumer Cyclical",
-        "exchange": "NasdaqGS"
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
-      "speculative_value_per_share": -3.163701980237584,
-      "current_price": 15.23,
-      "estimate_vs_price": -1.2077282981114632,
+      "speculative_value_per_share": -5.6179982597540565,
+      "current_price": 10.33,
+      "estimate_vs_price": -1.5438526872946812,
       "why_standard_valuation_refused": [
         "The company is loss-making: its day-to-day business lost $3.6bn in its 2025 financial year, and it made a loss in 4 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
       ],
       "starting_point": {
         "fiscal_year": "2025",
-        "revenue": 5387.0,
+        "revenue": 6480.0,
         "operating_margin": -0.6654909968442547,
         "gross_margin": 0.026731019120103953,
         "latest_revenue_growth": 0.08390342052313882,
         "revenue_cagr": 0.48111057614478514,
-        "cash": 6082.0,
-        "total_debt": 6100.0,
-        "shares": 1186.0,
+        "cash": 6184.0,
+        "total_debt": 4446.0,
+        "shares": 1313.5,
         "history": [
           {
             "fiscal_year": "2025",
@@ -145,67 +219,67 @@
       "path_to_profitability": [
         {
           "period": 1,
-          "revenue": 5838.987726358148,
+          "revenue": 7023.69416498994,
           "operating_margin": -0.5379091640368789,
-          "ebit": -3140.845006706908,
-          "ufcf": -3372.8871213312163,
-          "discount_factor": 0.8910973989644775,
-          "pv_ufcf": -3005.570940819031
+          "ebit": -3778.109456740443,
+          "ufcf": -4040.3977562414007,
+          "discount_factor": 0.9090909090909091,
+          "pv_ufcf": -3673.0888693103643
         },
         {
           "period": 2,
-          "revenue": 6328.898768992222,
+          "revenue": 7613.006130141007,
           "operating_margin": -0.41032733122950316,
-          "ebit": -2596.9201415022662,
-          "ufcf": -2807.9273557523156,
-          "discount_factor": 0.7940545744412572,
-          "pv_ufcf": -2229.6475615338695
+          "ebit": -3123.824488014607,
+          "ufcf": -3450.818189209351,
+          "discount_factor": 0.8264462809917354,
+          "pv_ufcf": -2851.915858850703
         },
         {
           "period": 3,
-          "revenue": 6859.915023855352,
+          "revenue": 8251.76338492346,
           "operating_margin": -0.2827454984221274,
-          "ebit": -1939.6100925534213,
-          "ufcf": -2124.419079885515,
-          "discount_factor": 0.7075799659204491,
-          "pv_ufcf": -1503.1963801461447
+          "ebit": -2333.148951131645,
+          "ufcf": -2733.859610109256,
+          "discount_factor": 0.7513148009015775,
+          "pv_ufcf": -2053.9891886621003
         },
         {
           "period": 4,
-          "revenue": 7435.485358854886,
+          "revenue": 8944.114558266134,
           "operating_margin": -0.1551636656147516,
-          "ebit": -1153.7171639047408,
-          "ufcf": -1306.4462374131745,
-          "discount_factor": 0.630522667191086,
-          "pv_ufcf": -823.7439661555135
+          "ebit": -1387.801600538838,
+          "ufcf": -1872.2974620986463,
+          "discount_factor": 0.6830134553650705,
+          "pv_ufcf": -1278.8043590592486
         },
         {
           "period": 5,
-          "revenue": 8059.348013712529,
+          "revenue": 9694.556363255466,
           "operating_margin": -0.027581832807375806,
-          "ebit": -222.29158945067527,
-          "ufcf": -336.2565047881181,
-          "discount_factor": 0.5618571087221215,
-          "pv_ufcf": -188.92810756925823
+          "ebit": -267.3936327529935,
+          "ufcf": -846.9135105908639,
+          "discount_factor": 0.6209213230591549,
+          "pv_ufcf": -525.8666575127528
         },
         {
           "period": 6,
-          "revenue": 8735.554879249376,
+          "revenue": 10507.96280258696,
           "operating_margin": 0.09999999999999998,
-          "ebit": 873.5554879249373,
-          "ufcf": 622.4881489070156,
-          "discount_factor": 0.5006694081719841,
-          "pv_ufcf": 311.6607731073494
+          "ebit": 1050.7962802586958,
+          "ufcf": 143.05023349568137,
+          "discount_factor": 0.5644739300537772,
+          "pv_ufcf": 80.74812749641774
         }
       ],
       "valuation": {
-        "pv_path_sum": -7439.426183116467,
-        "cumulative_cash_burn": 9947.93629917034,
-        "revenue_at_profitability": 8735.554879249376,
-        "value_at_profitability": 7400.64316708142,
-        "pv_value_at_profitability": 3705.2756345546923,
-        "enterprise_value": -3734.1505485617745,
-        "equity_value": -3752.1505485617745,
+        "pv_path_sum": -10302.916805898753,
+        "cumulative_cash_burn": 12944.286528249519,
+        "revenue_at_profitability": 10507.96280258696,
+        "value_at_profitability": 2100.4975227090463,
+        "pv_value_at_profitability": 1185.6760917117983,
+        "enterprise_value": -9117.240714186953,
+        "equity_value": -7379.2407141869535,
         "share_from_after_profitability": null
       },
       "assumptions": [
@@ -214,100 +288,167 @@
           "value": 0.08390342052313882,
           "source": "derived",
           "detail": "the lower of the latest year's revenue growth (8.4%) and the 3-year CAGR (48.1%), so an early ramp from a small base is not extrapolated",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "target_operating_margin",
           "value": 0.1,
           "source": "default",
           "detail": "a generic mature-company operating margin. It is not specific to this company or its industry, and the company has never earned it",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "years_to_profitability",
           "value": 6.0,
           "source": "derived",
           "detail": "the distance from today's -67% operating margin to the 10% target, closed at 15 percentage points a year - a fast pace to sustain",
-          "is_percent": false
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "post_profitability_growth",
           "value": 0.04195171026156941,
           "source": "default",
           "detail": "half the 8.4% assumed until profitability, as growth slows with scale; floored at terminal growth",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "mature_capex_pct",
-          "value": 0.05,
-          "source": "default",
-          "detail": "5% of revenue, typical of a mature business - today's build-out rate of 23.1% is not assumed to last. Depreciation is assumed to equal capex once mature",
-          "is_percent": true
+          "value": 0.2,
+          "source": "derived",
+          "detail": "investment settles at 20.0% of revenue (moderated down from today's 24.1%), with depreciation rising to 13.5% - 67% of it, which is what Total Market companies cover out of depreciation (Damodaran). The 6.5% gap is the net investment the growth is paid for with.",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "mature_da_pct",
+          "value": 0.13461350779243944,
+          "source": "derived",
+          "detail": "67% of the 20.0% invested, which is what Total Market companies cover out of depreciation (Damodaran). The 6.5% gap is net investment, and it does not go away",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "mature_nwc_pct",
-          "value": 0.1,
+          "value": 0.0,
           "source": "derived (clamped)",
-          "detail": "the company's working-capital investment of 28.7% of revenue growth, limited to [0%, 10%] once mature",
-          "is_percent": true
+          "detail": "the company's working-capital investment of -2.6% of revenue growth, limited to [0%, 10%] once mature",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "tax_rate",
           "value": 0.21,
           "source": "default",
           "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "wacc",
-          "value": 0.12221178196914914,
-          "source": "derived",
-          "detail": "CAPM: 5.01% + 1.67x5.50% = 14.17% equity; debt 6.56% (5.19% after tax); weights 78.3%E / 21.7%D",
-          "is_percent": true
+          "value": 0.1,
+          "source": "derived (clamped)",
+          "detail": "CAPM: 4.18% + 1.45x4.41% = 10.58% equity; debt 6.84% (5.09% after tax); weights 76.8%E / 23.2%D; that gave 9.30%, raised to a 10% floor for a company that has never been profitable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
           "value": 0.025,
           "source": "default",
-          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
-          "is_percent": true
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "projection_years",
           "value": 5.0,
           "source": "default",
           "detail": "years of mature-company forecast after profitability, before the terminal value",
-          "is_percent": false
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "wacc_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0418,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2025-12-31 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "beta",
-          "value": 1.6657177537392516,
+          "value": 1.4504167632030462,
           "source": "derived",
-          "detail": "computed from 57 monthly returns vs ^GSPC (5y), the convention market data providers use",
-          "is_percent": false
+          "detail": "Blume-adjusted from raw 1.67; computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "cost_of_debt",
-          "value": 0.06564050895462138,
+          "value": 0.06839040825210585,
           "source": "derived",
           "detail": "median interest expense / average debt (FY2025, FY2024, FY2023, FY2022)",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "sensitivity": {
@@ -334,42 +475,43 @@
             null
           ],
           [
-            -2.6168355430473196,
-            -4.051820879966326,
-            -5.455694065035311,
-            -6.829215271550472,
-            -8.173124863185484
+            -5.70967968263988,
+            -7.362913070779057,
+            -8.999862169411543,
+            -10.620707667432796,
+            -12.22562811393106
           ],
           [
-            -0.3820635443563543,
-            -1.7873390445341517,
-            -3.163701980237584,
-            -4.511817416700278,
-            -5.835560783311568
+            -2.4709184516367593,
+            -4.051781043133975,
+            -5.6179982597540565,
+            -7.169722583630349,
+            -8.711135613435626
           ],
           [
-            1.8527084543346148,
-            0.4771427908980234,
-            -0.8830029681375093,
-            -2.220363603849377,
-            -3.5274944543690787
+            0.7678427793663597,
+            -0.7406490154888952,
+            -2.2496895354436797,
+            -3.7505071998401442,
+            -5.233493878822422
           ],
           [
-            4.087480453025583,
-            2.7192927104991167,
-            1.3755812184601879,
-            0.06384485317364583,
-            -1.2194281254265895
+            4.006604010369482,
+            2.5442083476158097,
+            1.0920745480386944,
+            -0.3401640951319614,
+            -1.7558521442092165
           ]
         ],
         "centre_row": 2,
         "centre_col": 2
       },
       "warnings": [
-        "On this path Rivian Automotive, Inc. burns $9.9bn of cash before turning profitable, against $6.1bn of cash and investments today. It would have to raise the difference, most likely by issuing shares that dilute existing holders - if it can raise it at all. The estimate subtracts the cost of those losses but assumes the money is found.",
+        "On this path Rivian Automotive, Inc. burns $12.9bn of cash before turning profitable, against $6.2bn of cash and investments today. It would have to raise the difference, most likely by issuing shares that dilute existing holders - if it can raise it at all. The estimate subtracts the cost of those losses but assumes the money is found.",
         "Rivian Automotive, Inc.'s gross margin was 3% in its 2025 financial year, below the 10% operating margin assumed. Reaching it needs gross margin to rise well above today's level before operating costs are even covered.",
         "Even on these assumptions, the losses on the way and the debt outweigh the value of the profitable business at the end, so the estimate is negative.",
-        "Rivian Automotive, Inc. currently ties up an unusually large amount of cash in stock and unpaid customer bills as it grows. The estimate assumes this settles to a more typical level once the business matures."
+        "Rivian Automotive, Inc. currently frees up cash from stock, customer payments and supplier bills as it grows, which a maturing business rarely keeps doing. The estimate assumes this stops once the business matures.",
+        "Rivian Automotive, Inc.'s calculated discount rate was 9.3%. For a company that has never made a profit, the estimate uses at least 10%, to reflect the extra risk of it never getting there."
       ]
     }
   },
@@ -379,29 +521,31 @@
       "method": "speculative",
       "is_valuation": false,
       "disclaimer_headline": "SPECULATIVE ESTIMATE - NOT A VALUATION",
-      "disclaimer": "Rivian Automotive, Inc. loses money, so a standard valuation was refused: it has no profits to project. This figure is not a valuation and must not be treated as one. It was produced only because it was explicitly requested, and it rests entirely on assumptions about a future that has not happened: that revenue grows 8.4% a year, that the operating margin climbs from -67% to 25% within 4 years, that the company can fund about $4.3bn of losses along the way, and that it then performs like an established, profitable business indefinitely. Loss-making companies often never reach sustained profitability; many raise money on terms that dilute existing shareholders, and some fail outright, in which case shareholders can lose everything. Modest changes to these assumptions move this figure by multiples, not percentages - the sensitivity table shows how far. It is not investment advice, a price target, or a reason to buy or sell.",
+      "disclaimer": "Rivian Automotive, Inc. loses money, so a standard valuation was refused: it has no profits to project. This figure is not a valuation and must not be treated as one. It was produced only because it was explicitly requested, and it rests entirely on assumptions about a future that has not happened: that revenue grows 8.4% a year, that the operating margin climbs from -67% to 25% within 4 years, that the company can fund about $5.6bn of losses along the way, and that it then performs like an established, profitable business indefinitely. Loss-making companies often never reach sustained profitability; many raise money on terms that dilute existing shareholders, and some fail outright, in which case shareholders can lose everything. Modest changes to these assumptions move this figure by multiples, not percentages - the sensitivity table shows how far. It is not investment advice, a price target, or a reason to buy or sell.",
       "company": {
         "ticker": "RIVN",
         "company_name": "Rivian Automotive, Inc.",
         "sector": "Consumer Cyclical",
-        "exchange": "NasdaqGS"
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
-      "speculative_value_per_share": 6.304094290933068,
-      "current_price": 15.23,
-      "estimate_vs_price": -0.5860739139242896,
+      "speculative_value_per_share": 7.2244240726438305,
+      "current_price": 10.33,
+      "estimate_vs_price": -0.30063658541686056,
       "why_standard_valuation_refused": [
         "The company is loss-making: its day-to-day business lost $3.6bn in its 2025 financial year, and it made a loss in 4 of the last 4 years.\n    This kind of valuation assumes a business that already makes a profit and grows steadily. Applying it to a loss-making company would mean inventing the profits it then puts a value on."
       ],
       "starting_point": {
         "fiscal_year": "2025",
-        "revenue": 5387.0,
+        "revenue": 6480.0,
         "operating_margin": -0.6654909968442547,
         "gross_margin": 0.026731019120103953,
         "latest_revenue_growth": 0.08390342052313882,
         "revenue_cagr": 0.48111057614478514,
-        "cash": 6082.0,
-        "total_debt": 6100.0,
-        "shares": 1186.0,
+        "cash": 6184.0,
+        "total_debt": 4446.0,
+        "shares": 1313.5,
         "history": [
           {
             "fiscal_year": "2025",
@@ -432,50 +576,50 @@
       "path_to_profitability": [
         {
           "period": 1,
-          "revenue": 5838.987726358148,
+          "revenue": 7023.69416498994,
           "operating_margin": -0.436618247633191,
-          "ebit": -2549.408589034205,
-          "ufcf": -2762.7663694596636,
-          "discount_factor": 0.8910973989644775,
-          "pv_ufcf": -2461.893925772039
+          "ebit": -3066.6730382293763,
+          "ufcf": -3348.657980158979,
+          "discount_factor": 0.9090909090909091,
+          "pv_ufcf": -3044.2345274172535
         },
         {
           "period": 2,
-          "revenue": 6328.898768992222,
+          "revenue": 7613.006130141007,
           "operating_margin": -0.20774549842212736,
-          "ebit": -1314.8002292274775,
-          "ufcf": -1485.3034159808662,
-          "discount_factor": 0.7940545744412572,
-          "pv_ufcf": -1179.4119718928323
+          "ebit": -1581.5677529968546,
+          "ufcf": -1951.2599703940566,
+          "discount_factor": 0.8264462809917354,
+          "pv_ufcf": -1612.6115457802118
         },
         {
           "period": 3,
-          "revenue": 6859.915023855352,
+          "revenue": 8251.76338492346,
           "operating_margin": 0.02112725078893629,
-          "ebit": 144.93114509978392,
-          "ufcf": -4.45970178037409,
-          "discount_factor": 0.7075799659204491,
-          "pv_ufcf": -3.1555956337724647
+          "ebit": 174.3370744842398,
+          "ufcf": -332.4059717797217,
+          "discount_factor": 0.7513148009015775,
+          "pv_ufcf": -249.74152650617702
         },
         {
           "period": 4,
-          "revenue": 7435.485358854886,
+          "revenue": 8944.114558266134,
           "operating_margin": 0.25,
-          "ebit": 1858.8713397137215,
-          "ufcf": 1410.9513248738863,
-          "discount_factor": 0.630522667191086,
-          "pv_ufcf": 889.6367926362792
+          "ebit": 2236.0286395665335,
+          "ufcf": 1181.6383483899642,
+          "discount_factor": 0.6830134553650705,
+          "pv_ufcf": 807.0748913257045
         }
       ],
       "valuation": {
-        "pv_path_sum": -2754.8247006623646,
-        "cumulative_cash_burn": 4252.529487220904,
-        "revenue_at_profitability": 7435.485358854886,
-        "value_at_profitability": 16255.53063043613,
-        "pv_value_at_profitability": 10249.480529708982,
-        "enterprise_value": 7494.655829046618,
-        "equity_value": 7476.655829046618,
-        "share_from_after_profitability": 1.3675718756804875
+        "pv_path_sum": -4099.512708377938,
+        "cumulative_cash_burn": 5632.323922332757,
+        "revenue_at_profitability": 8944.114558266134,
+        "value_at_profitability": 17350.747096865554,
+        "pv_value_at_profitability": 11850.793727795608,
+        "enterprise_value": 7751.28101941767,
+        "equity_value": 9489.28101941767,
+        "share_from_after_profitability": 1.5288819613310731
       },
       "assumptions": [
         {
@@ -483,100 +627,167 @@
           "value": 0.08390342052313882,
           "source": "derived",
           "detail": "the lower of the latest year's revenue growth (8.4%) and the 3-year CAGR (48.1%), so an early ramp from a small base is not extrapolated",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "target_operating_margin",
           "value": 0.25,
           "source": "override",
           "detail": "supplied by caller (would have been 0.1 from default)",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "years_to_profitability",
           "value": 4.0,
           "source": "override",
           "detail": "supplied by caller (would have been 7 from derived)",
-          "is_percent": false
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "post_profitability_growth",
           "value": 0.04195171026156941,
           "source": "default",
           "detail": "half the 8.4% assumed until profitability, as growth slows with scale; floored at terminal growth",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "mature_capex_pct",
-          "value": 0.05,
-          "source": "default",
-          "detail": "5% of revenue, typical of a mature business - today's build-out rate of 23.1% is not assumed to last. Depreciation is assumed to equal capex once mature",
-          "is_percent": true
+          "value": 0.2,
+          "source": "derived",
+          "detail": "investment settles at 20.0% of revenue (moderated down from today's 24.1%), with depreciation rising to 13.5% - 67% of it, which is what Total Market companies cover out of depreciation (Damodaran). The 6.5% gap is the net investment the growth is paid for with.",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "mature_da_pct",
+          "value": 0.13461350779243944,
+          "source": "derived",
+          "detail": "67% of the 20.0% invested, which is what Total Market companies cover out of depreciation (Damodaran). The 6.5% gap is net investment, and it does not go away",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "mature_nwc_pct",
-          "value": 0.1,
+          "value": 0.0,
           "source": "derived (clamped)",
-          "detail": "the company's working-capital investment of 28.7% of revenue growth, limited to [0%, 10%] once mature",
-          "is_percent": true
+          "detail": "the company's working-capital investment of -2.6% of revenue growth, limited to [0%, 10%] once mature",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "tax_rate",
           "value": 0.21,
           "source": "default",
           "detail": "US statutory rate. A loss-maker's tax history says nothing about a profitable future, and accumulated tax losses that would shelter early profits are not credited, which errs low",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "wacc",
-          "value": 0.12221178196914914,
-          "source": "derived",
-          "detail": "CAPM: 5.01% + 1.67x5.50% = 14.17% equity; debt 6.56% (5.19% after tax); weights 78.3%E / 21.7%D",
-          "is_percent": true
+          "value": 0.1,
+          "source": "derived (clamped)",
+          "detail": "CAPM: 4.18% + 1.45x4.41% = 10.58% equity; debt 6.84% (5.09% after tax); weights 76.8%E / 23.2%D; that gave 9.30%, raised to a 10% floor for a company that has never been profitable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
           "value": 0.025,
           "source": "default",
-          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
-          "is_percent": true
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "projection_years",
           "value": 5.0,
           "source": "default",
           "detail": "years of mature-company forecast after profitability, before the terminal value",
-          "is_percent": false
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "wacc_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0418,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2025-12-31 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "beta",
-          "value": 1.6657177537392516,
+          "value": 1.4504167632030462,
           "source": "derived",
-          "detail": "computed from 57 monthly returns vs ^GSPC (5y), the convention market data providers use",
-          "is_percent": false
+          "detail": "Blume-adjusted from raw 1.67; computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "cost_of_debt",
-          "value": 0.06564050895462138,
+          "value": 0.06839040825210585,
           "source": "derived",
           "detail": "median interest expense / average debt (FY2025, FY2024, FY2023, FY2022)",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "sensitivity": {
@@ -596,49 +807,50 @@
         ],
         "grid": [
           [
-            4.686322704557248,
-            3.2555698286573507,
-            1.8527084543346148,
-            0.4771427908980234,
-            -0.8830029681375093
+            3.824349129003662,
+            2.2894665628254773,
+            0.7678427793663597,
+            -0.7406490154888952,
+            -2.2496895354436797
           ],
           [
-            6.854676727306606,
-            5.458333502368097,
-            4.087480453025583,
-            2.7192927104991167,
-            1.3755812184601879
+            6.9133369047162745,
+            5.454189419012383,
+            4.006604010369482,
+            2.5442083476158097,
+            1.0920745480386944
           ],
           [
-            9.02303075005596,
-            7.661097176078841,
-            6.304094290933068,
-            4.95056945882612,
-            3.634165405057885
+            10.002324680428885,
+            8.618912275199287,
+            7.2244240726438305,
+            5.816272857215344,
+            4.433838631521066
           ],
           [
-            11.191384772805314,
-            9.863860849789587,
-            8.506636302098299,
-            7.181846207153122,
-            5.892749591655581
+            13.091312456141504,
+            11.78363513138619,
+            10.426015591639741,
+            9.088337366814873,
+            7.77560271500344
           ],
           [
-            13.359738795554673,
-            12.05638866517012,
-            10.709178313263529,
-            9.413122955480127,
-            8.141784824455783
+            16.18030023185411,
+            14.936786979774304,
+            13.627607110635658,
+            12.360401876414413,
+            11.10613195595647
           ]
         ],
         "centre_row": 2,
         "centre_col": 2
       },
       "warnings": [
-        "On this path Rivian Automotive, Inc. burns $4.3bn of cash before turning profitable, covered by today's $6.1bn of cash and investments only if nothing goes worse than assumed.",
+        "On this path Rivian Automotive, Inc. burns $5.6bn of cash before turning profitable, covered by today's $6.2bn of cash and investments only if nothing goes worse than assumed.",
         "All of this estimate comes from after the assumed turn to profit - the years before it subtract value rather than add it - so the figure is entirely a statement about a future that has not happened.",
         "Rivian Automotive, Inc.'s gross margin was 3% in its 2025 financial year, below the 25% operating margin assumed. Reaching it needs gross margin to rise well above today's level before operating costs are even covered.",
-        "Rivian Automotive, Inc. currently ties up an unusually large amount of cash in stock and unpaid customer bills as it grows. The estimate assumes this settles to a more typical level once the business matures."
+        "Rivian Automotive, Inc. currently frees up cash from stock, customer payments and supplier bills as it grows, which a maturing business rarely keeps doing. The estimate assumes this stops once the business matures.",
+        "Rivian Automotive, Inc.'s calculated discount rate was 9.3%. For a company that has never made a profit, the estimate uses at least 10%, to reflect the extra risk of it never getting there."
       ]
     }
   },
@@ -739,13 +951,15 @@
         "ticker": "AXP",
         "company_name": "American Express Company",
         "sector": "Financial Services",
-        "exchange": "NYSE"
+        "exchange": "NYSE",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
       "suitable": false,
       "intrinsic_value_per_share": null,
       "message": "A standard discounted cash flow valuation isn't suitable for American Express Company. No intrinsic value is reported, deliberately: the model would produce a figure with no economic meaning.",
       "reasons": [
-        "American Express Company is a Credit Services company whose interest expense is 11% of its revenue. Borrowing is part of how it earns that revenue rather than how it is financed, so - as for a bank - unlevered free cash flow and an enterprise-to-equity bridge are not meaningful, and a DCF would produce a figure with no economic meaning. A dividend discount model is not substituted either: it counts only dividends, and American Express Company returned $5.8bn through buybacks against $2.3bn in dividends in its 2025 financial year, so it would understate what shareholders receive. The appropriate tool is an excess-return model, which values a lender from its return on equity against its cost of equity. That model is not available yet, so no value is reported."
+        "American Express Company is a Credit Services company with a loan book 3.1 times its annual revenue. Lending is part of how it earns that revenue rather than how it is financed, so - as for a bank - unlevered free cash flow and an enterprise-to-equity bridge are not meaningful, and a DCF would produce a figure with no economic meaning. A dividend discount model is not substituted either: it counts only dividends, and American Express Company returned $5.8bn through buybacks against $2.3bn in dividends in its 2025 financial year, so it would understate what shareholders receive. The appropriate tool is an excess-return model, which values a lender from its return on equity against its cost of equity. That model is not available yet, so no value is reported."
       ],
       "assumptions": [
         {
@@ -753,68 +967,138 @@
           "value": 0.10966360326420155,
           "source": "derived",
           "detail": "3-year revenue CAGR, FY2022-FY2025 (52.9bn -> 72.2bn)",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "operating_margin",
           "value": 0.3049840786376852,
           "source": "derived",
-          "detail": "median operatingIncome / revenue over 3 years",
-          "is_percent": true
+          "detail": "the latest year's 30.5%, which sits inside the previous years' own range (23.4% to 32.1%)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "tax_rate",
           "value": 0.21450174486234974,
           "source": "derived",
           "detail": "median effective rate over 3 profitable year(s)",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "da_pct",
           "value": 0.025413577158107024,
           "source": "derived",
           "detail": "median D&A / revenue over 3 years",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_terminal_pct",
+          "value": 0.029459517081703076,
+          "source": "derived",
+          "detail": "mean capex / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "capex_pct",
           "value": 0.02897693672383205,
           "source": "derived",
-          "detail": "median capex / revenue over 3 years",
-          "is_percent": true
+          "detail": "median capex / revenue over 3 years (no trailing figure reported)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "nwc_pct",
-          "value": -0.1,
-          "source": "derived (clamped)",
-          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025; raw -53.9% clamped to [-10%, 30%]",
-          "is_percent": true
+          "value": 0.0,
+          "source": "default",
+          "detail": "no balance sheet reported current assets and liabilities; working capital assumed to stay flat",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "wacc",
-          "value": 0.11182107681717669,
+          "value": 0.09386162171277122,
           "source": "derived",
-          "detail": "CAPM: 5.01% + 1.1x5.50% = 11.03% equity; debt 14.92% (11.72% after tax); weights 78.5%E / 21.5%D",
-          "is_percent": true
+          "detail": "CAPM: 4.18% + 1.03x4.41% = 8.72% equity; debt 14.92% (11.72% after tax); weights 77.8%E / 22.2%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
-          "value": 0.025,
-          "source": "default",
-          "detail": "global default (~long-run nominal GDP growth)",
-          "is_percent": true
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.18% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "projection_years",
           "value": 5.0,
           "source": "default",
           "detail": "modelling convention",
-          "is_percent": false
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_enabled",
+          "value": 0.0,
+          "source": "default",
+          "detail": "off; growth is held flat across the forecast",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_start_year",
+          "value": 3.0,
+          "source": "default",
+          "detail": "last year at the full starting rate before the glide",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "speculative_estimate_available": false,
       "hypothetical_available": false,
-      "hypothetical_placeholders": null
+      "hypothetical_placeholders": null,
+      "hypothetical_framing": null
     }
   },
   "qs_speculative_refused": {
@@ -1012,9 +1296,9 @@
         },
         {
           "name": "wacc",
-          "value": 0.11564188041115986,
+          "value": 0.10828575531758919,
           "source": "derived",
-          "detail": "CAPM: 4.92% + 1.52x4.41% = 11.61% equity; debt 5.12% (4.07% after tax); weights 99.4%E / 0.6%D",
+          "detail": "CAPM: 4.18% + 1.52x4.41% = 10.87% equity; debt 5.12% (4.07% after tax); weights 99.4%E / 0.6%D",
           "is_percent": true,
           "min_value": null,
           "max_value": null,
@@ -1025,7 +1309,7 @@
           "name": "terminal_growth",
           "value": 0.04,
           "source": "derived",
-          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.18% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
           "is_percent": true,
           "min_value": 0.0,
           "max_value": 0.04,
@@ -1071,7 +1355,8 @@
       "hypothetical_placeholders": {
         "revenue_growth": 0.051943257367141005,
         "target_operating_margin": 0.05113522519957396,
-        "years_to_target": 5.0
+        "years_to_target": 5.0,
+        "capex_pct": 0.14882688037076375
       },
       "hypothetical_framing": "what_would_have_to_be_true"
     }
@@ -1175,9 +1460,9 @@
         },
         {
           "name": "wacc",
-          "value": 0.09961810013545522,
+          "value": 0.09386162171277122,
           "source": "derived",
-          "detail": "CAPM: 4.92% + 1.03x4.41% = 9.46% equity; debt 14.92% (11.72% after tax); weights 77.8%E / 22.2%D",
+          "detail": "CAPM: 4.18% + 1.03x4.41% = 8.72% equity; debt 14.92% (11.72% after tax); weights 77.8%E / 22.2%D",
           "is_percent": true,
           "min_value": null,
           "max_value": null,
@@ -1188,7 +1473,7 @@
           "name": "terminal_growth",
           "value": 0.04,
           "source": "derived",
-          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.18% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
           "is_percent": true,
           "min_value": 0.0,
           "max_value": 0.04,

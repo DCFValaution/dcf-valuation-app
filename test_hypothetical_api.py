@@ -46,6 +46,14 @@ def ask(client, ticker=SHRINKER, **overrides):
     return client.get(f"/valuation/{ticker}/hypothetical", params=params)
 
 
+def opening(placeholders: dict) -> dict:
+    """The screen's starting values, as query parameters."""
+    return {"revenue_growth": placeholders["revenue_growth"],
+            "target_operating_margin": placeholders["target_operating_margin"],
+            "years_to_target": int(placeholders["years_to_target"]),
+            "capex_pct": placeholders["capex_pct"]}
+
+
 # ---------------------------------------------------------------------------
 # The honest refusal is still the default
 # ---------------------------------------------------------------------------
@@ -73,13 +81,17 @@ def test_the_refusal_offers_the_opt_in_without_taking_a_step_towards_it(client):
     body = client.get(f"/valuation/{SHRINKER}/speculative").json()
 
     assert body["hypothetical_available"] is True
-    # Offered, never pre-computed: the placeholders are neutral and no figure
-    # appears anywhere in the refusal.
-    assert body["hypothetical_placeholders"] == {
-        "revenue_growth": NEUTRAL_REVENUE_GROWTH,
-        "target_operating_margin": NEUTRAL_TARGET_MARGIN,
-        "years_to_target": float(NEUTRAL_YEARS_TO_TARGET),
-    }
+    # Offered, never pre-computed: growth and margin start neutral and no
+    # figure appears anywhere in the refusal.
+    start = body["hypothetical_placeholders"]
+    assert start["revenue_growth"] == NEUTRAL_REVENUE_GROWTH
+    assert start["target_operating_margin"] == NEUTRAL_TARGET_MARGIN
+    assert start["years_to_target"] == float(NEUTRAL_YEARS_TO_TARGET)
+    # Investment is the exception, and deliberately so: there is no neutral
+    # rate of capital spending, and a constant here would be the engine's
+    # old 5% substitution wearing a different hat. It starts at what the
+    # company actually spends.
+    assert start["capex_pct"] > 0
     assert "hypothetical_value_per_share" not in body
 
 
@@ -138,7 +150,11 @@ def test_the_figure_is_computed_from_the_supplied_assumptions(client):
         "revenue_growth": 0.08,
         "target_operating_margin": 0.15,
         "years_to_target": 5,
+        # Not supplied, so the company's own rate was used and is reported
+        # back: a caller reading this never has to guess what ran.
+        "capex_pct": body["your_assumptions"]["capex_pct"],
     }
+    assert body["your_assumptions"]["capex_pct"] > 0
     # A different hypothetical gives a different figure - it is arithmetic on
     # the caller's numbers, not a stored answer about the company.
     other = ask(client, target_operating_margin=0.25).json()
@@ -178,18 +194,32 @@ def test_no_upside_or_downside_is_computed_against_the_price(client):
         assert forbidden not in body, forbidden
 
 
-def test_the_disclaimer_is_the_strongest_in_the_app(client):
+def test_the_disclaimer_is_one_sentence_in_normal_case(client):
+    """It was a paragraph opening in capitals, and it was read by nobody.
+
+    It sat under three bullets that said the same thing in fewer words and
+    in the second person, so the top half of the screen was a wall of red
+    shouting - which is how a warning stops being a warning. The headline
+    and the bullets carry the force; this says the one thing they do not,
+    which is what the figure actually rests on.
+    """
     body = ask(client).json()
     disclaimer = body["disclaimer"]
 
     assert body["disclaimer_headline"] == "A HYPOTHETICAL YOU BUILT - NOT A VALUATION"
-    assert "THIS IS NOT A VALUATION" in disclaimer
-    # It names the caller as the author of the assumptions, and the company's
-    # own trajectory as contradicting them.
-    assert "you typed in" in disclaimer
-    assert "+8.0%" in disclaimer and "15%" in disclaimer
-    assert "revenue is actually falling" in disclaimer
-    assert "not as information about the company" in disclaimer
+    # One sentence. Counted by sentence boundaries rather than full stops,
+    # because the figures in it have decimal points.
+    assert disclaimer.rstrip().count(". ") == 0, disclaimer
+    assert len(disclaimer) < 300, len(disclaimer)
+    assert disclaimer.upper() != disclaimer
+    assert "THIS IS NOT A VALUATION" not in disclaimer
+
+    # It still names whose assumptions these are, all four of them, and
+    # refuses both of the things a reader might mistake it for.
+    assert "your assumptions" in disclaimer
+    assert "+8.0%" in disclaimer and "15.0%" in disclaimer
+    assert "not a valuation" in disclaimer
+    assert "not a price target" in disclaimer
 
 
 def test_both_earlier_refusals_travel_with_it(client):
@@ -396,11 +426,10 @@ def test_this_refusal_asks_a_different_question_and_says_so(client):
     # the original one.
     spec = client.get(f"/valuation/{SHRINKER}/speculative").json()
     assert spec["hypothetical_available"] is True
-    assert spec["hypothetical_placeholders"] == {
-        "revenue_growth": NEUTRAL_REVENUE_GROWTH,
-        "target_operating_margin": NEUTRAL_TARGET_MARGIN,
-        "years_to_target": float(NEUTRAL_YEARS_TO_TARGET),
-    }
+    start = spec["hypothetical_placeholders"]
+    assert start["revenue_growth"] == NEUTRAL_REVENUE_GROWTH
+    assert start["target_operating_margin"] == NEUTRAL_TARGET_MARGIN
+    assert start["years_to_target"] == float(NEUTRAL_YEARS_TO_TARGET)
 
 
 def test_a_profitable_refusal_opens_on_the_companys_own_figures(client):
@@ -423,19 +452,58 @@ def test_a_profitable_refusal_opens_on_the_companys_own_figures(client):
         "a nil margin would land the reader on the no-profit screen at once")
 
 
-def test_opening_on_them_produces_a_figure_rather_than_a_prompt(client):
-    """The loss-maker's screen opens with no figure on purpose - the reader
-    has not chosen a profit yet. This one opens with the answer to "what does
-    today imply", which is the question it exists to ask."""
+def test_assumptions_that_support_no_value_say_so_rather_than_print_one(client):
+    """A negative number here would be the refusal restated with a decimal
+    point on it, and a reader would read it as a price target.
+
+    Reached by assuming the company earns almost nothing and spends heavily,
+    which is a thing a reader can assume and a thing the arithmetic cannot
+    value. The screen names the two levers rather than stopping.
+    """
     start = client.get(f"/valuation/{OUTSPENDER}").json()[
         "hypothetical_placeholders"]
     r = ask(client, ticker=OUTSPENDER,
-            revenue_growth=start["revenue_growth"],
-            target_operating_margin=start["target_operating_margin"],
-            years_to_target=int(start["years_to_target"]))
+            **{**opening(start), "target_operating_margin": 0.01,
+               "capex_pct": 0.45})
+
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == "hypothetical_incomplete"
+    assert "no value to show" in body["message"]
+    assert "Raise the margin" in body["message"]
+    assert "lower the investment" in body["message"]
+
+
+def test_its_own_figures_now_do_support_one(client):
+    """They did not, while depreciation was pinned to today's rate.
+
+    A company building out at 20% of revenue was assumed to keep
+    depreciating the much smaller asset base it has now, forever - so
+    investment looked permanently expensive and a heavy spender could never
+    be worth anything. Depreciation rising toward investment is what makes
+    the opening figure a figure.
+    """
+    start = client.get(f"/valuation/{OUTSPENDER}").json()[
+        "hypothetical_placeholders"]
+    r = ask(client, ticker=OUTSPENDER, **opening(start))
 
     assert r.status_code == 200, r.json()
-    assert r.json()["hypothetical_value_per_share"] is not None
+    assert r.json()["hypothetical_value_per_share"] > 0
+
+
+def test_moving_either_lever_produces_one(client):
+    start = client.get(f"/valuation/{OUTSPENDER}").json()[
+        "hypothetical_placeholders"]
+
+    richer = ask(client, ticker=OUTSPENDER,
+                 **{**opening(start), "target_operating_margin": 0.30})
+    assert richer.status_code == 200, richer.json()
+    assert richer.json()["hypothetical_value_per_share"] > 0
+
+    leaner = ask(client, ticker=OUTSPENDER,
+                 **{**opening(start), "capex_pct": 0.02})
+    assert leaner.status_code == 200, leaner.json()
+    assert leaner.json()["hypothetical_value_per_share"] > 0
 
 
 def test_the_no_profit_message_is_written_for_the_route(client):
@@ -450,13 +518,29 @@ def test_the_no_profit_message_is_written_for_the_route(client):
     assert "path to profitability" in loss["message"]
 
 
-def test_the_screen_states_what_the_reader_is_not_setting(client):
-    body = ask(client, ticker=OUTSPENDER).json()
+def test_investment_is_the_readers_to_set_and_actually_moves_the_figure(client):
+    """It was held fixed, and worse than fixed: the engine substituted a 5%
+    mature rate for whatever the company spends. For a company refused FOR
+    spending past its profits, that decided the answer.
 
-    note = body["investment_note"]
-    assert "Investment is not yours to set" in note
-    assert "%" in note, "the rate itself has to be in it"
-    assert body["framing"] == "what_would_have_to_be_true"
+    The first attempt at a slider changed nothing, because the engine also
+    set depreciation equal to capex once mature, so the two cancelled in the
+    cash flow. Both halves are needed for the control to mean anything, and
+    this holds the pair.
+    """
+    start = client.get(f"/valuation/{OUTSPENDER}").json()[
+        "hypothetical_placeholders"]
+
+    heavy = ask(client, ticker=OUTSPENDER,
+                **{**opening(start), "target_operating_margin": 0.30,
+                   "capex_pct": 0.20}).json()
+    light = ask(client, ticker=OUTSPENDER,
+                **{**opening(start), "target_operating_margin": 0.30,
+                   "capex_pct": 0.02}).json()
+
+    assert heavy["your_assumptions"]["capex_pct"] == 0.20
+    assert light["your_assumptions"]["capex_pct"] == 0.02
+    assert light["hypothetical_value_per_share"] >         heavy["hypothetical_value_per_share"],         "spending more on investment has to cost something"
 
 
 def test_assuming_no_change_is_not_called_a_contradiction(client):
@@ -465,10 +549,10 @@ def test_assuming_no_change_is_not_called_a_contradiction(client):
     figures, and it is false."""
     start = client.get(f"/valuation/{OUTSPENDER}").json()[
         "hypothetical_placeholders"]
+    # The margin is left exactly where the company has it; investment is
+    # lowered, which is what makes a figure appear at all.
     body = ask(client, ticker=OUTSPENDER,
-               revenue_growth=start["revenue_growth"],
-               target_operating_margin=start["target_operating_margin"],
-               years_to_target=int(start["years_to_target"])).json()
+               **{**opening(start), "capex_pct": 0.02}).json()
 
     years = next(c for c in body["reality"] if c["name"] == "years_to_target")
     assert years["contradicts"] is False
@@ -476,19 +560,21 @@ def test_assuming_no_change_is_not_called_a_contradiction(client):
     assert "Nothing in" not in years["statement"]
 
 
-def test_the_disclaimer_asks_the_right_question(client):
-    text = ask(client, ticker=OUTSPENDER).json()["disclaimer"]
+def test_the_disclaimer_names_all_four_drivers_on_this_route(client):
+    """Short, but not vague. One sentence that says what the figure rests
+    on - including the investment rate, which is the input this company was
+    refused over."""
+    text = ask(client, ticker=OUTSPENDER, capex_pct=0.02).json()["disclaimer"]
 
-    assert ("what would have to be true about its growth, its margins and "
-            "its investment") in text
-    assert "opens on the company" in text
-    # The loss-maker's claim is false here and must not travel.
-    assert "Nothing here is derived from the company's data" not in text
-    assert "Nothing here is derived from the company's data" in ask(
-        client).json()["disclaimer"]
+    assert "your assumptions" in text
+    assert "2.0% of revenue invested" in text
+    assert "not a valuation" in text and "not a price target" in text
 
 
 def test_the_offer_is_honoured_and_not_refused_a_step_later(client):
+    """The door opens on something. The figure may be absent where the
+    company's own numbers support none, but the screen must serve the route
+    rather than refuse it as not applicable."""
     r = ask(client, ticker=OUTSPENDER)
 
     assert r.status_code == 200, r.json()
@@ -496,14 +582,14 @@ def test_the_offer_is_honoured_and_not_refused_a_step_later(client):
 
 
 def test_the_disclaimer_does_not_call_a_profitable_company_a_loss_maker(client):
+    """The loss route's clause is a statement about the company's own
+    figures, and it is false of this one."""
     text = ask(client, ticker=OUTSPENDER).json()["disclaimer"]
+    assert "actually earned" not in text
 
-    assert "spending more cash than it brings in" in text
-    assert "this company is not losing money" in text
-    # The sentence written for the loss route must not travel to this one.
-    assert "loses money and was refused" not in text
-    # And the loss route still says what it always said.
-    assert "loses money and was refused" in ask(client).json()["disclaimer"]
+    # The loss route still carries it, naming what the company really did.
+    loss = ask(client).json()["disclaimer"]
+    assert "which actually earned -30.0% last year" in loss
 
 
 def test_the_speculative_refusal_block_is_empty_because_there_was_none(client):
@@ -624,9 +710,8 @@ def test_a_margin_below_the_companys_own_is_called_falling(client):
     start = client.get(f"/valuation/{OUTSPENDER}").json()[
         "hypothetical_placeholders"]
     body = ask(client, ticker=OUTSPENDER,
-               revenue_growth=start["revenue_growth"],
-               target_operating_margin=0.01,
-               years_to_target=5).json()
+               **{**opening(start), "target_operating_margin": 0.01,
+                  "capex_pct": 0.0}).json()
 
     years = next(c for c in body["reality"] if c["name"] == "years_to_target")
     assert "falling by about" in years["statement"]
@@ -637,7 +722,8 @@ def test_a_margin_below_the_companys_own_is_called_falling(client):
 
 def test_an_assumed_improvement_still_says_improving(client):
     body = ask(client, ticker=OUTSPENDER,
-               target_operating_margin=0.30, years_to_target=5).json()
+               target_operating_margin=0.30, years_to_target=5,
+               capex_pct=0.02).json()
     years = next(c for c in body["reality"] if c["name"] == "years_to_target")
     assert "improving by about" in years["statement"]
 
@@ -652,19 +738,28 @@ def test_an_assumed_improvement_still_says_improving(client):
 # note has to say which of the two it did.
 # ---------------------------------------------------------------------------
 
-def test_a_substituted_rate_is_named_as_a_default_beside_todays(client):
-    note = ask(client, ticker=OUTSPENDER).json()["investment_note"]
+def test_no_mature_default_is_substituted_for_the_companys_own_rate(client):
+    """The substitution this release removes.
 
-    assert "mature-business default, not this company's rate" in note
-    assert "10.0% today" in note, "what it actually spends has to be in it"
-    assert "5.0% of revenue" in note, "and what the model assumes instead"
+    The engine replaced a heavy spender's capital investment with 5% of
+    revenue, called it "typical of a mature business", and left the figure
+    resting on it. Nothing is substituted now: where the caller says
+    nothing, the company's own rate is used and reported back.
+    """
+    start = client.get(f"/valuation/{OUTSPENDER}").json()[
+        "hypothetical_placeholders"]
+    derived = {a["name"]: a["value"]
+               for a in client.get(f"/valuation/{OUTSPENDER}").json()["assumptions"]}
 
+    assert start["capex_pct"] == pytest.approx(derived["capex_pct"])
+    assert start["capex_pct"] > 0.05, (
+        "fixture sanity: this company spends well above the old default")
 
-def test_a_company_already_at_a_mature_rate_is_not_told_it_is_a_default(client):
-    note = ask(client).json()["investment_note"]
-
-    assert "own current rate" in note
-    assert "default" not in note
+    used = ask(client, ticker=OUTSPENDER,
+               **{**opening(start), "target_operating_margin": 0.30}
+               ).json()["your_assumptions"]["capex_pct"]
+    assert used == pytest.approx(start["capex_pct"])
+    assert used != pytest.approx(0.05)
 
 
 def test_only_the_profitable_route_reaches_these_placeholders():
@@ -683,3 +778,20 @@ def test_only_the_profitable_route_reaches_these_placeholders():
         if offered_from_the_dcf_screen:
             assert analysis.hypothetical_framing_for([code]) == \
                 "what_would_have_to_be_true", code
+
+
+def test_omitting_investment_uses_the_companys_own_rate_not_a_constant(client):
+    """The call that exercises the fallback.
+
+    Every other test here sends an investment rate, so none of them touches
+    the branch that decides what happens when a caller sends none - and that
+    branch is exactly where a convenient constant would hide.
+    """
+    start = client.get(f"/valuation/{OUTSPENDER}").json()[
+        "hypothetical_placeholders"]
+    body = ask(client, ticker=OUTSPENDER, target_operating_margin=0.30).json()
+
+    used = body["your_assumptions"]["capex_pct"]
+    assert used == pytest.approx(start["capex_pct"])
+    assert used != pytest.approx(0.05), (
+        "the 5% mature default is what this replaced")

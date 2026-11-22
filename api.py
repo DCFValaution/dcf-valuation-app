@@ -89,7 +89,8 @@ from assumptions import (DAMODARAN_ERP_AS_OF, erp_is_stale,
 from analysis import (SEVERITY_CAUTION, SEVERITY_INFO, SEVERITY_SERIOUS,
                       _METHOD_KINDS as METHOD_KINDS, severity_of)
 from relative import MAX_PEERS
-from hypothetical import (HYPOTHETICAL_HEADLINE, NEUTRAL_REVENUE_GROWTH,
+from hypothetical import (CAPEX_PCT_BOUNDS, HYPOTHETICAL_HEADLINE,
+                          NEUTRAL_REVENUE_GROWTH,
                           NEUTRAL_TARGET_MARGIN, NEUTRAL_YEARS_TO_TARGET,
                           REVENUE_GROWTH_BOUNDS, TARGET_MARGIN_BOUNDS,
                           YEARS_TO_TARGET_BOUNDS, HypotheticalRefused,
@@ -1038,10 +1039,16 @@ class RealityContrastOut(BaseModel):
 
 
 class HypotheticalAssumptionsOut(BaseModel):
-    """The three drivers, exactly as the caller supplied them."""
+    """The four drivers, exactly as the caller supplied them."""
     revenue_growth: float
     target_operating_margin: float
     years_to_target: int
+    capex_pct: float = Field(
+        0.0,
+        description="Capital investment as a share of revenue once the target margin is "
+                    "reached; investment glides there from what the company spends today, "
+                    "over the same years as the margin. Where the caller did not supply "
+                    "one this is the company's OWN current rate, never a convention.")
 
 
 class HypotheticalResponse(BaseModel):
@@ -1067,10 +1074,6 @@ class HypotheticalResponse(BaseModel):
                     "'what_would_have_to_be_true' for a profitable company that outspends "
                     "its profits, which starts from the company's own figures. A client "
                     "must take its wording from this, not from the first route alone.")
-    investment_note: str = Field(
-        "",
-        description="What the model holds fixed while the caller sets the rest: the "
-                    "company's own capital spending. Empty when the figure was unavailable.")
     disclaimer_headline: str
     disclaimer: str = Field(
         ..., description="The strongest disclaimer this API produces. Must be displayed in "
@@ -2107,6 +2110,14 @@ def _respond_speculative(report: SpeculativeReport) -> Any:
                     "revenue_growth": NEUTRAL_REVENUE_GROWTH,
                     "target_operating_margin": NEUTRAL_TARGET_MARGIN,
                     "years_to_target": float(NEUTRAL_YEARS_TO_TARGET),
+                    # Growth and margin start neutral on this route, because
+                    # the turnaround is the reader's to assume. Investment
+                    # does not: there is no neutral rate of capital
+                    # spending, and a constant here would be the engine's
+                    # old 5% substitution wearing a different hat. It starts
+                    # at what the company actually spends.
+                    "capex_pct": report.derived.diagnostics.get(
+                        "current_capex_pct", 0.0),
                 }
                 if hypothetical_available(report) else None
             ),
@@ -2300,7 +2311,6 @@ def _serialise_hypothetical(report: Any) -> HypotheticalResponse:
 
     return HypotheticalResponse(
         framing=report.framing,
-        investment_note=report.investment_note,
         disclaimer_headline=HYPOTHETICAL_HEADLINE,
         disclaimer=hypothetical_disclaimer(report),
         company=_company_out(report),
@@ -2310,6 +2320,10 @@ def _serialise_hypothetical(report: Any) -> HypotheticalResponse:
             revenue_growth=report.user.revenue_growth,
             target_operating_margin=report.user.target_operating_margin,
             years_to_target=report.user.years_to_target,
+            # The rate actually used, which is the company's own where the
+            # caller supplied none - so a client reading this back always
+            # sees a real figure rather than a null it has to interpret.
+            capex_pct=report.capex_pct,
         ),
         reality=[RealityContrastOut(name=c.name, label=c.label, assumed=c.assumed,
                                     actual=c.actual, statement=c.statement,
@@ -2387,6 +2401,13 @@ def get_hypothetical(
     years_to_target: Annotated[int, Query(
         ge=YEARS_TO_TARGET_BOUNDS[0], le=YEARS_TO_TARGET_BOUNDS[1],
         description="Years to reach that margin. REQUIRED.")],
+    capex_pct: Annotated[float | None, Query(
+        ge=CAPEX_PCT_BOUNDS[0], le=CAPEX_PCT_BOUNDS[1],
+        description="Assumed capital investment as a share of revenue once mature. "
+                    "Optional, and omitting it means the company's OWN current rate - "
+                    "its figure, not a convention. It is not REQUIRED like the others "
+                    "because there is an honest answer when the caller says nothing, "
+                    "which is not true of growth or margin.")] = None,
 ) -> Any:
     """
     The last opt-in, for a company whose own figures support no projection.
@@ -2402,7 +2423,8 @@ def get_hypothetical(
             valuer=lambda t, overrides: value_company_hypothetically(
                 t, UserAssumptions(revenue_growth=revenue_growth,
                                    target_operating_margin=target_operating_margin,
-                                   years_to_target=years_to_target)))
+                                   years_to_target=years_to_target,
+                                   capex_pct=capex_pct)))
     except HypotheticalRefused as e:
         raise ApiError(HTTP_422_NOT_SUITABLE, e.code, str(e),
                        method="hypothetical", reasons=e.reasons) from e
@@ -2455,6 +2477,13 @@ def get_hypothetical_excel(
     years_to_target: Annotated[int, Query(
         ge=YEARS_TO_TARGET_BOUNDS[0], le=YEARS_TO_TARGET_BOUNDS[1],
         description="Years to reach that margin. REQUIRED.")],
+    capex_pct: Annotated[float | None, Query(
+        ge=CAPEX_PCT_BOUNDS[0], le=CAPEX_PCT_BOUNDS[1],
+        description="Assumed capital investment as a share of revenue once mature. "
+                    "Optional, and omitting it means the company's OWN current rate - "
+                    "its figure, not a convention. It is not REQUIRED like the others "
+                    "because there is an honest answer when the caller says nothing, "
+                    "which is not true of growth or margin.")] = None,
 ) -> Any:
     """
     The user-built hypothetical as a spreadsheet.
@@ -2470,7 +2499,8 @@ def get_hypothetical_excel(
             valuer=lambda t, overrides: value_company_hypothetically(
                 t, UserAssumptions(revenue_growth=revenue_growth,
                                    target_operating_margin=target_operating_margin,
-                                   years_to_target=years_to_target)))
+                                   years_to_target=years_to_target,
+                                   capex_pct=capex_pct)))
     except HypotheticalRefused as e:
         raise ApiError(HTTP_422_NOT_SUITABLE, e.code, str(e),
                        method="hypothetical", reasons=e.reasons) from e
