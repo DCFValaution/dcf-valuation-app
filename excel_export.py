@@ -34,6 +34,7 @@ import datetime as _dt
 from dataclasses import dataclass
 from io import BytesIO
 
+from dcf import HOLD_UNTIL_YEAR
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -63,62 +64,75 @@ THIN_TOP = Border(top=Side(style="thin", color="808080"))
 R_TITLE = 1
 R_SUBTITLE = 2
 R_ASSUMPTIONS_HEAD = 4
-R_GROWTH = 5
-R_MARGIN = 6
-R_TAX = 7
-R_DA = 8
-R_CAPEX = 9
-R_NWC = 10
-R_WACC = 11
-R_TERMINAL = 12
-R_YEARS = 13
-R_BASE_HEAD = 15
-R_REVENUE_IN = 16
-R_DEBT_IN = 17
-R_CASH_IN = 18
-R_MINORITY_IN = 19
-R_SHARES_IN = 20
-R_PRICE_IN = 21
-R_PROJ_HEAD = 23
-R_COLUMN_HEADS = 24
-R_PERIOD = 25
-R_REVENUE = 26
-R_GROWTH_PCT = 27
-R_EBIT = 28
-R_TAXES = 29
-R_NOPAT = 30
-R_DA_ADD = 31
-R_CAPEX_LESS = 32
+# Three growth rates, because they are three different claims. Year one is
+# close to a fact, years two to five a judgement, and the decline after them
+# arithmetic. The measured trend is kept beside them as a reference: it is
+# what years two to five are derived FROM, and a reader comparing the two
+# can see how far the model has moved from the company's own record.
+R_GROWTH_Y1 = 5
+R_GROWTH_Y25 = 6
+R_GROWTH = 7
+R_MARGIN = 8
+R_MARGIN_TARGET = 9
+R_MARGIN_YEAR = 10
+R_TAX = 11
+R_TAX_MARGINAL = 12
+R_DA = 13
+R_DA_TERMINAL = 14
+R_CAPEX = 15
+R_CAPEX_TERMINAL = 16
+R_NWC = 17
+R_WACC = 18
+R_TERMINAL = 19
+R_TERMINAL_ROIC = 20
+R_YEARS = 21
+R_BASE_HEAD = 23
+R_REVENUE_IN = 24
+R_DEBT_IN = 25
+R_CASH_IN = 26
+R_MINORITY_IN = 27
+R_SHARES_IN = 28
+R_PRICE_IN = 29
+R_PROJ_HEAD = 31
+R_COLUMN_HEADS = 32
+R_PERIOD = 33
+R_REVENUE = 34
+R_GROWTH_PCT = 35
+R_EBIT = 36
+R_TAXES = 37
+R_NOPAT = 38
+R_DA_ADD = 39
+R_CAPEX_LESS = 40
 # The share of revenue each projected year's capex actually was. Written per
 # year rather than referenced from the single assumption cell, because the
 # capex fade means the years differ - and a workbook that pointed every year
 # at one cell would recalculate to a different answer than the API returned
 # the moment anyone opened it.
-R_CAPEX_PCT = 33
-R_NWC_LESS = 34
-R_UFCF = 35
-R_DISCOUNT = 36
-R_PV_UFCF = 37
-R_EV_HEAD = 39
-R_PV_SUM = 40
-R_TV = 41
-R_PV_TV = 42
-R_EV = 43
-R_PLUS_CASH = 44
-R_LESS_DEBT = 45
-R_LESS_MINORITY = 46
-R_EQUITY = 47
-R_SHARES = 48
-R_INTRINSIC = 49
-R_PRICE = 50
-R_UPSIDE = 51
-R_TV_PCT = 52
-R_SENS_HEAD = 54
-R_SENS_LEGEND = 55
-R_SENS_COLS = 56
-R_SENS_FIRST = 57
-R_SENS_LAST = 61
-R_NOTES_HEAD = 63
+R_CAPEX_PCT = 41
+R_NWC_LESS = 42
+R_UFCF = 43
+R_DISCOUNT = 44
+R_PV_UFCF = 45
+R_EV_HEAD = 47
+R_PV_SUM = 48
+R_TV = 49
+R_PV_TV = 50
+R_EV = 51
+R_PLUS_CASH = 52
+R_LESS_DEBT = 53
+R_LESS_MINORITY = 54
+R_EQUITY = 55
+R_SHARES = 56
+R_INTRINSIC = 57
+R_PRICE = 58
+R_UPSIDE = 59
+R_TV_PCT = 60
+R_SENS_HEAD = 62
+R_SENS_LEGEND = 63
+R_SENS_COLS = 64
+R_SENS_FIRST = 65
+R_SENS_LAST = 69
+R_NOTES_HEAD = 71
 
 SENSITIVITY_OFFSETS = (-0.01, -0.005, 0.0, 0.005, 0.01)
 
@@ -269,15 +283,29 @@ def build_workbook(report: ValuationReport) -> Workbook:
              "1.  ASSUMPTIONS   (shaded blue-text cells are editable inputs)", layout)
 
     assumption_rows = [
-        (R_GROWTH, "Revenue growth rate (per year)", "revenue_growth", PERCENT_2DP),
+        (R_GROWTH_Y1, "Revenue growth, year 1", "year_one_growth",
+         PERCENT_2DP),
+        (R_GROWTH_Y25, "Revenue growth, years 2-5", "years_two_to_five_growth",
+         PERCENT_2DP),
+        (R_GROWTH, "Revenue growth measured (3-year trend)", "revenue_growth",
+         PERCENT_2DP),
         (R_MARGIN, "Operating margin (EBIT % of revenue)", "operating_margin", PERCENT_2DP),
-        (R_TAX, "Tax rate", "tax_rate", PERCENT_2DP),
-        (R_DA, "Depreciation & amortisation (% of revenue)", "da_pct", PERCENT_2DP),
+        (R_TAX, "Tax rate, effective (year 1)", "tax_rate", PERCENT_2DP),
+        (R_TAX_MARGINAL, "Tax rate, marginal (final year)",
+         "marginal_tax_rate", PERCENT_2DP),
+        (R_DA, "Depreciation & amortisation (% of revenue, year 1)", "da_pct",
+         PERCENT_2DP),
+        (R_DA_TERMINAL, "Depreciation & amortisation (final year)",
+         "da_terminal_pct", PERCENT_2DP),
         (R_CAPEX, "Capital expenditures (% of revenue, year 1)", "capex_pct",
          PERCENT_2DP),
+        (R_CAPEX_TERMINAL, "Capital expenditures (final year)",
+         "capex_terminal_pct", PERCENT_2DP),
         (R_NWC, "Change in net working capital (% of revenue growth)", "nwc_pct", PERCENT_2DP),
         (R_WACC, "WACC (discount rate)", "wacc", PERCENT_2DP),
         (R_TERMINAL, "Terminal growth rate (g)", "terminal_growth", PERCENT_2DP),
+        (R_TERMINAL_ROIC, "Return on capital, long run",
+         "terminal_roic", PERCENT_2DP),
     ]
     fading = bool(getattr(a, "fade_enabled", False)) and len(result.years) > 1
     # The base-year column is shown on the same basis as year one, which is
@@ -398,28 +426,60 @@ def build_workbook(report: ValuationReport) -> Workbook:
         c = layout.letter(col)
         prev = layout.letter(col - 1)
 
-        if fading:
-            # The rate for this year is a value, not a reference to the single
-            # growth cell, and revenue compounds off it. Written first so the
-            # revenue formula below has something to point at.
-            _input(ws, R_GROWTH_PCT, result.years[year_index].revenue_growth,
-                   PERCENT_2DP, column=col)
-            _formula(ws, R_REVENUE, col,
-                     f"={prev}{R_REVENUE}*(1+{c}{R_GROWTH_PCT})", CURRENCY)
+        year = year_index + 1
+        final = len(result.years)
+
+        # The growth path as a FORMULA per year, not a frozen number.
+        #
+        # Year one reads its own cell; years two to five read theirs; the
+        # years after them interpolate between that cell and the terminal
+        # rate. Editing either growth cell in Excel therefore moves the
+        # whole path, which is the difference between a model and a picture
+        # of one.
+        if year == 1:
+            _formula(ws, R_GROWTH_PCT, col, f"=$B${R_GROWTH_Y1}", PERCENT_2DP)
+        elif year <= HOLD_UNTIL_YEAR or final <= HOLD_UNTIL_YEAR:
+            _formula(ws, R_GROWTH_PCT, col, f"=$B${R_GROWTH_Y25}", PERCENT_2DP)
         else:
-            _formula(ws, R_REVENUE, col,
-                     f"={prev}{R_REVENUE}*(1+$B${R_GROWTH})", CURRENCY)
-            _formula(ws, R_GROWTH_PCT, col,
-                     f"={c}{R_REVENUE}/{prev}{R_REVENUE}-1", PERCENT_1DP)
-        _formula(ws, R_EBIT, col, f"={c}{R_REVENUE}*$B${R_MARGIN}", CURRENCY)
-        _formula(ws, R_TAXES, col, f"=-{c}{R_EBIT}*$B${R_TAX}", CURRENCY)
+            steps = final - HOLD_UNTIL_YEAR
+            done = year - HOLD_UNTIL_YEAR
+            _formula(
+                ws, R_GROWTH_PCT, col,
+                f"=$B${R_GROWTH_Y25}+($B${R_TERMINAL}-$B${R_GROWTH_Y25})"
+                f"*{done}/{steps}",
+                PERCENT_2DP)
+        _formula(ws, R_REVENUE, col,
+                 f"={prev}{R_REVENUE}*(1+{c}{R_GROWTH_PCT})", CURRENCY)
+
+        # The margin converges only where a target was set; otherwise the
+        # single cell is read, exactly as before.
+        if getattr(a, "target_operating_margin", None) is not None:
+            by_year = getattr(a, "margin_convergence_year", None) or final
+            progress = min(year / by_year, 1.0)
+            _formula(
+                ws, R_EBIT, col,
+                f"={c}{R_REVENUE}*($B${R_MARGIN}+($B${R_MARGIN_TARGET}"
+                f"-$B${R_MARGIN})*{progress:.6f})", CURRENCY)
+        else:
+            _formula(ws, R_EBIT, col, f"={c}{R_REVENUE}*$B${R_MARGIN}",
+                     CURRENCY)
+
+        # Tax and depreciation both glide, so both are written as the same
+        # interpolation the engine runs rather than as a single reference.
+        span = max(final - 1, 1)
+        share = (year - 1) / span
+        _formula(ws, R_TAXES, col,
+                 f"=-{c}{R_EBIT}*($B${R_TAX}+($B${R_TAX_MARGINAL}"
+                 f"-$B${R_TAX})*{share:.6f})", CURRENCY)
         _formula(ws, R_NOPAT, col, f"={c}{R_EBIT}+{c}{R_TAXES}", CURRENCY)
-        _formula(ws, R_DA_ADD, col, f"={c}{R_REVENUE}*$B${R_DA}", CURRENCY)
-        # Each year carries its own intensity, and the cash line points at
-        # it. With no fade every one of them is the same number, and the
-        # workbook reads exactly as it did before.
-        _input(ws, R_CAPEX_PCT, result.years[year_index].capex_pct,
-               PERCENT_2DP, column=col)
+        _formula(ws, R_DA_ADD, col,
+                 f"={c}{R_REVENUE}*($B${R_DA}+($B${R_DA_TERMINAL}"
+                 f"-$B${R_DA})*{share:.6f})", CURRENCY)
+        # Capital spending glides between its own two cells on the same
+        # schedule, so a reader can move either end and watch the path move.
+        _formula(ws, R_CAPEX_PCT, col,
+                 f"=$B${R_CAPEX}+($B${R_CAPEX_TERMINAL}-$B${R_CAPEX})"
+                 f"*{share:.6f}", PERCENT_2DP)
         _formula(ws, R_CAPEX_LESS, col, f"=-{c}{R_REVENUE}*{c}{R_CAPEX_PCT}", CURRENCY)
         _formula(ws, R_NWC_LESS, col,
                  f"=-({c}{R_REVENUE}-{prev}{R_REVENUE})*$B${R_NWC}", CURRENCY)
@@ -440,8 +500,17 @@ def build_workbook(report: ValuationReport) -> Workbook:
     ev_rows = [
         (R_PV_SUM, "Sum of PV of explicit UFCF",
          f"=SUM({first}{R_PV_UFCF}:{last}{R_PV_UFCF})", CURRENCY, False),
-        (R_TV, "Terminal value at end of forecast (Gordon growth)",
-         f"={last}{R_UFCF}*(1+$B${R_TERMINAL})/($B${R_WACC}-$B${R_TERMINAL})",
+        (R_TV, "Terminal value at end of forecast (growth paid for)",
+         # NOPAT x (1 + g) x (1 - g / ROIC) / (WACC - g). The IF mirrors the
+         # engine's own guard: a return of nil would divide by zero here and
+         # means "no reinvestment" there, so both answer the same way rather
+         # than one of them showing #DIV/0!.
+         f"=IF($B${R_TERMINAL_ROIC}=0,"
+         f"{last}{R_NOPAT}*(1+$B${R_TERMINAL})"
+         f"/($B${R_WACC}-$B${R_TERMINAL}),"
+         f"{last}{R_NOPAT}*(1+$B${R_TERMINAL})"
+         f"*(1-$B${R_TERMINAL}/$B${R_TERMINAL_ROIC})"
+         f"/($B${R_WACC}-$B${R_TERMINAL}))",
          CURRENCY, False),
         (R_PV_TV, "PV of terminal value",
          f"=$B${R_TV}*{last}{R_DISCOUNT}", CURRENCY, False),
@@ -523,8 +592,11 @@ def build_workbook(report: ValuationReport) -> Workbook:
     _label(ws, R_NOTES_HEAD, "NOTES", bold=True)
     notes = [
         "Unlevered FCF = NOPAT + D&A - capex - change in NWC.",
-        "Terminal value uses Gordon growth: TV = FCF_final x (1+g) / (WACC - g), "
-        "discounted at the final-year factor.",
+        "Terminal value charges for the growth it assumes: "
+        "TV = NOPAT_final x (1+g) x (1 - g / ROIC) / (WACC - g), "
+        "discounted at the final-year factor. A company growing at g while "
+        "earning ROIC on new capital has to reinvest g / ROIC of its profit "
+        "to do it.",
         "Equity value = enterprise value + cash & investments - total debt "
         "- minority interest. Minority interest is the outside "
         "shareholders' claim on partly-owned subsidiaries, whose cash "

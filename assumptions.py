@@ -70,6 +70,8 @@ from statistics import median
 from dcf import FADE_EXPONENTIAL, FADE_LINEAR, Assumptions
 from industry_betas import (MAX_DEBT_TO_EQUITY, as_of_text, industry_for,
                             relevered_beta)
+from industry_betas import industry_capex_for
+from reinvestment import depreciation_cover
 from market_data import (CompanyFinancials, fetch_risk_free_rate, num,
                          reported, total_debt_of)
 
@@ -85,7 +87,7 @@ DEFAULT_WACC = 0.085             # only used when WACC derivation fails
 # growth. Those are different questions with different right answers, and
 # they share a number only by history. Changing it moves all five.
 DEFAULT_TERMINAL_GROWTH = 0.025
-DEFAULT_PROJECTION_YEARS = 5
+DEFAULT_PROJECTION_YEARS = 10
 
 # How far below the discount rate the derived terminal growth is held.
 #
@@ -423,8 +425,24 @@ CLAMP_REVENUE_GROWTH = (0.00, 0.25)
 # that more value sits in years six to ten, which are the least knowable -
 # but they are discounted hardest, and the alternative puts that value in
 # the terminal figure, which is less knowable still.
+# Retired with the three-phase growth path: the horizon no longer depends on
+# how fast a company is growing, so there is nothing to threshold.
 FAST_GROWTH_THRESHOLD = 0.15
 FAST_GROWTH_YEARS = 10
+
+# The latest year's own growth is capped harder than the trend, because a
+# single twelve months can be extraordinary in a way a three-year rate
+# cannot. 40% rather than 50%: of the fourteen companies measured only
+# Nvidia and Palantir reach it, and 50% moved them 7% and 3% while changing
+# nothing else - a stronger claim buying no extra explanation.
+YEAR_ONE_GROWTH_CAP = 0.40
+
+# The US marginal corporate rate, which an effective rate converges to.
+MARGINAL_TAX_RATE = 0.25
+
+# The most a company is assumed to earn on new capital in perpetuity.
+# Above this is a claim that a competitive advantage never erodes.
+TERMINAL_ROIC_CAP = 0.25
 CLAMP_OPERATING_MARGIN = (-1.00, 0.60)
 # Raised from 0.35, which was below what real companies pay. Chevron's
 # three-year median is 35.5%, Shell's 39.8%, and BP's is 81.9% - two years
@@ -681,6 +699,45 @@ def margin_trend_span(series: list[float]) -> float | None:
     if not (improving or declining):
         return None
     return series[0] - series[-1]
+
+# What a dollar of new revenue may be assumed to cost in capital. The ratio
+# divides by a book figure that buybacks can drive toward nothing, so it is
+# bounded at both ends rather than trusted.
+SALES_TO_CAPITAL_CLAMP = (0.30, 5.00)
+
+
+def _invested_capital(fin: CompanyFinancials) -> float | None:
+    """Equity plus debt less cash: what the business has to work with."""
+    if not fin.balance:
+        return None
+    balance = fin.balance[0]
+    return (num(balance, "commonStockEquity")
+            + num(balance, "shortTermDebt") + num(balance, "longTermDebt")
+            - num(balance, "cashAndCashEquivalents")
+            - num(balance, "shortTermInvestments"))
+
+
+def _current_roic(fin: CompanyFinancials, tax_rate: float) -> float | None:
+    """Operating profit after tax over invested capital, from the filings.
+
+    Invested capital is equity plus debt less cash - what the business has
+    been given to work with, excluding the cash it is sitting on. None where
+    the books do not support it: a company with negative invested capital
+    (years of buybacks) or no operating profit has no return to measure, and
+    a made-up one would be worse than the absence.
+    """
+    if not fin.income or not fin.balance:
+        return None
+    income, balance = fin.income[0], fin.balance[0]
+    ebit = num(income, "operatingIncome")
+    invested = (num(balance, "commonStockEquity")
+                + num(balance, "shortTermDebt") + num(balance, "longTermDebt")
+                - num(balance, "cashAndCashEquivalents")
+                - num(balance, "shortTermInvestments"))
+    if invested <= 0 or ebit <= 0:
+        return None
+    return ebit * (1 - tax_rate) / invested
+
 
 def capital_values(fin: CompanyFinancials) -> tuple[float, float]:
     """(market value of equity, book value of debt) for *fin*.
@@ -1024,6 +1081,14 @@ def derive_assumptions(fin: CompanyFinancials,
     revenues = [num(r, "revenue") for r in income]
     years = [r.get("fiscalYear", "?") for r in income]
     diagnostics["revenue_by_year"] = list(zip(years, revenues))
+    # The latest year's own growth, which is what year one of the forecast
+    # uses. Separate from the measured trend on purpose: what a company just
+    # did and what it has been doing are two different claims, and a single
+    # rate said the same thing about both.
+    diagnostics["latest_revenue_growth"] = (
+        revenues[0] / revenues[1] - 1
+        if len(revenues) >= 2 and revenues[1] > 0 and revenues[0] > 0
+        else None)
 
     # --- Revenue growth: endpoint CAGR over a FIXED window -----------------
     #
@@ -1455,69 +1520,219 @@ def derive_assumptions(fin: CompanyFinancials,
 
     diagnostics["terminal_growth_ceiling"] = ceiling
 
-    # --- Global defaults ---------------------------------------------------
+    # --- The growth structure ----------------------------------------------
     #
-    # A company growing faster than FAST_GROWTH_THRESHOLD is projected over
-    # ten years with the growth rate gliding down to its terminal rate.
-    # Everything slower keeps the five flat years that have always shipped.
+    # Three rates rather than one, because a single held rate says the same
+    # thing about next year as about year nine and those are not the same
+    # claim. What a company just did is close to a fact; what it does in
+    # five years is a judgement; what it does in ten is arithmetic
+    # converging on the economy's growth rate.
     #
-    # The two go together and must not be separated: the fade without a
-    # longer forecast makes a fast grower WORSE than the flat projection,
-    # because it decelerates from the same starting rate over the same five
-    # years - Palantir $7.14 flat against $6.89 faded. It is the pair that
-    # helps, not the fade.
-    fast_grower = revenue_growth > FAST_GROWTH_THRESHOLD
-    if fast_grower:
-        projection_years = record(
-            "projection_years", FAST_GROWTH_YEARS, "derived",
-            f"ten years rather than five, because {revenue_growth:.1%} "
-            f"growth needs room to slow to the "
-            f"{terminal_growth:.1%} it ends at")
-    else:
-        projection_years = record("projection_years",
-                                  DEFAULT_PROJECTION_YEARS, "default",
-                                  "modelling convention")
+    # Ten years for every company, not only for fast growers. The horizon
+    # was five or ten depending on growth, which made the SHAPE of the model
+    # depend on the figure being modelled; and a shorter forecast only moves
+    # value into the perpetuity, which is the part nobody can check.
+    projection_years = record(
+        "projection_years", DEFAULT_PROJECTION_YEARS, "default",
+        f"{DEFAULT_PROJECTION_YEARS} years, for every company: a shorter "
+        f"forecast only moves value into the perpetuity")
 
-    # The fade: on for a fast grower, off otherwise. Recorded like any other
-    # assumption so that when it is on, the screen can say so and say where
-    # it came from.
-    if fast_grower:
-        fade_enabled = record(
-            "fade_enabled", True, "derived",
-            f"on; growth glides from {revenue_growth:.1%} down to "
-            f"{terminal_growth:.1%} across the forecast rather than "
-            f"dropping to it in one step at the end")
+    # Years two to five hold the measured trend rather than the latest year,
+    # which may be a single good or bad twelve months. Derived first,
+    # because year one falls back to it where the latest year is unusable.
+    years_two_to_five = record(
+        "years_two_to_five_growth", revenue_growth, "derived",
+        f"the {GROWTH_WINDOW_YEARS}-year rate, held for years two to five")
+
+    latest = diagnostics.get("latest_revenue_growth")
+    if latest is None:
+        year_one = record(
+            "year_one_growth", years_two_to_five, "derived",
+            f"the {GROWTH_WINDOW_YEARS}-year rate, because the latest year "
+            f"on its own could not be measured")
     else:
-        fade_enabled = record("fade_enabled", DEFAULT_FADE_ENABLED, "default",
-                              "off; growth is held flat across the forecast")
-    # A fast grower starts gliding immediately. The default holds the full
-    # rate for three years, which for a 25% starter means compounding 25%
-    # three times before any deceleration - and that is a strong assumption
-    # to make silently: it puts Nvidia 64% above its market price against
-    # 45% when the glide starts at once. The longer hold is still available
-    # as an override; it is not the default for a company whose growth is
-    # the thing most likely to disappoint.
-    if fast_grower:
-        fade_start_year = record(
-            "fade_start_year", 1, "derived",
-            f"the glide starts immediately, so {revenue_growth:.1%} is this "
-            f"year's rate rather than the next three years' rate")
-    else:
-        fade_start_year = record("fade_start_year", DEFAULT_FADE_START_YEAR,
-                                 "default",
-                                 "last year at the full starting rate before "
-                                 "the glide")
-    # The shape of the glide is a choice between two named curves, not a
-    # quantity, so it is kept out of the numeric provenance channel - which
-    # exists to say where a *number* came from - and recorded as a
-    # diagnostic instead. An unfamiliar name falls back to the straight line
-    # rather than failing a valuation over a spelling.
-    supplied_pattern = str(overrides.get("fade_pattern", DEFAULT_FADE_PATTERN)).lower()
-    fade_pattern = (supplied_pattern if supplied_pattern in (FADE_LINEAR, FADE_EXPONENTIAL)
-                    else DEFAULT_FADE_PATTERN)
+        capped, bit = _clamp(latest, (0.0, YEAR_ONE_GROWTH_CAP))
+        year_one = record(
+            "year_one_growth", capped,
+            "derived (clamped)" if bit else "derived",
+            (f"the latest financial year's own growth of {latest:.1%}, "
+             f"capped at {YEAR_ONE_GROWTH_CAP:.0%}"
+             if bit else
+             f"the latest financial year's own growth"),
+            **({"raw": latest, "limit": capped, "why": "range"} if bit else {}))
+
+    # The shape of the decline from year six is a choice between two named
+    # curves, not a quantity, so it stays out of the numeric provenance
+    # channel - which exists to say where a NUMBER came from - and is
+    # recorded as a diagnostic. Exponential is a ratio and needs both ends
+    # positive to mean anything; where they are not, the straight line is
+    # used and this says so.
+    supplied_pattern = str(
+        overrides.get("growth_decline_pattern", DEFAULT_FADE_PATTERN)).lower()
+    decline_pattern = (supplied_pattern
+                       if supplied_pattern in (FADE_LINEAR, FADE_EXPONENTIAL)
+                       else DEFAULT_FADE_PATTERN)
+    usable = years_two_to_five > 0 and terminal_growth > 0
+    diagnostics["growth_decline_pattern"] = (
+        decline_pattern if usable else FADE_LINEAR)
+    diagnostics["growth_decline_pattern_source"] = (
+        "override" if "growth_decline_pattern" in overrides else "default")
+    diagnostics["growth_decline_fell_back"] = (
+        decline_pattern == FADE_EXPONENTIAL and not usable)
+
+    # The old single-rate fade is off: the three-phase path replaces it, and
+    # running both would apply two different shapes to one forecast.
+    fade_enabled = record("fade_enabled", False, "default",
+                          "replaced by the three-phase growth path")
+    fade_start_year = record("fade_start_year", DEFAULT_FADE_START_YEAR,
+                             "default", "unused while the fade is off")
+    fade_pattern = DEFAULT_FADE_PATTERN
     diagnostics["fade_pattern"] = fade_pattern
-    diagnostics["fade_pattern_source"] = (
-        "override" if "fade_pattern" in overrides else "default")
+    diagnostics["fade_pattern_source"] = "default"
+
+    # --- How the forecast pays for growth -----------------------------------
+    #
+    # Two methods, and the difference is what investment is a share OF. The
+    # capital-spending path makes it a share of revenue, so a company spends
+    # whether or not it is growing. The sales-to-capital rule makes it a
+    # share of the growth itself - Damodaran's approach, and the one the
+    # terminal rule here already uses.
+    #
+    # The first is the default because the second divides by invested
+    # capital from the balance sheet, and buybacks make that figure
+    # unreliable in exactly the way they made book equity unreliable for the
+    # discount rate. Measured, it values Meta at $1,152 against a $561
+    # price and takes Coinbase negative. It is offered rather than hidden,
+    # because for a company mid-build-out it is the more defensible of the
+    # two - it lifts Amazon from $34 to $94 and halves its terminal share.
+    method = str(overrides.get("reinvestment_method", "capex_path")).lower()
+    diagnostics["reinvestment_method"] = method
+    if method == "sales_to_capital":
+        invested = _invested_capital(fin)
+        revenue = num(income[0], "revenue") if income else 0.0
+        ratio = (revenue / invested
+                 if invested and invested > 0 and revenue > 0 else None)
+        if ratio is not None:
+            ratio = min(max(ratio, SALES_TO_CAPITAL_CLAMP[0]),
+                        SALES_TO_CAPITAL_CLAMP[1])
+            diagnostics["sales_to_capital"] = ratio
+            # Net capital spending goes to nil and the whole cost of growth
+            # moves into the working-capital term, which is already a share
+            # of revenue GROWTH rather than of revenue.
+            capex_pct = record(
+                "capex_pct", da_pct, "override",
+                f"net capital spending set to nil: on this method the cost "
+                f"of growth is {1 / ratio:.2f} of each new dollar of revenue, "
+                f"not a share of all of it")
+            capex_terminal_pct = capex_pct
+            nwc_pct = record(
+                "nwc_pct", 1 / ratio, "override",
+                f"the company's own sales-to-capital of {ratio:.2f}: every "
+                f"dollar of new revenue costs {1 / ratio:.2f} of capital")
+        else:
+            diagnostics["sales_to_capital"] = None
+
+    # --- An optional target margin ------------------------------------------
+    #
+    # Nothing derived. The margin from the filings is the one figure in the
+    # model that came from the company rather than from a judgement about
+    # the company, and holding it is the honest default. A reader who
+    # believes it improves or erodes says so, and says by when.
+    target_margin = overrides.get("target_operating_margin")
+    margin_year = overrides.get("margin_convergence_year")
+    if target_margin is not None:
+        target_margin = float(target_margin)
+        margin_year = int(margin_year or projection_years)
+        record("target_operating_margin", target_margin, "override",
+               f"your figure, reached by year {margin_year} from the "
+               f"{operating_margin:.1%} in the filings")
+        record("margin_convergence_year", float(margin_year), "override",
+               "your figure")
+    else:
+        margin_year = None
+
+    # --- Tax converging to the marginal rate --------------------------------
+    marginal_tax = record(
+        "marginal_tax_rate", MARGINAL_TAX_RATE, "default",
+        f"the US marginal rate, reached by year {int(projection_years)}; the "
+        f"effective {tax_rate:.1%} is what was paid, and the reasons it sits "
+        f"below the statutory rate expire")
+
+    # --- Terminal return on capital -----------------------------------------
+    roic_now = _current_roic(fin, tax_rate)
+    if roic_now is None:
+        terminal_roic = record(
+            "terminal_roic", wacc, "default",
+            "the discount rate, because the company's own return on capital "
+            "could not be measured; growth then creates no value")
+    else:
+        halfway = (roic_now + wacc) / 2
+        floored = max(halfway, wacc)
+        capped, bit = _clamp(floored, (0.0, TERMINAL_ROIC_CAP))
+        terminal_roic = record(
+            "terminal_roic", capped,
+            "derived (clamped)" if bit else "derived",
+            (f"halfway from the {roic_now:.1%} it earns now to its "
+             f"{wacc:.1%} cost of capital, capped at "
+             f"{TERMINAL_ROIC_CAP:.0%}: a perpetual return far above the "
+             f"cost of capital is a claim that an advantage never erodes"
+             if bit else
+             f"halfway from the {roic_now:.1%} it earns now to its "
+             f"{wacc:.1%} cost of capital, on the view that competition "
+             f"takes about half the excess"),
+            **({"raw": floored, "limit": capped, "why": "range"} if bit else {}))
+    diagnostics["current_roic"] = roic_now
+
+    # --- Where investment and depreciation settle ---------------------------
+    #
+    # Capex already glided to `capex_terminal_pct`. Depreciation's end point
+    # is set so the LAST forecast year reinvests exactly what the perpetuity
+    # does - otherwise the two are a year apart and charge different amounts
+    # for the same thing. Amazon's year ten reinvested 7.3% of revenue while
+    # the perpetuity starting the next year reinvested 2.3%, and that five
+    # point step was most of why its terminal value reached 160% of
+    # enterprise value.
+    # THE SEAM MATCH IS NOT HERE, AND THIS IS WHY.
+    #
+    # Setting depreciation so the last forecast year reinvests exactly what
+    # the perpetuity does closes the seam - Amazon's terminal value fell
+    # from 160% of enterprise value to 111% - and it breaks three other
+    # things, because it makes depreciation a plug rather than a fact about
+    # an asset base:
+    #
+    #   * it neuters the refusal guard. The `negative_fcf` check asks
+    #     whether the last forecast year produces cash; a plug that forces
+    #     that year's net investment to the small terminal figure means it
+    #     always does. No capital-spending rate refuses a company any more,
+    #     and Tesla - refused since 1.0.38 for exactly this - is valued.
+    #   * it drives depreciation to nil for asset-light companies, which is
+    #     not a describable business.
+    #   * it drives depreciation to EQUAL capex for heavy ones, which is the
+    #     "investment is free" bug 1.0.40 removed, returning by another door.
+    #
+    # The real fault is in which end gives way. The forecast was made to
+    # meet the terminal; it should be the terminal that follows the
+    # company's own steady-state investment. That is a change to the
+    # terminal rule, not to depreciation, and it is not made here.
+    required_net = ((terminal_growth / terminal_roic)
+                    * operating_margin * (1 - marginal_tax)
+                    if terminal_roic else 0.0)
+    diagnostics["terminal_net_investment"] = required_net
+    # Depreciation's end point is the industry's own relationship to the
+    # investment that produces it: the share of spending a company in
+    # this industry covers out of depreciation, from the same Damodaran
+    # table 1.0.40 already uses for the speculative path and the
+    # hypothetical. One mechanism, three callers.
+    cover, cover_industry = depreciation_cover(
+        industry_capex_for(fin.ticker))
+    da_terminal_pct = record(
+        "da_terminal_pct", capex_terminal_pct * cover, "derived",
+        f"{cover:.0%} of the {capex_terminal_pct:.1%} invested, which is "
+        f"what {cover_industry} companies cover out of depreciation "
+        f"(Damodaran); the {capex_terminal_pct * (1 - cover):.1%} gap is "
+        f"net investment, and it does not go away")
+    diagnostics["mature_cover"] = cover
+    diagnostics["mature_cover_industry"] = cover_industry
 
     assumptions = Assumptions(
         revenue_growth=revenue_growth,
@@ -1533,9 +1748,20 @@ def derive_assumptions(fin: CompanyFinancials,
         fade_enabled=bool(fade_enabled),
         fade_start_year=int(fade_start_year),
         fade_pattern=str(fade_pattern),
+        year_one_growth=year_one,
+        years_two_to_five_growth=years_two_to_five,
+        growth_decline_pattern=str(diagnostics["growth_decline_pattern"]),
+        marginal_tax_rate=marginal_tax,
+        terminal_reinvestment=True,
+        terminal_roic=terminal_roic,
+        da_terminal_pct=da_terminal_pct,
+        target_operating_margin=target_margin,
+        margin_convergence_year=(int(margin_year) if margin_year else None),
     )
 
-    unknown = set(overrides) - set(provenance) - set(wacc_inputs) - {"fade_pattern"}
+    unknown = (set(overrides) - set(provenance) - set(wacc_inputs)
+               - {"fade_pattern", "growth_decline_pattern",
+                  "reinvestment_method"})
     if unknown:
         known = sorted(set(provenance) | set(wacc_inputs))
         raise ValueError(

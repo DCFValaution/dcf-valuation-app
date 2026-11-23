@@ -745,3 +745,48 @@ accurate and sayable in provenance.
 Needs EDGAR as the statement source (Stage 4), and needs care about
 double-counting: some of those tags are already inside operating income and
 some are not, and the answer differs by filer.
+
+## Reinvestment that counts R&D and acquisitions, not just capital spending
+
+The forecast's last year and the perpetuity that follows it charge different
+amounts for the same thing. Amazon's year ten reinvests 7.3% of revenue; the
+perpetuity starting the next year reinvests 2.3%, because the forecast's
+investment is set from the industry's capital-spending relationship while
+the terminal's is set from growth (reinvestment = g / ROIC). Nothing makes
+them meet, and for a heavy investor the gap is most of why terminal value
+reaches 130% of enterprise value.
+
+**The fix that was tried, and why it was withdrawn.** Setting depreciation's
+end point so the last forecast year reinvests exactly what the perpetuity
+does closes the seam - Amazon fell from 160% to 111% - and breaks three
+other things, because it makes depreciation a plug rather than a fact about
+an asset base:
+
+  * it neuters the refusal guard. The check asks whether the last forecast
+    year produces cash; a plug that forces that year's net investment to the
+    small terminal figure means it always does. Tested at capital spending
+    of 10%, 18%, 25%, 35% and 45% of revenue, no company was refused;
+  * it drives depreciation to nil for asset-light companies, which is not a
+    describable business;
+  * it drives depreciation to EQUAL capital spending for heavy ones, which
+    is the "investment is free" bug 1.0.40 removed, returning by another
+    door. Lucid came out at 100% of revenue for both lines.
+
+**What would actually close it.** The two ends measure different things.
+Damodaran's own reinvestment includes net R&D and acquisitions; this model's
+capital spending line includes neither. That is also why the terminal rule
+asks more of an asset-light company than its capital spending can express -
+Coca-Cola needs 6.4% of revenue reinvested in perpetuity against a mature
+capital spend of 3.8%, and Nvidia 7.2% against 2.8%. The same is true of
+Apple, Palantir and Coinbase.
+
+The missing investment is real and it is in the filings: R&D is an expense
+line and acquisitions are a cash-flow line, both of which EDGAR gives
+directly. So this belongs with the Stage 4 follow-ups rather than as a
+formula.
+
+**It errs conservative in the meantime.** Where the terminal asks for more
+investment than the forecast charges, the forecast's cash flows are too high
+and the terminal's too low; the perpetuity dominates, which the serious
+warning at 100% of enterprise value reports, and above 150% the company is
+refused outright rather than valued.

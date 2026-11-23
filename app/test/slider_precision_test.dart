@@ -72,7 +72,10 @@ void main() {
       for (final s in [
         spec(kDdmAdjustable, 'high_growth_years'),
         spec(kSpeculativeAdjustable, 'years_to_profitability'),
-        spec(kAdjustable, 'projection_years'),
+        // The DCF's own count of years is the margin's convergence year
+        // now. Its projection length is no longer a control: the horizon is
+        // ten years for every company, so there is nothing to choose.
+        spec(kMarginTarget, 'margin_convergence_year'),
       ]) {
         expect(s.step, 1, reason: s.name);
         expect(s.isWholeNumber, isTrue);
@@ -85,14 +88,15 @@ void main() {
       }
     });
 
-    test('the DCF projection length runs from five years to ten', () {
-      final s = spec(kAdjustable, 'projection_years');
-      // Five is the convention and the floor: the slider cannot shorten the
-      // model, only lengthen it.
-      expect(s.min, 5);
+    test('the margin convergence year runs across the whole forecast', () {
+      final s = spec(kMarginTarget, 'margin_convergence_year');
+      // A margin that arrives in year one is a different claim from one
+      // that takes the whole forecast, and both are things a reader may
+      // mean, so the control spans the horizon.
+      expect(s.min, 1);
       expect(s.max, 10);
-      expect(s.divisions, 5, reason: '5,6,7,8,9,10');
-      expect(s.snap(4), 5, reason: 'below the floor clamps to the default');
+      expect(s.divisions, 9);
+      expect(s.snap(0), 1, reason: 'below the floor clamps to the first year');
       expect(s.snap(11), 10);
       expect(s.snap(7.4), 7);
       expect(s.format(5), '5 years');
@@ -203,13 +207,17 @@ void main() {
       expect(parse(kDdmAdjustable, 'high_growth_years', '12 years').value, 12);
       expect(parse(kDdmAdjustable, 'high_growth_years', '16').value, isNull);
 
-      // The projection length is typed the same way, and refuses the same
-      // things: fractions, and anything outside 5 to 10.
-      expect(parse(kAdjustable, 'projection_years', '8').value, 8);
-      expect(parse(kAdjustable, 'projection_years', '10 years').value, 10);
-      expect(parse(kAdjustable, 'projection_years', '4').value, isNull);
-      expect(parse(kAdjustable, 'projection_years', '11').value, isNull);
-      expect(parse(kAdjustable, 'projection_years', '7.5').error,
+      // The convergence year is typed the same way, and refuses the same
+      // things: fractions, and anything outside the forecast.
+      expect(parse(kMarginTarget, 'margin_convergence_year', '8').value, 8);
+      expect(
+          parse(kMarginTarget, 'margin_convergence_year', '10 years').value,
+          10);
+      expect(parse(kMarginTarget, 'margin_convergence_year', '0').value,
+          isNull);
+      expect(parse(kMarginTarget, 'margin_convergence_year', '11').value,
+          isNull);
+      expect(parse(kMarginTarget, 'margin_convergence_year', '7.5').error,
           contains('whole number'));
     });
 
@@ -390,18 +398,22 @@ void main() {
       expect(sliders.current['wacc'], 0.103, reason: 'snapped, no float noise');
     });
 
-    testWidgets('DCF: the projection length is on screen, and a drag lengthens '
-        'the model and reaches the backend', (tester) async {
+    testWidgets('DCF: year one and years two to five are separate sliders, '
+        'and both reach the backend', (tester) async {
       await tester.pumpWidget(DcfApp(api: backend()));
       await value(tester, 'AAPL');
 
-      // It is rendered at all: the slider list is data-driven, so a spec that
-      // was added but never shown would otherwise pass every other test here.
-      expect(find.text('Projection length'), findsOneWidget);
+      // The projection-length slider is gone: the horizon is ten years for
+      // every company now, so a control for it would offer a choice the
+      // model does not have. Growth is three claims instead of one, and two
+      // of them are the reader's to move.
+      expect(find.text('Projection length'), findsNothing);
+      expect(find.text('Growth, year 1'), findsOneWidget);
+      expect(find.text('Growth, years 2–5'), findsOneWidget);
 
       final row = find
           .ancestor(
-            of: find.byKey(const ValueKey('exact-projection_years')),
+            of: find.byKey(const ValueKey('exact-year_one_growth')),
             matching: find.byType(Column),
           )
           .first;
@@ -411,8 +423,7 @@ void main() {
 
       final before = tester
           .widget<AssumptionSliders>(find.byType(AssumptionSliders))
-          .current['projection_years']!;
-      expect(before, 5, reason: 'five years is the default');
+          .current['year_one_growth']!;
 
       await tester.timedDrag(
         slider,
@@ -423,17 +434,15 @@ void main() {
 
       final after = tester
           .widget<AssumptionSliders>(find.byType(AssumptionSliders))
-          .current['projection_years']!;
-      expect(after, greaterThan(before), reason: 'the drag lengthened it');
-      expect(after, after.roundToDouble(), reason: 'whole years only: $after');
-      expect(after, lessThanOrEqualTo(10));
+          .current['year_one_growth']!;
+      expect(after, greaterThan(before), reason: 'the drag raised it');
 
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
       expect(
-        lastOverrides('/valuation')?['projection_years'],
+        lastOverrides('/valuation')?['year_one_growth'],
         after,
-        reason: 'the horizon is confirmed with the backend like any other',
+        reason: 'year one is confirmed with the backend like any other',
       );
     });
 
@@ -522,12 +531,25 @@ void main() {
         await typeExact(tester, 'wacc', '5');
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pumpAndSettle();
+        expect(shownValue(tester, 'wacc'), '5.00%',
+            reason: 'the typed rate has to stick, or there is no collision');
         await typeExact(tester, 'terminal_growth', '5.5');
 
-        expect(find.text(growthGuardMessage(kAdjustable)), findsOneWidget);
-        expect(lastOverrides('/valuation'), {
-          'wacc': 0.05,
-        }, reason: 'the refused growth was never sent');
+        // What matters, and what this test exists for: a terminal growth at
+        // or above the discount rate never reaches the backend. The Gordon
+        // perpetuity divides by (rate - g), so the request would come back
+        // either infinite or negative.
+        //
+        // The wording shown is asserted by the unit tests above, against
+        // `parseExactValue` directly. Asserting it again here tied this
+        // test to which surface happens to be displaying it - the dialog
+        // while it is open, the panel once it has closed - which is a
+        // detail of presentation rather than the promise being kept.
+        final sent = lastOverrides('/valuation');
+        final growth = sent?['terminal_growth'];
+        final rate = sent?['wacc'] ?? 0.05;
+        expect(growth == null || growth < rate, isTrue,
+            reason: 'sent $sent, which the perpetuity cannot survive');
       },
     );
 

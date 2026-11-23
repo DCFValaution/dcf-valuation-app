@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 // The pattern names come from the engine, so the control and the model
 // cannot drift apart over a spelling.
 import 'dcf_engine.dart' show fadeExponential, fadeLinear;
+import 'assumption_sliders.dart';
 import 'theme.dart';
 import 'ui.dart';
 import 'formatting.dart';
@@ -37,7 +38,43 @@ class AdvancedPanel extends StatelessWidget {
     required this.projectionYears,
     required this.growthPath,
     this.busy = false,
+    this.declineFellBack = false,
+    this.currentRoic,
+    this.wacc = 0.0,
+    this.reinvestmentMethod = kReinvestmentCapexPath,
+    this.onReinvestmentChanged,
+    this.marginTargetEnabled = false,
+    this.onMarginTargetEnabledChanged,
+    this.marginTarget = 0.0,
+    this.onMarginTargetChanged,
+    this.marginConvergenceYear = 5,
+    this.onMarginConvergenceYearChanged,
+    this.onMarginChangeEnd,
   });
+
+  /// The optional claim that the margin goes somewhere other than where the
+  /// filings left it. Off unless the reader asks for it.
+  final bool marginTargetEnabled;
+  final ValueChanged<bool>? onMarginTargetEnabledChanged;
+  final double marginTarget;
+  final ValueChanged<double>? onMarginTargetChanged;
+  final int marginConvergenceYear;
+  final ValueChanged<int>? onMarginConvergenceYearChanged;
+  final VoidCallback? onMarginChangeEnd;
+
+  /// True when an exponential decline was asked for and the straight line
+  /// used instead, because a ratio needs both of its rates positive.
+  final bool declineFellBack;
+
+  /// What the company earns on its capital now, and what that capital
+  /// costs. Shown beside the long-run return, which is unreadable without
+  /// them: 20% means nothing until you know it earns 32% today.
+  final double? currentRoic;
+  final double wacc;
+
+  /// How the forecast pays for growth. Two methods, named in the backend.
+  final String reinvestmentMethod;
+  final ValueChanged<String>? onReinvestmentChanged;
 
   final bool expanded;
   final ValueChanged<bool> onExpandedChanged;
@@ -99,13 +136,10 @@ class AdvancedPanel extends StatelessWidget {
                           Text('Advanced', style: context.text.titleSmall),
                           const SizedBox(height: 2),
                           Text(
-                            fadeEnabled
-                                ? 'Growth fade on - your override, not the default model'
-                                : 'Change the shape of the model, not just its numbers',
+                            'The growth path, the shape of its decline, '
+                            'and how growth is paid for',
                             style: context.text.labelSmall?.copyWith(
-                              color: fadeEnabled
-                                  ? context.scheme.primary
-                                  : colors.textSecondary,
+                              color: colors.textSecondary,
                             ),
                           ),
                         ],
@@ -147,54 +181,78 @@ class AdvancedPanel extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Fade growth to the terminal rate',
-                                          style: context.text.bodyMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Hold the starting rate, then glide to the '
-                                          'terminal rate by the final year, instead of '
-                                          'dropping to it all at once.',
-                                          style: context.text.labelSmall
-                                              ?.copyWith(
-                                                color: colors.textSecondary,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Switch(
-                                    key: const Key('fade-toggle'),
-                                    value: fadeEnabled,
-                                    onChanged: busy ? null : onFadeChanged,
-                                  ),
-                                ],
+                              // The path first, because it is the thing
+                              // the controls beneath it change. The on/off
+                              // switch and the start-year control are gone:
+                              // the decline is structural now rather than an
+                              // override, so there is nothing to turn off
+                              // and no year to start it in.
+                              GrowthPathView(path: growthPath),
+                              const SizedBox(height: AppSpacing.lg),
+                              Text(
+                                'Year 1 is the latest year\u2019s own growth; '
+                                'years 2\u20135 hold the measured trend; from '
+                                'year 6 it declines to the terminal rate, '
+                                'reaching it exactly at year '
+                                '$projectionYears.',
+                                style: context.text.labelSmall?.copyWith(
+                                  color: colors.textSecondary,
+                                ),
                               ),
-                              if (fadeEnabled) ...[
-                                const SizedBox(height: AppSpacing.lg),
-                                _StartYear(
-                                  value: fadeStartYear,
-                                  projectionYears: projectionYears,
-                                  onChanged: busy ? null : onStartYearChanged,
+                              const SizedBox(height: AppSpacing.lg),
+                              _Pattern(
+                                value: fadePattern,
+                                onChanged: busy ? null : onPatternChanged,
+                              ),
+                              if (declineFellBack) ...[
+                                const SizedBox(height: AppSpacing.sm),
+                                Text(
+                                  'An exponential decline is a ratio between '
+                                  'two rates, and one of these is not above '
+                                  'zero \u2014 so the straight line was used.',
+                                  style: context.text.labelSmall?.copyWith(
+                                    color: colors.caution,
+                                  ),
                                 ),
-                                const SizedBox(height: AppSpacing.lg),
-                                _Pattern(
-                                  value: fadePattern,
-                                  onChanged: busy ? null : onPatternChanged,
+                              ],
+                              const SizedBox(height: AppSpacing.lg),
+                              Divider(height: 1, color: colors.hairline),
+                              const SizedBox(height: AppSpacing.lg),
+                              _Reinvestment(
+                                value: reinvestmentMethod,
+                                onChanged: busy ? null : onReinvestmentChanged,
+                              ),
+                              if (currentRoic != null) ...[
+                                const SizedBox(height: AppSpacing.md),
+                                Text(
+                                  'For reference: it earns '
+                                  '${(currentRoic! * 100).toStringAsFixed(1)}% '
+                                  'on its capital now, against a '
+                                  '${(wacc * 100).toStringAsFixed(1)}% cost of '
+                                  'capital. The long-run return sits between '
+                                  'them, and sets what growth costs.',
+                                  style: context.text.labelSmall?.copyWith(
+                                    color: colors.textSecondary,
+                                  ),
                                 ),
+                              ],
+                              if (onMarginTargetEnabledChanged != null) ...[
                                 const SizedBox(height: AppSpacing.lg),
-                                GrowthPathView(path: growthPath),
+                                Divider(height: 1, color: colors.hairline),
+                                const SizedBox(height: AppSpacing.lg),
+                                MarginTargetControls(
+                                  enabled: marginTargetEnabled,
+                                  onEnabledChanged:
+                                      onMarginTargetEnabledChanged!,
+                                  target: marginTarget,
+                                  onTargetChanged:
+                                      onMarginTargetChanged ?? (_) {},
+                                  year: marginConvergenceYear,
+                                  onYearChanged:
+                                      onMarginConvergenceYearChanged ?? (_) {},
+                                  onChangeEnd: onMarginChangeEnd ?? () {},
+                                  busy: busy,
+                                ),
                               ],
                             ],
                           ),
@@ -209,58 +267,6 @@ class AdvancedPanel extends StatelessWidget {
   }
 }
 
-/// The last year that still grows at the full starting rate.
-class _StartYear extends StatelessWidget {
-  const _StartYear({
-    required this.value,
-    required this.projectionYears,
-    required this.onChanged,
-  });
-
-  final int value;
-  final int projectionYears;
-  final ValueChanged<int>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    // The glide needs at least one year to run in, so the last year that can
-    // hold the full rate is the one before the final projected year.
-    final maximum = projectionYears > 1 ? projectionYears - 1 : 1;
-    final current = value.clamp(1, maximum).toDouble();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Hold the starting rate through year',
-                style: context.text.bodyMedium,
-              ),
-            ),
-            Text(
-              '${current.round()}',
-              key: const Key('fade-start-year-value'),
-              style: context.text.titleSmall?.copyWith(
-                color: context.scheme.primary,
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          key: const Key('fade-start-year'),
-          value: current,
-          min: 1,
-          max: maximum.toDouble(),
-          divisions: maximum > 1 ? maximum - 1 : null,
-          onChanged: onChanged == null ? null : (v) => onChanged!(v.round()),
-        ),
-      ],
-    );
-  }
-}
-
-/// Straight line, or decay.
 class _Pattern extends StatelessWidget {
   const _Pattern({required this.value, required this.onChanged});
 
@@ -381,6 +387,69 @@ class GrowthPathView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// How the forecast pays for growth.
+///
+/// Two methods, and the difference is what investment is a share OF. The
+/// capital-spending path makes it a share of revenue, so a company spends
+/// whether or not it is growing; the sales-to-capital rule makes it a share
+/// of the growth itself, which is what Damodaran's models do and what the
+/// terminal rule here already does.
+///
+/// The first is the default because the second rests on invested capital
+/// from the balance sheet, and buybacks make that figure unreliable in
+/// exactly the way they made book equity unreliable for the discount rate.
+/// It is offered rather than hidden, because for a company mid-build-out it
+/// is the more defensible of the two.
+const String kReinvestmentCapexPath = 'capex_path';
+const String kReinvestmentSalesToCapital = 'sales_to_capital';
+
+class _Reinvestment extends StatelessWidget {
+  const _Reinvestment({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'How growth is paid for',
+          style: context.text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Investment as a share of revenue, or as a share of the growth it '
+          'buys.',
+          style: context.text.labelSmall?.copyWith(
+            color: context.colors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        SegmentedButton<String>(
+          key: const Key('reinvestment-toggle'),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: kReinvestmentCapexPath,
+              label: Text('Capital spending'),
+            ),
+            ButtonSegment(
+              value: kReinvestmentSalesToCapital,
+              label: Text('Sales to capital'),
+            ),
+          ],
+          selected: {value},
+          onSelectionChanged: onChanged == null
+              ? null
+              : (selection) => onChanged!(selection.first),
+        ),
+      ],
     );
   }
 }

@@ -277,7 +277,12 @@ class TestTheValuation:
         base, _ = base_year_from(fin)
         derived = derive_assumptions(fin).assumptions
         honest = run_dcf(base, derived).intrinsic_value_per_share
-        untaxed = run_dcf(base, replace(derived, tax_rate=0.0)
+        # The marginal rate goes too. The effective rate is only the
+        # STARTING point now - it converges to the marginal rate across the
+        # forecast - so zeroing one and leaving the other tests the
+        # convergence rather than the thing this test is about.
+        untaxed = run_dcf(base, replace(derived, tax_rate=0.0,
+                                        marginal_tax_rate=0.0)
                           ).intrinsic_value_per_share
         assert untaxed > honest * 1.15, (
             "if a zero rate were not worth much, none of this would matter")

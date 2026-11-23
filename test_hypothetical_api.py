@@ -401,7 +401,12 @@ def test_the_outspender_is_profitable_and_still_refused(client):
 
     assert r.status_code == 422
     body = r.json()
-    assert any("spending more cash than it brings in" in reason
+    # Its refusal is now the terminal-dominance rule rather than the
+    # last-forecast-year one: over ten years, with depreciation allowed to
+    # catch up, a heavy spender's final year does turn positive. What has
+    # not changed is that it is refused, and refused for something other
+    # than losing money.
+    assert any("Terminal value would be" in reason
                for reason in body["reasons"])
     # Not for losing money: the words that would say so are absent, and the
     # loss-maker's tier is not offered.
@@ -663,7 +668,7 @@ def test_a_profitable_lender_is_refused_even_though_it_loses_nothing(client):
 
 def _outspender_report():
     report = analysis.value_company(OUTSPENDER)
-    assert report.suitability.codes == ["negative_fcf"], "fixture sanity"
+    assert report.suitability.codes == ["terminal_value_dominates"],         "fixture sanity"
     return report, analysis.fetch_financials(OUTSPENDER)
 
 

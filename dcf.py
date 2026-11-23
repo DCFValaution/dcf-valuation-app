@@ -80,6 +80,73 @@ class Assumptions:
     # still gets.
     capex_terminal_pct: float | None = None
 
+    # --- The three-phase growth structure --------------------------------
+    #
+    # A single held rate, even faded, says the same thing about year one as
+    # about year nine, and those are not the same claim. What a company just
+    # did is close to a fact; what it does in five years is a judgement; what
+    # it does in ten is arithmetic converging on the economy's growth rate.
+    # Three inputs, so each can be argued with separately:
+    #
+    #   year one        the rate it is on now
+    #   years 2-5       the rate it is assumed to hold
+    #   years 6-10      a decline from that to the terminal rate
+    #
+    # None leaves the old single-rate path exactly as it was, so nothing
+    # built on `revenue_growth` and `fade_enabled` changes.
+    year_one_growth: float | None = None
+    years_two_to_five_growth: float | None = None
+    # "linear" (Damodaran's shape) or "exponential", which drops faster early
+    # and flattens near the terminal rate. Exponential needs both ends
+    # positive to mean anything - it is a ratio - so where they are not, the
+    # straight line is used and the provenance says so.
+    growth_decline_pattern: str = "linear"
+
+    # --- Tax converging to the marginal rate ------------------------------
+    #
+    # An effective rate is what a company paid, and it is usually below the
+    # statutory one: carry-forwards run out, structures get challenged,
+    # profits repatriate. Nvidia's 13.3% against a 25% US marginal rate is
+    # worth eleven points of after-tax profit, forever. None keeps the
+    # effective rate flat, which is what shipped.
+    marginal_tax_rate: float | None = None
+
+    # --- Margin converging to a target ------------------------------------
+    #
+    # None means no change: the margin derived from the filings is held, and
+    # that is the right default. A reader who believes it improves or erodes
+    # says so here and says by when.
+    target_operating_margin: float | None = None
+    margin_convergence_year: int | None = None
+
+    # --- Terminal reinvestment --------------------------------------------
+    #
+    # The perpetuity used to extend the last year's free cash flow forever at
+    # g, which assumes growth with nothing bought to produce it. Damodaran's
+    # rule ties them: to grow at g with a return of ROIC on new capital, a
+    # company must reinvest g / ROIC of its profit.
+    #
+    # None keeps the old perpetuity. Set, it replaces the terminal cash flow
+    # with NOPAT x (1 - g / ROIC). `terminal_roic` of None then means the
+    # WACC - Damodaran's own default, and the one that says a mature company
+    # earns exactly its cost of capital and so creates no value from growth.
+    terminal_reinvestment: bool = False
+    terminal_roic: float | None = None
+
+    # --- Depreciation rising toward investment ----------------------------
+    #
+    # The third caller of the shared mechanism, after the speculative path
+    # and the user-built hypothetical. Capex already glides, through
+    # `capex_terminal_pct`; depreciation did not, so a company building out
+    # was assumed to keep depreciating the much smaller asset base it has
+    # now - which is why a heavy spender's forecast never turned cash
+    # positive however long it ran.
+    #
+    # None holds depreciation flat, which is what shipped. The end point
+    # comes from `reinvestment.py`, so this agrees with the other two
+    # callers rather than being a fourth opinion.
+    da_terminal_pct: float | None = None
+
 
 FADE_LINEAR = "linear"
 FADE_EXPONENTIAL = "exponential"
@@ -104,6 +171,9 @@ def growth_path(assumptions: Assumptions) -> List[float]:
     inventing one.
     """
     n = assumptions.projection_years
+    if assumptions.year_one_growth is not None:
+        return three_phase_growth(assumptions)
+
     start = assumptions.revenue_growth
     if not assumptions.fade_enabled:
         return [start] * n
@@ -135,6 +205,104 @@ def growth_path(assumptions: Assumptions) -> List[float]:
     # and a float's width of daylight between them is a seam.
     path[-1] = terminal
     return path
+
+
+HOLD_UNTIL_YEAR = 5          # years 2 to 5 run at the second rate
+
+
+def three_phase_growth(a: Assumptions) -> List[float]:
+    """Year one, then years two to five, then a decline to the terminal rate.
+
+    The decline ends exactly at the final projected year, so the handoff to
+    the perpetuity has no seam in it.
+
+    A forecast shorter than six years has no decline phase and simply runs
+    out; one shorter than two is year one alone. Neither is the intended
+    shape - the horizon is ten - but a caller may ask for either and should
+    get the sensible truncation rather than an exception.
+    """
+    n = a.projection_years
+    first = a.year_one_growth
+    held = a.years_two_to_five_growth
+    if held is None:
+        held = first
+    terminal = a.terminal_growth
+
+    path = [first]
+    for _t in range(2, min(HOLD_UNTIL_YEAR, n) + 1):
+        path.append(held)
+    steps = n - HOLD_UNTIL_YEAR
+    if steps > 0:
+        # Exponential is a ratio, so it needs both ends positive to mean
+        # anything. Where they are not - a company assumed to shrink, or a
+        # terminal rate of nil - there is no constant factor to apply and
+        # the straight line is used instead of inventing one.
+        exponential = (a.growth_decline_pattern == FADE_EXPONENTIAL
+                       and held > 0 and terminal > 0)
+        for i in range(1, steps + 1):
+            progress = i / steps
+            if exponential:
+                path.append(held * (terminal / held) ** progress)
+            else:
+                path.append(held + (terminal - held) * progress)
+        path[-1] = terminal
+    return path[:n]
+
+
+def tax_path(a: Assumptions) -> List[float]:
+    """The tax rate each projected year.
+
+    An effective rate is what a company paid, and it is usually below the
+    statutory one for reasons that expire: carry-forwards run out, structures
+    get challenged, profits come home. Carrying it to the terminal year says
+    none of that ever happens.
+
+    Flat where no marginal rate was given, which is what shipped.
+    """
+    n = a.projection_years
+    if a.marginal_tax_rate is None:
+        return [a.tax_rate] * n
+    start, end = a.tax_rate, a.marginal_tax_rate
+    if n <= 1:
+        return [end]
+    return [start + (end - start) * (t / (n - 1)) for t in range(n)]
+
+
+def margin_path(a: Assumptions) -> List[float]:
+    """The operating margin each projected year.
+
+    Flat unless a target and a year to reach it were both given. Holding the
+    margin from the filings is the right default: it is the one figure in
+    the model that came from the company rather than from a judgement about
+    the company.
+    """
+    n = a.projection_years
+    target = a.target_operating_margin
+    by_year = a.margin_convergence_year
+    if target is None or not by_year:
+        return [a.operating_margin] * n
+    start = a.operating_margin
+    return [start + (target - start) * min(t / by_year, 1.0)
+            for t in range(1, n + 1)]
+
+
+def da_path(a: Assumptions) -> List[float]:
+    """Depreciation as a share of revenue, each projected year.
+
+    Assets bought in year three depreciate in years four onward, so a
+    company whose capital spending is falling has depreciation that is
+    still rising. Holding it flat is what made a heavy spender's forecast
+    never turn cash positive, however long it ran.
+
+    Flat where no end point was given, which is what shipped.
+    """
+    n = a.projection_years
+    if a.da_terminal_pct is None:
+        return [a.da_pct] * n
+    start, end = a.da_pct, a.da_terminal_pct
+    if n <= 1:
+        return [end]
+    return [start + (end - start) * (t / (n - 1)) for t in range(n)]
 
 
 def capex_path(assumptions: Assumptions) -> List[float]:
@@ -235,7 +403,10 @@ class DCFResult:
     sensitivity_gs: List[float]
 
 
-def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
+def run_dcf(base: BaseYearData, assumptions: Assumptions,
+            *, with_sensitivity: bool = True) -> DCFResult:
+    """The model. `with_sensitivity` is False only when called from inside
+    the sensitivity table, which would otherwise ask for a table of tables."""
     n = assumptions.projection_years
     g = assumptions.terminal_growth
     wacc = assumptions.wacc
@@ -251,12 +422,19 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
     years = []
     prev_revenue = base.revenue
 
+    # The tax rate each year, and the margin each year. Both are flat unless
+    # the caller asked for convergence, so nothing built on the single-rate
+    # assumptions changes.
+    tax_by_year = tax_path(assumptions)
+    margin_by_year = margin_path(assumptions)
+    da_by_year = da_path(assumptions)
+
     for t in range(1, n + 1):
         revenue = prev_revenue * (1 + growth_by_year[t - 1])
-        ebit = revenue * assumptions.operating_margin
-        tax = ebit * assumptions.tax_rate
+        ebit = revenue * margin_by_year[t - 1]
+        tax = ebit * tax_by_year[t - 1]
         nopat = ebit - tax
-        da = revenue * assumptions.da_pct
+        da = revenue * da_by_year[t - 1]
         capex_pct = capex_by_year[t - 1]
         capex = revenue * capex_pct
         delta_nwc = (revenue - prev_revenue) * assumptions.nwc_pct
@@ -283,9 +461,25 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
 
     pv_ufcf_sum = sum(y.pv_ufcf for y in years)
 
-    # --- Terminal value (Gordon Growth) ---
-    last_ufcf = years[-1].ufcf
-    terminal_value = last_ufcf * (1 + g) / (wacc - g)
+    # --- Terminal value ---
+    if assumptions.terminal_reinvestment:
+        # Growth has to be paid for. A company growing at g with a return of
+        # ROIC on new capital reinvests g / ROIC of its profit to do it, so
+        # the cash left over is NOPAT x (1 - g / ROIC) - not the last
+        # forecast year's free cash flow, which carries whatever investment
+        # that year happened to need.
+        #
+        # ROIC defaults to the discount rate, which says a mature company
+        # earns exactly its cost of capital and so creates no value by
+        # growing. That is Damodaran's default and the conservative one: any
+        # higher ROIC is a claim about a competitive advantage lasting
+        # forever.
+        roic = assumptions.terminal_roic or wacc
+        reinvestment_rate = g / roic if roic else 0.0
+        terminal_value = (years[-1].nopat * (1 + g) * (1 - reinvestment_rate)
+                          / (wacc - g))
+    else:
+        terminal_value = years[-1].ufcf * (1 + g) / (wacc - g)
     pv_terminal_value = terminal_value * years[-1].discount_factor
 
     # --- Enterprise & equity value ---
@@ -325,32 +519,24 @@ def run_dcf(base: BaseYearData, assumptions: Assumptions) -> DCFResult:
     sensitivity_gs = [g if i == 0 else round(g + i * SENSITIVITY_GROWTH_STEP, 10)
                       for i in SENSITIVITY_OFFSETS]
 
+    # Each cell is this model with two inputs moved, and EVERY other input
+    # carried. Rebuilding the assumptions field by field is how the grid
+    # drifted: each new input had to be remembered here too, and the capex
+    # fade, the growth path, the tax convergence and the depreciation path
+    # were each forgotten in turn - which shows up as the centre cell no
+    # longer reproducing the figure it sits under.
     sensitivity = []
-    for w in sensitivity_waccs:
-        row: List[Optional[float]] = []
-        for g_s in sensitivity_gs:
-            if g_s >= w:
-                # Gordon growth requires WACC > g; the cell has no meaning.
-                row.append(None)
-                continue
-            sens_assumptions = Assumptions(
-                revenue_growth=assumptions.revenue_growth,
-                operating_margin=assumptions.operating_margin,
-                tax_rate=assumptions.tax_rate,
-                da_pct=assumptions.da_pct,
-                capex_pct=assumptions.capex_pct,
-                # Carried, or the centre cell loses the capex fade and stops
-                # reproducing the headline - which is the one thing this grid
-                # is required to do.
-                capex_terminal_pct=assumptions.capex_terminal_pct,
-                nwc_pct=assumptions.nwc_pct,
-                wacc=w,
-                terminal_growth=g_s,
-                projection_years=n,
-            )
-            sens_result = _equity_value_per_share(base, sens_assumptions)
-            row.append(sens_result)
-        sensitivity.append(row)
+    if with_sensitivity:
+        for w in sensitivity_waccs:
+            row: List[Optional[float]] = []
+            for g_s in sensitivity_gs:
+                if g_s >= w:
+                    # Gordon growth requires WACC > g; the cell has no meaning.
+                    row.append(None)
+                    continue
+                row.append(_equity_value_per_share(
+                    base, replace(assumptions, wacc=w, terminal_growth=g_s)))
+            sensitivity.append(row)
 
     return DCFResult(
         years=years,
@@ -420,41 +606,18 @@ def growth_economics(assumptions: Assumptions) -> tuple[float, float]:
 
 
 def _equity_value_per_share(base: BaseYearData, assumptions: Assumptions) -> float:
-    """Lightweight inner calculation used only for the sensitivity table."""
-    n = assumptions.projection_years
-    g = assumptions.terminal_growth
-    wacc = assumptions.wacc
+    """The same calculation as the headline, for one cell of the table.
 
-    prev_revenue = base.revenue
-    pv_sum = 0.0
-    last_ufcf = 0.0
-    last_df = 0.0
+    This was an inline copy of the bridge, kept for speed, and it drifted:
+    it applied one flat growth rate where the engine had a fade, flat tax
+    where the engine converged it, and flat depreciation where the engine
+    glided it. Every drift showed up the same way - the centre cell no
+    longer reproduced the figure it sits under, which is the one thing the
+    table must never do.
 
-    # The same capex glide run_dcf applies. Without it the centre cell of the
-    # sensitivity table would not reproduce the headline valuation, which is
-    # the one thing this inline copy of the bridge exists to guarantee.
-    capex_by_year = capex_path(assumptions)
-
-    for t in range(1, n + 1):
-        revenue = prev_revenue * (1 + assumptions.revenue_growth)
-        ebit = revenue * assumptions.operating_margin
-        nopat = ebit * (1 - assumptions.tax_rate)
-        da = revenue * assumptions.da_pct
-        capex = revenue * capex_by_year[t - 1]
-        delta_nwc = (revenue - prev_revenue) * assumptions.nwc_pct
-        ufcf = nopat + da - capex - delta_nwc
-        df = 1 / (1 + wacc) ** t
-        pv_sum += ufcf * df
-        prev_revenue = revenue
-        last_ufcf = ufcf
-        last_df = df
-
-    tv = last_ufcf * (1 + g) / (wacc - g)
-    pv_tv = tv * last_df
-    ev = pv_sum + pv_tv
-    # The same bridge as above. It has to stay the same bridge: the centre
-    # cell of the sensitivity table is required to reproduce the headline
-    # exactly, so a subtraction missing here would show up as the table
-    # disagreeing with the figure it sits under.
-    equity = ev + base.cash - base.total_debt - base.minority_interest
-    return equity / base.shares
+    So it runs the engine. Twenty-five cells of a model this size cost
+    almost nothing, and a copy that cannot fall behind is worth more than
+    the microseconds.
+    """
+    return run_dcf(base, assumptions,
+                   with_sensitivity=False).intrinsic_value_per_share

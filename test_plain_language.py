@@ -90,6 +90,13 @@ def test_speculative_working_capital_below_the_limit_is_explained_too():
     (clamped("years_to_profitability", 14, 10), ["14 years", "limited to 10 years"]),
     (clamped("years_to_profitability", 1, 2), ["at least 2 years"]),
     (clamped("wacc", 0.082, 0.10, why="floor"), ["8.2%", "at least 10%", "never made a profit"]),
+    (clamped("year_one_growth", 1.00, 0.40), ["grew 100%", "40%", "year one"]),
+    (clamped("year_one_growth", -0.08, 0.0), ["fell", "holds year one flat"]),
+    (clamped("years_two_to_five_growth", 0.48, 0.25),
+     ["48% a year", "25% a year", "years two to five"]),
+    (clamped("years_two_to_five_growth", -0.06, 0.0),
+     ["negative", "flat"]),
+    (clamped("terminal_roic", 1.10, 0.25), ["25%", "never erodes"]),
 ])
 def test_every_clamp_reads_as_a_sentence_with_its_facts(prov, must_say):
     text = P.clamp_warning(prov, COMPANY)
@@ -202,3 +209,39 @@ def test_the_screen_gets_the_plain_warning_not_the_record():
     assert any("freeing up an unusually large amount of cash" in w for w in warnings), warnings
     for w in warnings:
         assert_plain(w)
+
+
+# ---------------------------------------------------------------------------
+# Two clamps must not read as the same sentence
+# ---------------------------------------------------------------------------
+
+def test_two_different_clamps_do_not_produce_the_same_sentence():
+    """Found on a device: Nvidia's card carried
+
+        "The model adjusted one of the assumptions for NVIDIA Corporation to
+         keep it within a realistic range ..."
+
+    twice over, because year one's growth and the long-run return on capital
+    both fell through to the generic wording. Two identical bullets say less
+    than one, and neither names what was adjusted.
+    """
+    names = ["year_one_growth", "years_two_to_five_growth", "terminal_roic",
+             "revenue_growth", "operating_margin", "capex_pct", "tax_rate",
+             "marginal_tax_rate", "da_terminal_pct", "capex_terminal_pct"]
+    said = {}
+    for name in names:
+        text = P.clamp_warning(clamped(name, 0.90, 0.30), COMPANY)
+        assert text not in said, (
+            f'{name} says exactly what {said.get(text)} says: {text}')
+        said[text] = name
+
+
+def test_no_clamp_the_models_apply_falls_through_to_the_generic_sentence():
+    """The fallback exists so an unfamiliar name cannot crash a valuation,
+    not as the wording for assumptions that ship today."""
+    generic = "one of the assumptions"
+    for name in ["year_one_growth", "years_two_to_five_growth",
+                 "terminal_roic", "marginal_tax_rate", "da_terminal_pct",
+                 "capex_terminal_pct"]:
+        text = P.clamp_warning(clamped(name, 0.90, 0.30), COMPANY)
+        assert generic not in text, f"{name}: {text}"

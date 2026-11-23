@@ -1,11 +1,15 @@
-/// The fade panel must describe the figure above it.
+/// The Advanced panel must describe the figure above it.
 ///
-/// A fresh valuation does not carry the fade's overrides, so if the stored
-/// fade state survived one, the panel would claim "Growth fade on" over an
-/// unfaded number - and the growth path's caption, which promises the final
-/// year matches the terminal rate, would be false. Found on a device: the
-/// toggle stayed blue, the export still counted the override, and the figure
-/// was the plain derived one.
+/// Found on a device, when the fade was still an override: the toggle stayed
+/// blue across a fresh valuation, the export still counted the override, and
+/// the figure was the plain derived one. The panel claimed "Growth fade on"
+/// over an unfaded number.
+///
+/// The fade is gone - the decline is structural now, so there is nothing to
+/// leave switched on - but the obligation moved rather than disappeared.
+/// How growth is paid for is an override in exactly the same way, and a
+/// method left selected over a figure computed without it would be the same
+/// lie in different words.
 library;
 
 import 'dart:convert';
@@ -16,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'package:dcf_app/advanced_panel.dart';
 import 'package:dcf_app/main.dart';
 import 'package:dcf_app/theme.dart';
 import 'package:dcf_app/valuation_api.dart';
@@ -28,9 +33,10 @@ class Backend {
   /// Every valuation request, as url + body, newest last.
   final List<String> requests = [];
 
-  /// Whether the most recent valuation asked for a fade.
-  bool get lastAskedForFade =>
-      requests.isNotEmpty && requests.last.contains('fade_enabled');
+  /// Whether the most recent valuation asked for the sales-to-capital
+  /// reinvestment method rather than the default capital-spending path.
+  bool get lastAskedForSalesToCapital =>
+      requests.isNotEmpty && requests.last.contains('sales_to_capital');
 
   ValuationApi api() => ValuationApi(
     baseUrl: 'http://test',
@@ -67,12 +73,15 @@ Future<void> valueTicker(WidgetTester tester, String ticker) async {
 }
 
 final _advancedHeader = find.byKey(const Key('advanced-header'));
-final _fadeToggle = find.byKey(const Key('fade-toggle'));
+final _reinvestmentToggle = find.byKey(const Key('reinvestment-toggle'));
 
-bool fadeIsOn(WidgetTester tester) => tester.widget<Switch>(_fadeToggle).value;
+bool salesToCapitalIsSelected(WidgetTester tester) => tester
+    .widget<SegmentedButton<String>>(_reinvestmentToggle)
+    .selected
+    .contains(kReinvestmentSalesToCapital);
 
 /// Opens Advanced and switches the fade on.
-Future<void> turnFadeOn(WidgetTester tester) async {
+Future<void> chooseSalesToCapital(WidgetTester tester) async {
   await tester.ensureVisible(_advancedHeader);
   await tester.pump();
   await tester.tap(_advancedHeader);
@@ -81,15 +90,15 @@ Future<void> turnFadeOn(WidgetTester tester) async {
   // growing is not yet a target - on a device as much as here. Waiting the
   // expansion out is what a user does too.
   await tester.pump(AppMotion.enter + const Duration(milliseconds: 20));
-  await tester.ensureVisible(_fadeToggle);
+  await tester.ensureVisible(_reinvestmentToggle);
   await tester.pump();
-  await tester.tap(_fadeToggle);
+  await tester.tap(find.text('Sales to capital'));
   await tester.pump();
   await tester.pump();
 }
 
 void main() {
-  testWidgets('a fresh valuation puts the fade back to off', (tester) async {
+  testWidgets('a fresh valuation puts the reinvestment method back to the default', (tester) async {
     final backend = Backend();
     await tester.pumpWidget(DcfApp(api: backend.api()));
 
@@ -100,35 +109,35 @@ void main() {
       reason: 'the DCF company should carry the Advanced section',
     );
 
-    await turnFadeOn(tester);
-    expect(fadeIsOn(tester), isTrue, reason: 'the fade was switched on');
+    await chooseSalesToCapital(tester);
+    expect(salesToCapitalIsSelected(tester), isTrue, reason: 'the method was chosen');
     expect(
-      backend.lastAskedForFade,
+      backend.lastAskedForSalesToCapital,
       isTrue,
-      reason: 'switching it on should ask the backend for a faded figure',
+      reason: 'choosing it should ask the backend for that method',
     );
 
     // A different company, valued the way the button values it.
     await valueTicker(tester, 'CRM');
 
     expect(
-      backend.lastAskedForFade,
+      backend.lastAskedForSalesToCapital,
       isFalse,
-      reason: 'a fresh valuation does not carry the fade',
+      reason: 'a fresh valuation does not carry the override',
     );
 
     // The section stays open across valuations, so the toggle is still on
     // screen - and must now read as off.
-    await tester.ensureVisible(_fadeToggle);
+    await tester.ensureVisible(_reinvestmentToggle);
     await tester.pump();
     expect(
-      fadeIsOn(tester),
+      salesToCapitalIsSelected(tester),
       isFalse,
-      reason: 'so the panel must not still claim the fade is on',
+      reason: 'so the panel must not still claim that method',
     );
   });
 
-  testWidgets('re-valuing the same company puts the fade back to off', (
+  testWidgets('re-valuing the same company puts it back too', (
     tester,
   ) async {
     // The case found on the device: the ticker never changed, so nothing
@@ -137,14 +146,14 @@ void main() {
     await tester.pumpWidget(DcfApp(api: backend.api()));
 
     await valueTicker(tester, 'AAPL');
-    await turnFadeOn(tester);
-    expect(fadeIsOn(tester), isTrue);
+    await chooseSalesToCapital(tester);
+    expect(salesToCapitalIsSelected(tester), isTrue);
 
     await valueTicker(tester, 'AAPL');
-    expect(backend.lastAskedForFade, isFalse);
+    expect(backend.lastAskedForSalesToCapital, isFalse);
 
-    await tester.ensureVisible(_fadeToggle);
+    await tester.ensureVisible(_reinvestmentToggle);
     await tester.pump();
-    expect(fadeIsOn(tester), isFalse);
+    expect(salesToCapitalIsSelected(tester), isFalse);
   });
 }

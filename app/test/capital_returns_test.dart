@@ -105,9 +105,14 @@ void main() {
     });
 
     test('a backend that has never heard of it is not an error', () {
-      // The recorded fixtures predate the feature, which is exactly the case
-      // a deployed app meets while the backend is still rolling out.
-      final parsed = ValuationSuccess.fromJson(caseFor('AAPL'));
+      // The case a deployed app meets while a backend is still rolling out.
+      //
+      // Built by removing the block rather than by leaning on a fixture
+      // that happens to predate the feature: the fixtures are re-recorded
+      // whenever the response changes, so one that lacked the field was
+      // only ever going to lack it until the next regeneration.
+      final body = {...caseFor('AAPL')}..remove('capital_returns');
+      final parsed = ValuationSuccess.fromJson(body);
       expect(parsed.capitalReturns, isNull);
       expect(parsed.intrinsicValuePerShare, greaterThan(0));
     });

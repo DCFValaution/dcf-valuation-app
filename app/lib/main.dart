@@ -233,10 +233,13 @@ class _ValuationScreenState extends State<ValuationScreen> {
     final anchor = _fullAssumptions['capex_terminal_pct'];
     if (start == null || anchor == null) return null;
     if ((anchor - start).abs() < 0.005) return null;
-    final years = (_fullAssumptions['projection_years'] ?? 5).round();
+    final years = (_fullAssumptions['projection_years'] ??
+            kDefaultProjectionYears)
+        .round();
     final direction = anchor < start ? 'down to' : 'up to';
     return _CapexFadeNote(
-      text: 'Capital spending glides $direction ${formatPercent(anchor)} of '
+      text:
+          'Capital spending glides $direction ${formatPercent(anchor)} of '
           'revenue by year $years, the average of the last three years. The '
           'perpetuity beyond that assumes the lower rate, not this one.',
     );
@@ -409,6 +412,30 @@ class _ValuationScreenState extends State<ValuationScreen> {
   // The Advanced section. Collapsed and off on arrival: a user who never
   // opens it sees exactly the screen that existed before it did.
   bool _advancedOpen = false;
+
+  /// How the forecast pays for growth. The capital-spending path is the
+  /// default; the sales-to-capital rule is offered because for a company
+  /// mid-build-out it is the more defensible of the two, and withheld as a
+  /// default because it rests on invested capital from the balance sheet -
+  /// the figure buybacks make unreliable.
+  String _reinvestmentMethod = kReinvestmentCapexPath;
+
+  /// The optional claim that the margin goes somewhere else, and where.
+  ///
+  /// Off until the reader switches it on, because the margin from the
+  /// filings is the one figure in the model that came from the company
+  /// rather than from a judgement about the company. The target seeds at
+  /// that same margin, so switching it on changes nothing until the slider
+  /// is moved: the reader starts from where the company actually is.
+  bool _marginTargetEnabled = false;
+  double? _marginTarget;
+  int _marginConvergenceYear = 5;
+
+  double get _marginTargetValue =>
+      _marginTarget ??
+      _slider['operating_margin'] ??
+      _derived['operating_margin'] ??
+      0.0;
   bool _fadeEnabled = false;
   int _fadeStartYear = _defaultFadeStartYear;
   String _fadePattern = fadeLinear;
@@ -430,6 +457,18 @@ class _ValuationScreenState extends State<ValuationScreen> {
     _fadeEnabled = false;
     _fadeStartYear = _defaultFadeStartYear;
     _fadePattern = fadeLinear;
+    // The reinvestment method is the override the fade used to be, and it
+    // carries the same obligation: the panel describes what built the
+    // number above it, so a method left selected over a figure computed
+    // without it would make the panel assert something the figure does not
+    // support.
+    _reinvestmentMethod = kReinvestmentCapexPath;
+    // Same obligation again: a target margin left switched on over a figure
+    // computed without it would have the panel assert a claim the number
+    // does not carry.
+    _marginTargetEnabled = false;
+    _marginTarget = null;
+    _marginConvergenceYear = 5;
   }
 
   /// The growth rate the backend applied in each projected year.
@@ -444,8 +483,17 @@ class _ValuationScreenState extends State<ValuationScreen> {
       ? {'fade_enabled': 1, 'fade_start_year': _fadeStartYear.toDouble()}
       : const {};
 
-  Map<String, String> get _fadeTextOverrides =>
-      _fadeEnabled ? {'fade_pattern': _fadePattern} : const {};
+  Map<String, String> get _fadeTextOverrides => {
+    // Only what differs from the derived model is sent. The decline's shape
+    // is structural now, so the straight line is not an override and saying
+    // so on every request would put a user's name on the model's own
+    // choice - which is the distinction the whole provenance channel
+    // exists to keep.
+    if (_fadePattern != fadeLinear) 'growth_decline_pattern': _fadePattern,
+    if (_fadeEnabled) 'fade_pattern': _fadePattern,
+    if (_reinvestmentMethod != kReinvestmentCapexPath)
+      'reinvestment_method': _reinvestmentMethod,
+  };
 
   Map<String, double> get _activeOverrides {
     final out = <String, double>{};
@@ -456,6 +504,10 @@ class _ValuationScreenState extends State<ValuationScreen> {
       if ((derived - current).abs() > 0.00005) out[spec.name] = current;
     }
     out.addAll(_fadeOverrides);
+    if (_marginTargetEnabled) {
+      out['target_operating_margin'] = _marginTargetValue;
+      out['margin_convergence_year'] = _marginConvergenceYear.toDouble();
+    }
     return out;
   }
 
@@ -533,8 +585,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
           for (final a in result.assumptions) a.name: a.value,
         };
         _equityRiskPremium = result.assumption('equity_risk_premium')?.value;
-        _equityRiskPremiumAsOf =
-            result.assumption('equity_risk_premium')?.asOf;
+        _equityRiskPremiumAsOf = result.assumption('equity_risk_premium')?.asOf;
         final specs = _specsFor(result.method, result.assumptions);
         _derived = {
           for (final spec in specs)
@@ -709,10 +760,39 @@ class _ValuationScreenState extends State<ValuationScreen> {
   ///
   /// Debounced, because releasing and grabbing another slider in quick
   /// succession would otherwise fire a request per gesture.
-  /// The horizon the fade has to fit inside.
-  int get _projectionYears =>
-      (_slider['projection_years'] ?? _derived['projection_years'] ?? 5)
-          .round();
+  /// The forecast horizon, as the backend set it.
+  ///
+  /// From the full assumption set rather than the slider map: the horizon
+  /// stopped being a control when it became ten years for every company,
+  /// so `_derived` - which is built from the slider specs - no longer has
+  /// it, and the old lookup fell through to a hardcoded five.
+  int get _projectionYears => (_fullAssumptions['projection_years'] ??
+          kDefaultProjectionYears)
+      .round();
+
+  void _onReinvestmentChanged(String method) {
+    setState(() => _reinvestmentMethod = method);
+    _confirmNow();
+  }
+
+  void _onMarginTargetEnabledChanged(bool on) {
+    setState(() {
+      _marginTargetEnabled = on;
+      // Seeded at the company's own margin, so switching it on is not
+      // itself a claim - it only opens the question.
+      if (on) _marginTarget ??= _marginTargetValue;
+    });
+    _confirmNow();
+  }
+
+  void _onMarginTargetChanged(double value) {
+    setState(() => _marginTarget = value);
+  }
+
+  void _onMarginConvergenceYearChanged(int year) {
+    if (year == _marginConvergenceYear) return;
+    setState(() => _marginConvergenceYear = year);
+  }
 
   void _onFadeChanged(bool value) {
     setState(() {
@@ -1208,6 +1288,21 @@ class _ValuationScreenState extends State<ValuationScreen> {
                                 projectionYears: _projectionYears,
                                 growthPath: _growthPath,
                                 busy: _revaluing,
+                                declineFellBack:
+                                    _success?.declineFellBack ?? false,
+                                currentRoic: _success?.currentRoic,
+                                wacc: _success?.referenceWacc ?? 0.0,
+                                reinvestmentMethod: _reinvestmentMethod,
+                                marginTargetEnabled: _marginTargetEnabled,
+                                onMarginTargetEnabledChanged:
+                                    _onMarginTargetEnabledChanged,
+                                marginTarget: _marginTargetValue,
+                                onMarginTargetChanged: _onMarginTargetChanged,
+                                marginConvergenceYear: _marginConvergenceYear,
+                                onMarginConvergenceYearChanged:
+                                    _onMarginConvergenceYearChanged,
+                                onMarginChangeEnd: _confirmNow,
+                                onReinvestmentChanged: _onReinvestmentChanged,
                               ),
                             ],
                             if (_derived.isNotEmpty) ...[
@@ -1744,9 +1839,7 @@ class _SuccessCard extends StatelessWidget {
                         Text(
                           !comparable
                               ? 'VS MARKET PRICE'
-                              : (up
-                                    ? 'IMPLIED UPSIDE'
-                                    : 'IMPLIED DOWNSIDE'),
+                              : (up ? 'IMPLIED UPSIDE' : 'IMPLIED DOWNSIDE'),
                           style: context.text.labelMedium,
                         ),
                         const SizedBox(height: AppSpacing.sm),
@@ -1936,12 +2029,16 @@ class _SuccessCard extends StatelessWidget {
 /// so it sits under the figure with a heading of its own and amber rather
 /// than red: a warning to read, not a loss.
 /// Caveats that belong beside the figure: everything but the quiet tier.
-List<Caveat> _loudCaveats(ValuationSuccess r) =>
-    [for (final c in r.caveats) if (c.severity != Severity.info) c];
+List<Caveat> _loudCaveats(ValuationSuccess r) => [
+  for (final c in r.caveats)
+    if (c.severity != Severity.info) c,
+];
 
 /// Caveats that qualify an input rather than the answer.
-List<Caveat> _quietCaveats(ValuationSuccess r) =>
-    [for (final c in r.caveats) if (c.severity == Severity.info) c];
+List<Caveat> _quietCaveats(ValuationSuccess r) => [
+  for (final c in r.caveats)
+    if (c.severity == Severity.info) c,
+];
 
 /// The badge, the one-line qualifier, and whatever else the loudest caveat
 /// has to show.
@@ -2055,10 +2152,7 @@ class _CaveatHeaderState extends State<_CaveatHeader> {
         ],
 
         const SizedBox(height: AppSpacing.sm),
-        Callout(
-          tone: serious ? Tone.negative : Tone.caution,
-          text: top.text,
-        ),
+        Callout(tone: serious ? Tone.negative : Tone.caution, text: top.text),
 
         if (rest.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.sm),
@@ -2647,7 +2741,6 @@ class _CapexFadeNote extends StatelessWidget {
     );
   }
 }
-
 
 class _GrowthCostNote extends StatelessWidget {
   const _GrowthCostNote({required this.text});

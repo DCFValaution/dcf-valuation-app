@@ -176,8 +176,13 @@ def test_overrides_on_the_standard_endpoint_cannot_reach_the_speculative_path(cl
 
 
 def test_the_standard_endpoint_does_not_even_accept_speculative_assumptions(client):
+    # `years_to_profitability` rather than `target_operating_margin`: the
+    # latter is now a DCF assumption too - the optional margin target - so
+    # the standard endpoint accepts it, correctly. This one is the
+    # speculative engine's alone and always will be, because the standard
+    # model has no concept of a year profitability arrives.
     r = client.post("/valuation", json={"ticker": GROWER,
-                                        "overrides": {"target_operating_margin": 0.10}})
+                                        "overrides": {"years_to_profitability": 4}})
     assert r.status_code == 422
     assert r.json()["code"] == "validation_error"
 

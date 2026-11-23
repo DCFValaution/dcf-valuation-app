@@ -116,6 +116,27 @@ def clamp_warning(prov: Provenance, company: str) -> str:
         return (f"{whose} recent tax figures showed a net tax credit, which will not keep "
                 "happening. The forecast assumes no tax benefit instead.")
 
+    if name == "year_one_growth":
+        if above:
+            return (f"{whose} revenue grew {_pct(raw)} in its latest financial year. "
+                    f"The forecast uses {_pct(limit)} for year one instead - the most "
+                    "a company of any size has been seen to repeat.")
+        return (f"{whose} revenue fell in its latest financial year. The forecast "
+                "holds year one flat rather than projecting the fall forward.")
+
+    if name == "years_two_to_five_growth":
+        if above:
+            return (f"{whose} measured trend of {_pct(raw)} a year is faster than a "
+                    f"company can usually keep up for four more years. The forecast "
+                    f"uses {_pct(limit)} a year for years two to five.")
+        return (f"{whose} measured trend was negative. The forecast holds years two "
+                "to five flat rather than projecting the decline forward.")
+
+    if name == "terminal_roic":
+        return (f"{company} earns an unusually high return on its capital. The "
+                f"forecast assumes {_pct(limit)} forever after, because a return far "
+                "above the cost of capital is a claim that an advantage never erodes.")
+
     if name == "da_pct":
         return (f"{whose} depreciation was unusually large relative to its revenue. The "
                 f"forecast uses {_pct(limit)} of revenue instead, to keep the estimate "
@@ -178,6 +199,12 @@ _LABELS = {
     "speculative_revenue_growth": "revenue growth",
     "years_to_profitability": "the years to profitability",
     "wacc": "the discount rate",
+    "year_one_growth": "year one's growth",
+    "years_two_to_five_growth": "the growth trend",
+    "terminal_roic": "the long-run return on capital",
+    "marginal_tax_rate": "the long-run tax rate",
+    "da_terminal_pct": "long-run depreciation",
+    "capex_terminal_pct": "long-run investment spending",
 }
 
 

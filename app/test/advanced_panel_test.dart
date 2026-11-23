@@ -1,13 +1,17 @@
-// The Advanced section, and the growth path it has to show.
+// The Advanced section, and the growth path it exists to show.
 //
-// Two promises. The first is restraint: a user who never opens this section
-// sees the screen exactly as it was before it existed, so the panel starts
-// collapsed, the fade starts off, and nothing inside it reaches the backend
-// until it is switched on.
+// It used to be a switch. The fade was an override - off by default, on if
+// you asked - so the panel's first promise was restraint: a user who never
+// opened it saw the screen exactly as it was before it existed.
 //
-// The second is visibility. A fade changes every projected year at once, so
-// listing the rate applied in each one is the whole point - a model whose
-// shape cannot be read back is not one anybody can argue with.
+// That is no longer the shape of the model. Growth runs at the latest year's
+// own rate, then the measured trend for four years, then declines to the
+// terminal rate - always, for every company. There is nothing to switch on,
+// so the switch and the start-year control are gone and what remains is the
+// path itself, the shape of its decline, and how growth is paid for.
+//
+// The promise that survives is the second one: a model whose shape cannot be
+// read back is not one anybody can argue with.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,18 +20,21 @@ import 'package:dcf_app/advanced_panel.dart';
 import 'package:dcf_app/dcf_engine.dart' show fadeExponential, fadeLinear;
 import 'package:dcf_app/theme.dart';
 
+const _path = [0.32, 0.12, 0.12, 0.12, 0.12, 0.10, 0.09, 0.07, 0.06, 0.04];
+
 Future<void> pumpPanel(
   WidgetTester tester, {
   bool expanded = false,
-  bool fadeEnabled = false,
-  int fadeStartYear = 3,
   String fadePattern = fadeLinear,
   int projectionYears = 10,
-  List<double> growthPath = const [],
+  List<double> growthPath = _path,
+  bool declineFellBack = false,
+  double? currentRoic,
+  double wacc = 0.09,
+  String reinvestmentMethod = kReinvestmentCapexPath,
   void Function(bool)? onExpandedChanged,
-  void Function(bool)? onFadeChanged,
-  void Function(int)? onStartYearChanged,
   void Function(String)? onPatternChanged,
+  void Function(String)? onReinvestmentChanged,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -37,14 +44,22 @@ Future<void> pumpPanel(
           child: AdvancedPanel(
             expanded: expanded,
             onExpandedChanged: onExpandedChanged ?? (_) {},
-            fadeEnabled: fadeEnabled,
-            onFadeChanged: onFadeChanged ?? (_) {},
-            fadeStartYear: fadeStartYear,
-            onStartYearChanged: onStartYearChanged ?? (_) {},
+            // Still accepted, still unused by the panel's own controls: the
+            // fade's state belongs to the screen, and removing the
+            // parameters would be a change to every caller for no gain.
+            fadeEnabled: false,
+            onFadeChanged: (_) {},
+            fadeStartYear: 1,
+            onStartYearChanged: (_) {},
             fadePattern: fadePattern,
             onPatternChanged: onPatternChanged ?? (_) {},
             projectionYears: projectionYears,
             growthPath: growthPath,
+            declineFellBack: declineFellBack,
+            currentRoic: currentRoic,
+            wacc: wacc,
+            reinvestmentMethod: reinvestmentMethod,
+            onReinvestmentChanged: onReinvestmentChanged ?? (_) {},
           ),
         ),
       ),
@@ -58,147 +73,140 @@ void main() {
     testWidgets('collapsed, with nothing inside it on screen', (tester) async {
       await pumpPanel(tester);
 
-      expect(find.text('Advanced'), findsOneWidget);
-      expect(find.byKey(const Key('fade-toggle')), findsNothing);
-      expect(find.byKey(const Key('fade-start-year')), findsNothing);
-      expect(find.byKey(const Key('fade-pattern')), findsNothing);
-      expect(find.byKey(const Key('growth-path')), findsNothing);
+      expect(find.byKey(const Key('advanced-panel')), findsOneWidget);
+      expect(find.byKey(const Key('reinvestment-toggle')), findsNothing);
+      expect(find.textContaining('Year 1 is the latest'), findsNothing);
     });
 
-    testWidgets('opening it shows the toggle, still off', (tester) async {
+    testWidgets('the header says what is inside, not what is overridden', (
+      tester,
+    ) async {
+      await pumpPanel(tester);
+
+      // It used to announce "Growth fade on - your override, not the default
+      // model", which was the point when the fade was an override. It is
+      // the model now, so the header describes rather than warns.
+      expect(find.textContaining('override'), findsNothing);
+      expect(
+        find.textContaining('The growth path, the shape of its decline'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('opening it reports back rather than opening itself', (
+      tester,
+    ) async {
+      bool? reported;
+      await pumpPanel(tester, onExpandedChanged: (v) => reported = v);
+
+      await tester.tap(find.byKey(const Key('advanced-header')));
+      await tester.pump();
+
+      expect(reported, isTrue);
+      // And nothing appeared: the panel is told whether it is open, it does
+      // not decide.
+      expect(find.byKey(const Key('reinvestment-toggle')), findsNothing);
+    });
+  });
+
+  group('the growth path', () {
+    testWidgets('is shown without being asked for', (tester) async {
       await pumpPanel(tester, expanded: true);
 
-      expect(find.byKey(const Key('fade-toggle')), findsOneWidget);
-      expect(tester.widget<Switch>(find.byKey(const Key('fade-toggle'))).value,
-          isFalse);
-      // The controls the fade governs stay hidden until it is on.
-      expect(find.byKey(const Key('fade-start-year')), findsNothing);
-      expect(find.byKey(const Key('fade-pattern')), findsNothing);
+      // No switch to find, because there is nothing to switch.
+      expect(find.byKey(const Key('fade-toggle')), findsNothing);
+      // The view collapses equal consecutive years into one range, so the
+      // four held years read as one line rather than four identical ones.
+      expect(find.textContaining('Yr1: 32.0%'), findsOneWidget);
+      expect(find.textContaining('Yr2-5: 12.0%'), findsOneWidget);
+      expect(find.textContaining('Yr10: 4.0%'), findsOneWidget);
     });
 
-    testWidgets('the header says this is an override, not the model',
-        (tester) async {
-      await pumpPanel(tester, expanded: true, fadeEnabled: true);
-      expect(find.textContaining('your override, not the default model'),
-          findsOneWidget);
+    testWidgets('says which years each rate covers', (tester) async {
+      await pumpPanel(tester, expanded: true);
+
+      expect(
+        find.textContaining('Year 1 is the latest year’s own growth'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('reaching it exactly at year 10'), findsOneWidget);
     });
 
-    testWidgets('tapping the header asks to open it', (tester) async {
-      bool? asked;
-      await pumpPanel(tester, onExpandedChanged: (v) => asked = v);
-      await tester.tap(find.byKey(const Key('advanced-header')));
-      expect(asked, isTrue);
+    testWidgets('the horizon in that sentence is the real one', (tester) async {
+      await pumpPanel(tester, expanded: true, projectionYears: 7);
+      expect(find.textContaining('at year 7'), findsOneWidget);
     });
   });
 
-  group('the controls', () {
-    testWidgets('switching the fade on is reported', (tester) async {
-      bool? asked;
-      await pumpPanel(tester, expanded: true, onFadeChanged: (v) => asked = v);
-      await tester.tap(find.byKey(const Key('fade-toggle')));
-      expect(asked, isTrue);
-    });
-
-    testWidgets('with it on, the start year and pattern appear',
-        (tester) async {
-      await pumpPanel(tester, expanded: true, fadeEnabled: true);
-      expect(find.byKey(const Key('fade-start-year')), findsOneWidget);
-      expect(find.byKey(const Key('fade-pattern')), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-    });
-
-    testWidgets('the start year cannot run past the horizon', (tester) async {
-      // The glide needs a year to run in, so on a five-year projection the
-      // last year that can hold the full rate is the fourth.
-      await pumpPanel(tester,
-          expanded: true, fadeEnabled: true, projectionYears: 5);
-      final slider = tester.widget<Slider>(
-        find.byKey(const Key('fade-start-year')),
-      );
-      expect(slider.max, 4);
-      expect(slider.min, 1);
-    });
-
-    testWidgets('a start year beyond the horizon is pulled back into it',
-        (tester) async {
-      await pumpPanel(tester,
-          expanded: true,
-          fadeEnabled: true,
-          projectionYears: 5,
-          fadeStartYear: 9);
-      expect(tester.widget<Slider>(find.byKey(const Key('fade-start-year'))).value,
-          4);
-    });
-
-    testWidgets('choosing the other pattern is reported', (tester) async {
-      String? asked;
+  group('the decline', () {
+    testWidgets('offers both shapes and reports the choice', (tester) async {
+      String? chosen;
       await pumpPanel(
         tester,
         expanded: true,
-        fadeEnabled: true,
-        onPatternChanged: (v) => asked = v,
+        onPatternChanged: (v) => chosen = v,
       );
+
       await tester.tap(find.text('Exponential'));
-      expect(asked, fadeExponential);
+      await tester.pump();
+      expect(chosen, fadeExponential);
     });
 
-    testWidgets('each pattern explains itself', (tester) async {
-      await pumpPanel(tester, expanded: true, fadeEnabled: true);
-      expect(find.textContaining('Equal steps down'), findsOneWidget);
+    testWidgets('says when an exponential decline could not be used', (
+      tester,
+    ) async {
+      await pumpPanel(tester, expanded: true, declineFellBack: true);
 
-      await pumpPanel(tester,
-          expanded: true, fadeEnabled: true, fadePattern: fadeExponential);
-      expect(find.textContaining('Equal-proportion decay'), findsOneWidget);
+      expect(
+        find.textContaining('a ratio between two rates'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and says nothing when it could', (tester) async {
+      await pumpPanel(tester, expanded: true);
+      expect(find.textContaining('a ratio between two rates'), findsNothing);
     });
   });
 
-  group('the growth path, written out', () {
-    testWidgets('every year is listed once the backend has answered',
-        (tester) async {
+  group('how growth is paid for', () {
+    testWidgets('offers both methods, capital spending first', (tester) async {
+      await pumpPanel(tester, expanded: true);
+
+      expect(find.byKey(const Key('reinvestment-toggle')), findsOneWidget);
+      expect(find.text('Capital spending'), findsOneWidget);
+      expect(find.text('Sales to capital'), findsOneWidget);
+    });
+
+    testWidgets('reports a change rather than making it', (tester) async {
+      String? chosen;
       await pumpPanel(
         tester,
         expanded: true,
-        fadeEnabled: true,
-        growthPath: const [0.18, 0.18, 0.18, 0.1579, 0.1357, 0.025],
+        onReinvestmentChanged: (v) => chosen = v,
       );
 
-      expect(find.byKey(const Key('growth-path')), findsOneWidget);
-      expect(find.text('Yr1-3: 18.0%'), findsOneWidget);
-      expect(find.text('Yr4: 15.8%'), findsOneWidget);
-      expect(find.text('Yr6: 2.5%'), findsOneWidget);
-      expect(find.textContaining('matches the terminal growth rate'),
-          findsOneWidget);
+      await tester.tap(find.text('Sales to capital'));
+      await tester.pump();
+      expect(chosen, kReinvestmentSalesToCapital);
+    });
+  });
+
+  group('the reference figures', () {
+    testWidgets('are shown beside the long-run return', (tester) async {
+      await pumpPanel(tester, expanded: true, currentRoic: 0.324, wacc: 0.098);
+
+      // The slider is unreadable without them: 20% means nothing until you
+      // know the company earns 32.4% today.
+      expect(find.textContaining('32.4%'), findsOneWidget);
+      expect(find.textContaining('9.8%'), findsOneWidget);
     });
 
-    testWidgets('and says so plainly before one has', (tester) async {
-      await pumpPanel(tester, expanded: true, fadeEnabled: true);
-      expect(find.byKey(const Key('growth-path-empty')), findsOneWidget);
-    });
+    testWidgets('are absent rather than invented where the books do not '
+        'support them', (tester) async {
+      await pumpPanel(tester, expanded: true, currentRoic: null);
 
-    test('consecutive years at one rate read as a range', () {
-      expect(
-        GrowthPathView.summarise(const [0.18, 0.18, 0.18, 0.15, 0.025]),
-        ['Yr1-3: 18.0%', 'Yr4: 15.0%', 'Yr5: 2.5%'],
-      );
-    });
-
-    test('a flat path is one range, which is what the fade being off looks like',
-        () {
-      expect(
-        GrowthPathView.summarise(const [0.05, 0.05, 0.05, 0.05, 0.05]),
-        ['Yr1-5: 5.0%'],
-      );
-    });
-
-    test('a path that never repeats lists every year', () {
-      expect(
-        GrowthPathView.summarise(const [0.10, 0.08, 0.06, 0.04]),
-        ['Yr1: 10.0%', 'Yr2: 8.0%', 'Yr3: 6.0%', 'Yr4: 4.0%'],
-      );
-    });
-
-    test('an empty path produces nothing rather than a stray label', () {
-      expect(GrowthPathView.summarise(const []), isEmpty);
+      expect(find.textContaining('on its capital now'), findsNothing);
     });
   });
 }

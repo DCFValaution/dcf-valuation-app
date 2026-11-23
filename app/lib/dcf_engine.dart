@@ -117,7 +117,8 @@ class DcfAssumptions {
     nwcPct: m['nwc_pct'] ?? 0,
     wacc: m['wacc'] ?? 0,
     terminalGrowth: m['terminal_growth'] ?? 0,
-    projectionYears: (m['projection_years'] ?? 5).round(),
+    projectionYears:
+        (m['projection_years'] ?? kDefaultProjectionYears).round(),
     fadeEnabled: (m['fade_enabled'] ?? 0) != 0,
     fadeStartYear: (m['fade_start_year'] ?? 1).round(),
   );
@@ -142,6 +143,13 @@ class DcfAssumptions {
     'fade_start_year': fadeStartYear.toDouble(),
   };
 }
+
+/// The forecast horizon, where a payload does not carry its own.
+///
+/// Ten years for every company: a shorter forecast does not make a model
+/// more honest, it moves value into the perpetuity, which is the part
+/// nobody can check. It was five when the horizon was a control.
+const int kDefaultProjectionYears = 10;
 
 const String fadeLinear = 'linear';
 const String fadeExponential = 'exponential';

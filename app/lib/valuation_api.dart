@@ -379,6 +379,7 @@ class ValuationSuccess extends ValuationResult {
   }
 
   final double intrinsicValuePerShare;
+
   /// Null when the price source would not give us one. Every other figure
   /// is unaffected: the price is not an input to the valuation, only to the
   /// comparison with it.
@@ -457,6 +458,18 @@ class ValuationSuccess extends ValuationResult {
   /// recomputing a path and hoping it matches.
   final List<double> growthPath;
 
+  /// What the company earns on its capital now, from the filings. Null
+  /// where the books do not support it - negative invested capital after
+  /// years of buybacks, or no operating profit.
+  final double? currentRoic;
+
+  /// The discount rate, for showing beside the long-run return.
+  final double referenceWacc;
+
+  /// True when an exponential decline was asked for and the straight line
+  /// was used instead.
+  final bool declineFellBack;
+
   /// Return on invested capital beside the cost of it, where the backend
   /// judged the comparison meaningful. Null everywhere else, and the screen
   /// shows nothing rather than a dash.
@@ -502,6 +515,9 @@ class ValuationSuccess extends ValuationResult {
     this.snapshot,
     this.growthCostNote,
     this.growthPath = const [],
+    this.currentRoic,
+    this.referenceWacc = 0.0,
+    this.declineFellBack = false,
   });
 
   bool get isUndervalued => (upsideDownside ?? 0) > 0;
@@ -560,8 +576,8 @@ class ValuationSuccess extends ValuationResult {
       intrinsicValuePerShare: (json['intrinsic_value_per_share'] as num)
           .toDouble(),
       currentPrice: (json['current_price'] as num?)?.toDouble(),
-      priceAsOfText: company['price_as_of_text'] as String? ??
-          'close date unavailable',
+      priceAsOfText:
+          company['price_as_of_text'] as String? ?? 'close date unavailable',
       upsideDownside: (json['upside_downside'] as num?)?.toDouble(),
       note: json['note'] as String? ?? '',
       fxClause: (json['fx_clause'] as String?)?.trim().isEmpty ?? true
@@ -608,6 +624,19 @@ class ValuationSuccess extends ValuationResult {
           ((y as Map<String, dynamic>)['revenue_growth'] as num?)?.toDouble() ??
               0.0,
       ],
+      currentRoic:
+          ((json['reference'] as Map<String, dynamic>?)?['current_roic']
+                  as num?)
+              ?.toDouble(),
+      referenceWacc:
+          ((json['reference'] as Map<String, dynamic>?)?['wacc'] as num?)
+              ?.toDouble() ??
+          0.0,
+      declineFellBack:
+          (json['reference']
+                  as Map<String, dynamic>?)?['growth_decline_fell_back']
+              as bool? ??
+          false,
     );
   }
 }
@@ -667,7 +696,8 @@ class ValuationNotSuitable extends ValuationResult {
     return ValuationNotSuitable(
       ticker: company['ticker'] as String? ?? '',
       companyName: company['company_name'] as String? ?? '',
-      message: json['message'] as String? ?? 'A standard valuation is not suitable.',
+      message:
+          json['message'] as String? ?? 'A standard valuation is not suitable.',
       reasons: (json['reasons'] as List<dynamic>? ?? const [])
           .map((r) => r.toString())
           .toList(),

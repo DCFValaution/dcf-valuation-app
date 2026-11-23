@@ -17,6 +17,12 @@ attached, because a number on screen is what people remember.
 from dataclasses import dataclass, field
 from statistics import median
 
+# A capital-spending glide wider than this is a claim about a
+# build-out ending, not a technicality of the model. Ten points of
+# revenue is where it stops being a detail and starts being the
+# answer: Meta's whole figure turns on 23 of them.
+CAPEX_FADE_DISCLOSE = 0.10
+
 from assumptions import (DAMODARAN_ERP_AS_OF, DAMODARAN_IMPLIED_ERP,
                          LONG_RUN_GROWTH_AS_OF, LONG_RUN_NOMINAL_GROWTH,
                          MARGIN_TREND_DISCLOSE,
@@ -287,6 +293,15 @@ MIN_HISTORY_YEARS = 2
 # model nobody can check - that is a different claim, and gets a different
 # tier.
 HIGH_TV_SHARE = 0.85
+
+# Above this the forecast has stopped contributing anything and the
+# figure is a perpetuity with a company's name on it. Refused rather
+# than warned about: the warning at 100% says the forecast is worth
+# less than nothing, and there is a point past which saying it louder
+# is not enough. 150% rather than lower because Amazon sits at 124%
+# with real cash flow today, and refusing it would blame the company
+# for a capital-spending assumption the model made.
+TV_REFUSAL_SHARE = 1.50
 TV_EXCEEDS_FORECAST = 1.00
 
 
@@ -524,6 +539,34 @@ def input_source_warnings(derived, *, dcf: bool,
             headline=(f"The forecast holds the latest {latest:.1%} margin, "
                       f"which has moved steadily from {oldest:.1%}.")))
 
+    # --- A build-out the forecast assumes ends ----------------------------
+    #
+    # The capital-spending path glides from what a company spends now to
+    # where the model assumes it settles, and for a company mid-build-out
+    # that glide is most of the answer. Meta's figure rests on investment
+    # falling from 43% of revenue to 20%: capital spending does 23 points of
+    # the work and depreciation catching up only 5. That is a large,
+    # checkable claim, and it was being made silently.
+    # getattr throughout, because this function also sees a dividend
+    # discount model's assumptions - which have no capital spending in them
+    # at all - and, in tests, stand-ins that carry only what the case under
+    # test needs.
+    _assumptions = getattr(derived, "assumptions", None)
+    capex_start = getattr(_assumptions, "capex_pct", None)
+    capex_end = getattr(_assumptions, "capex_terminal_pct", None)
+    if capex_start is None:
+        capex_end = None
+    if capex_end is not None and capex_start - capex_end > CAPEX_FADE_DISCLOSE:
+        out.append(Warning(
+            f"The forecast assumes investment falls from {capex_start:.0%} of "
+            f"revenue to {capex_end:.0%}. The company is building something, "
+            f"and the value depends on that build-out ending. Move the "
+            f"capital expenditure assumption to see what a longer one is "
+            f"worth.",
+            severity=SEVERITY_CAUTION, kind="capex_fade",
+            detail={"from": capex_start, "to": capex_end},
+            headline=(f"Investment is assumed to fall from {capex_start:.0%} "
+                      f"of revenue to {capex_end:.0%}.")))
     # --- An annual base where a trailing one was wanted --------------------
     #
     # Caution, because it is not an error and it is not nothing: the figures
@@ -995,7 +1038,7 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
     # Checked directly rather than inferred, because a company can be
     # profitable on an operating basis yet still consume cash through capex.
     if not reasons:
-        probe = run_dcf(base, a)
+        probe = run_dcf(base, a, with_sensitivity=False)
         if probe.years[-1].ufcf <= 0:
             codes.append("negative_fcf")
             reasons.append(
@@ -1003,6 +1046,43 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
                 f"spending more cash than it brings in ({_money(probe.years[-1].ufcf * 1e6)} "
                 "that year). Its investment needs outweigh its profits, so there is no "
                 "positive cash flow to put a long-term value on."
+            )
+
+        # --- Blocking: the answer is not in the part you can check ---------
+        #
+        # The rule above asks only about the LAST forecast year. Over five
+        # years that was a fair proxy for "this never funds itself"; over
+        # ten, with depreciation allowed to catch up, a company can consume
+        # cash for nine years and turn positive in the tenth. Tesla does
+        # exactly that - eight negative years, minus $25bn cumulative, and
+        # a final year of plus $1.3bn - so it stopped being refused and
+        # started being valued at $11 a share with 668% of that value
+        # sitting in the perpetuity.
+        #
+        # Two other rules were measured and rejected. "Cumulative forecast
+        # cash flow is negative" and "negative in half the years" both
+        # catch Tesla, and both also catch Amazon - a company whose free
+        # cash flow is positive today, and whose forecast only turns
+        # negative because the derived capital spending of 27% of revenue
+        # outruns its margin. That is a complaint about an input, not about
+        # the company, and refusing on it would be the model blaming a
+        # business for an assumption the model made.
+        #
+        # This rule asks a different question: is the answer coming from
+        # the part of the model anyone can check? It is the same quantity
+        # the serious warning at 100% already reports, so the warning and
+        # the refusal are one scale with two thresholds rather than two
+        # unrelated tests. At 150% Amazon (124%) is valued and flagged;
+        # Tesla (668%) is refused.
+        elif probe.tv_pct_of_ev > TV_REFUSAL_SHARE:
+            codes.append("terminal_value_dominates")
+            reasons.append(
+                f"Terminal value would be {probe.tv_pct_of_ev:.0%} of the whole "
+                f"company. The {a.projection_years} years that were actually "
+                f"forecast come to {_money(probe.pv_ufcf_sum * 1e6)}, and everything "
+                f"else is a single perpetuity beyond them. There is no figure here "
+                f"worth reporting: it would be a statement about one growth rate "
+                f"applied forever, not a valuation of this business."
             )
 
     # --- Non-blocking warnings --------------------------------------------
@@ -1067,14 +1147,15 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
         if prov.name == "revenue_growth":
             # The one clamp that belongs beside the figure. Every other one
             # trims an input the reader never questioned; this one overrules
-            # the company's own reported history - the forecast grows at a
-            # rate the company did not achieve - and the headline figure is
+            # the company's own reported history - the measured trend is
+            # replaced by a rate the company did not achieve - and the
+            # headline figure is
             # built on the replacement. A reader comparing it to the market
             # price should meet that before they act on it.
             raw, limit = prov.raw, prov.limit
             if raw is not None and limit is not None and raw > limit:
                 headline = (
-                    f"The forecast grows at {limit:.1%} a year rather than "
+                    f"Years 2-5 grow at {limit:.1%} a year rather than "
                     f"the {raw:.1%} this company has managed, which the "
                     "model treats as too fast to keep up.")
             elif raw is not None and limit is not None:
@@ -1853,6 +1934,12 @@ def hypothetical_available(report: SpeculativeReport) -> bool:
 #                         thresholds there are the ones that screen applies.
 HYPOTHETICAL_REFUSAL_CODES = frozenset({
     "negative_fcf", "negative_median_margin", "operating_loss",
+    # A terminal value that swamps the forecast is a complaint about growth
+    # and investment, and those are two of the three figures that screen
+    # hands the reader. It is also Tesla's refusal now that the cash-flow
+    # rule no longer catches it, so leaving it out would make that refusal
+    # the dead end the whole route exists to remove.
+    "terminal_value_dominates",
 })
 
 # Codes that may accompany those without sending the reader to the generic
@@ -1877,7 +1964,10 @@ def hypothetical_framing_for(codes: "list[str] | set[str]") -> str:
     there is no turnaround to assume and nothing in its figures pointing the
     other way. Every other refusal that reaches this screen is a loss.
     """
-    return (FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE if "negative_fcf" in set(codes)
+    # Both of these refuse a company that MAKES money, so neither gets the
+    # loss-maker's words.
+    profitable = {"negative_fcf", "terminal_value_dominates"}
+    return (FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE if set(codes) & profitable
             else FRAMING_PATH_TO_PROFIT)
 
 

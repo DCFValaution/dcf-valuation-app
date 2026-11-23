@@ -131,10 +131,35 @@ class AdjustableAssumption {
 }
 
 const List<AdjustableAssumption> kAdjustable = [
+  // Year one and years two to five are separate claims, so they are
+  // separate controls. What a company just did is close to a fact; what it
+  // does for the next four years is a judgement. One slider said the same
+  // thing about both.
+  AdjustableAssumption(
+    name: 'year_one_growth',
+    label: 'Growth, year 1',
+    help: 'The latest financial year’s own growth, applied to year one',
+    min: 0.0,
+    max: 0.40,
+    step: 0.0025,
+    typedMin: -0.99,
+    typedMax: 10.0,
+  ),
+  AdjustableAssumption(
+    name: 'years_two_to_five_growth',
+    label: 'Growth, years 2–5',
+    help:
+        'Held for four years, then declining to the terminal rate by year 10',
+    min: 0.0,
+    max: 0.30,
+    step: 0.0025,
+    typedMin: -0.99,
+    typedMax: 10.0,
+  ),
   AdjustableAssumption(
     name: 'revenue_growth',
-    label: 'Revenue growth',
-    help: 'Annual growth applied across the forecast',
+    label: 'Revenue growth (measured)',
+    help: 'The three-year trend the years 2–5 rate is derived from',
     min: 0.0,
     max: 0.25,
     step: 0.0025,
@@ -194,17 +219,70 @@ const List<AdjustableAssumption> kAdjustable = [
     max: 0.06,
     step: 0.001,
   ),
-  // Five years is the convention and the floor, not a view about this
-  // company. Lengthening it moves value out of the terminal value and into
-  // cash flows that have been forecast explicitly, which is the point of
-  // moving it: the share of the answer resting on a single perpetuity shrinks.
-  // Ten is the ceiling because a revenue growth rate held flat for longer than
-  // that is a weaker claim than the terminal value it replaces.
+  // The projection-length and fade-start sliders are gone. The horizon is
+  // ten years for every company now, and the decline over years six to ten
+  // IS the fade - so both controls described a shape the model no longer
+  // has. They remain available through the API and the spreadsheet, where
+  // a caller who wants a different horizon can still ask for one.
   AdjustableAssumption(
-    name: 'projection_years',
-    label: 'Projection length',
-    help: 'Years forecast explicitly before the terminal value',
-    min: 5,
+    name: 'marginal_tax_rate',
+    label: 'Tax rate, long run',
+    help:
+        'The rate the effective rate converges to by year 10. An effective '
+        'rate is what was paid, and the reasons it sits below the statutory '
+        'rate expire.',
+    min: 0.0,
+    max: 0.45,
+    step: 0.0025,
+  ),
+  // Return on new capital in perpetuity. It sets how much of its profit the
+  // company has to reinvest to grow at the terminal rate at all: g / ROIC.
+  // Unreadable without the company's own return and its cost of capital
+  // beside it, which the screen shows from the response's `reference`.
+  AdjustableAssumption(
+    name: 'terminal_roic',
+    label: 'Return on capital, long run',
+    help:
+        'What the company earns on new investment forever. Growth costs '
+        'g ÷ this in reinvestment, so a lower figure means growth buys '
+        'less.',
+    min: 0.03,
+    max: 0.40,
+    step: 0.0025,
+  ),
+  AdjustableAssumption(
+    name: 'da_terminal_pct',
+    label: 'Depreciation, year 10',
+    help:
+        'Depreciation as a share of revenue once investment settles. The gap '
+        'between this and capital expenditure is net investment, and it does '
+        'not go away.',
+    min: 0.0,
+    max: 0.40,
+    step: 0.0025,
+  ),
+];
+
+/// Shown only when the reader opts into a margin that changes.
+///
+/// Deliberately not in the list above. The margin from the filings is the
+/// one figure in the model that came from the company rather than from a
+/// judgement about it, and a slider sitting there pre-filled would invite a
+/// view the model has no basis for.
+const List<AdjustableAssumption> kMarginTarget = [
+  AdjustableAssumption(
+    name: 'target_operating_margin',
+    label: 'Target operating margin',
+    help: 'The margin you are assuming the company reaches',
+    min: -0.20,
+    max: 0.60,
+    step: 0.0025,
+  ),
+  AdjustableAssumption(
+    name: 'margin_convergence_year',
+    label: 'Reached by year',
+    help: 'How long you are assuming it takes to get there',
+    min: 1,
     max: 10,
     step: 1,
     isPercent: false,
@@ -620,6 +698,125 @@ class AssumptionSliders extends StatelessWidget {
     );
   }
 }
+
+/// The optional claim that the margin goes somewhere else.
+///
+/// Off by default, and deliberately not part of [kAdjustable]: see the note
+/// on [kMarginTarget]. When it is switched on the target seeds at the
+/// company's own margin, so the first thing the reader sees is their own
+/// starting point rather than a number the model made up.
+class MarginTargetControls extends StatelessWidget {
+  const MarginTargetControls({
+    super.key,
+    required this.enabled,
+    required this.onEnabledChanged,
+    required this.target,
+    required this.onTargetChanged,
+    required this.year,
+    required this.onYearChanged,
+    required this.onChangeEnd,
+    required this.busy,
+  });
+
+  /// Whether the reader has asked for a margin that moves.
+  final bool enabled;
+  final ValueChanged<bool> onEnabledChanged;
+
+  /// The margin being assumed, and the year it is reached.
+  final double target;
+  final ValueChanged<double> onTargetChanged;
+  final int year;
+  final ValueChanged<int> onYearChanged;
+
+  final VoidCallback onChangeEnd;
+  final bool busy;
+
+  AdjustableAssumption get _targetSpec => kMarginTarget[0];
+  AdjustableAssumption get _yearSpec => kMarginTarget[1];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Where the margin ends up',
+                    style: context.text.titleSmall,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'The forecast holds the margin from the filings. '
+                    'Switch this on to assume it moves instead.',
+                    style: context.text.labelSmall?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Switch(
+              key: const Key('margin-target-toggle'),
+              value: enabled,
+              onChanged: busy ? null : onEnabledChanged,
+            ),
+          ],
+        ),
+        if (enabled) ...[
+          const SizedBox(height: AppSpacing.lg),
+          _SliderRow(
+            spec: _targetSpec,
+            value: target,
+            derivedValue: null,
+            source: 'your assumption',
+            modified: true,
+            enabled: true,
+            onChanged: (v) => onTargetChanged(_targetSpec.snap(v)),
+            onChangeEnd: onChangeEnd,
+            onExactValue: (v) {
+              onTargetChanged(v);
+              onChangeEnd();
+            },
+            validate: (text) => parseExactValue(
+              spec: _targetSpec,
+              text: text,
+              current: const {},
+              specs: kMarginTarget,
+            ),
+          ),
+          _SliderRow(
+            spec: _yearSpec,
+            value: year.toDouble(),
+            derivedValue: null,
+            source: 'your assumption',
+            modified: true,
+            enabled: true,
+            onChanged: (v) => onYearChanged(_yearSpec.snap(v).round()),
+            onChangeEnd: onChangeEnd,
+            onExactValue: (v) {
+              onYearChanged(v.round());
+              onChangeEnd();
+            },
+            validate: (text) => parseExactValue(
+              spec: _yearSpec,
+              text: text,
+              current: const {},
+              specs: kMarginTarget,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 
 class _SliderRow extends StatelessWidget {
   const _SliderRow({

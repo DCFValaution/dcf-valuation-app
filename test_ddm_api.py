@@ -177,7 +177,7 @@ def test_a_dcf_company_still_gets_the_dcf_and_is_labelled(client):
     # method_fit_warnings is the one field added since: doubts about whether
     # the method fits at all. An ordinary company has none.
     assert set(body) == DCF_FIELDS_BEFORE_THE_DDM | {
-        "method", "method_fit_warnings",
+        "method", "growth_path", "reference", "method_fit_warnings",
         # Added later as a read-only diagnostic beside the valuation;
         # it changes nothing the DCF computes.
         "capital_returns",

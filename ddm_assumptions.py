@@ -70,6 +70,15 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Sequence
 
+# The dividend model's own horizon.
+#
+# It used to borrow the DCF's, and then the DCF's went from five years to
+# ten for reasons that are entirely about revenue growth and reinvestment -
+# neither of which this model has. A bank's dividend forecast moved by 16%
+# on a change that was not about banks, which is the whole argument for the
+# two models owning their own conventions.
+DDM_HIGH_GROWTH_YEARS = 5
+
 from assumptions import (DEFAULT_BETA, DEFAULT_PROJECTION_YEARS,
                          DEFAULT_TERMINAL_GROWTH, Provenance, _capm_inputs,
                          _clamp)
@@ -499,8 +508,9 @@ def derive_ddm_assumptions(fin: CompanyFinancials, dividends: DividendRecord,
     # --- Global defaults ---------------------------------------------------
     terminal_growth = record("terminal_growth", DEFAULT_TERMINAL_GROWTH, "default",
                              "conservative long-run default; adjustable")
-    high_growth_years = record("high_growth_years", DEFAULT_PROJECTION_YEARS, "default",
-                               "modelling convention, matching the DCF's forecast horizon")
+    high_growth_years = record("high_growth_years", DDM_HIGH_GROWTH_YEARS, "default",
+                               "modelling convention; this model's own, not "
+                               "the DCF's - see DDM_HIGH_GROWTH_YEARS")
 
     return DerivedDDMAssumptions(
         assumptions=DDMAssumptions(

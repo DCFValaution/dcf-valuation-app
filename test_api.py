@@ -166,7 +166,11 @@ def test_sensitivity_is_centred_on_the_headline_value(client):
 
 def test_projection_and_valuation_blocks_present(client):
     body = client.get(f"/valuation/{PROFITABLE}").json()
-    assert len(body["projection"]) == 5
+    # Ten years for every company. It used to be five, or ten for a fast
+    # grower, which made the SHAPE of the model depend on the figure being
+    # modelled - and a shorter forecast only moves value into the
+    # perpetuity, which is the part nobody can check.
+    assert len(body["projection"]) == 10
     assert body["projection"][0]["period"] == 1
     assert body["valuation"]["enterprise_value"] > 0
     assert body["wacc_build_up"]["cost_of_equity"] > 0

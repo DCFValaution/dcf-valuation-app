@@ -22,6 +22,7 @@ from openpyxl.utils import get_column_letter
 import analysis
 import assumptions as A
 import excel_export as E
+from sheet_eval import Sheet
 from analysis import value_company
 from api import app
 from test_api import (LOSSMAKING, PROFITABLE, THROTTLED, UNKNOWN,
@@ -73,7 +74,8 @@ def test_file_is_a_real_xlsx_zip(report):
 
 
 def test_all_five_sections_present(sheet):
-    headings = [sheet.cell(row=r, column=1).value or "" for r in range(1, 60)]
+    headings = [sheet.cell(row=r, column=1).value or ""
+                for r in range(1, sheet.max_row + 1)]
     joined = " ".join(headings)
     for section in ("1.  ASSUMPTIONS", "2.  BASE-YEAR DATA", "3.  UNLEVERED FREE CASH FLOW",
                     "4.  ENTERPRISE & EQUITY VALUE", "5.  SENSITIVITY"):
@@ -136,23 +138,33 @@ def test_base_year_cells_hold_reported_numbers(sheet, report):
 # Projection formulas
 # ---------------------------------------------------------------------------
 
-def test_revenue_compounds_by_the_growth_assumption(sheet):
-    assert formula(sheet, E.R_REVENUE, 3) == f"=B{E.R_REVENUE}*(1+$B${E.R_GROWTH})"
-    assert formula(sheet, E.R_REVENUE, 4) == f"=C{E.R_REVENUE}*(1+$B${E.R_GROWTH})"
+def test_revenue_compounds_by_its_own_years_growth(sheet):
+    """Every year reads the growth row above it, and that row reads the
+    input cells. One shared cell could not drive a three-phase path."""
+    assert formula(sheet, E.R_REVENUE, 3) == \
+        f"=B{E.R_REVENUE}*(1+C{E.R_GROWTH_PCT})"
+    assert formula(sheet, E.R_REVENUE, 4) == \
+        f"=C{E.R_REVENUE}*(1+D{E.R_GROWTH_PCT})"
 
 
 def test_base_revenue_links_to_the_input_cell(sheet):
     assert formula(sheet, E.R_REVENUE, 2) == f"=$B${E.R_REVENUE_IN}"
 
 
-@pytest.mark.parametrize("row,reference", [
-    (E.R_EBIT, "$B$6"), (E.R_TAXES, "$B$7"), (E.R_DA_ADD, "$B$8"),
-    (E.R_NWC_LESS, "$B$10"),
+@pytest.mark.parametrize("row,references", [
+    (E.R_EBIT, [f"$B${E.R_MARGIN}"]),
+    # Tax and depreciation each glide between two cells, so both ends have
+    # to be reachable from the formula or half the assumption is frozen.
+    (E.R_TAXES, [f"$B${E.R_TAX}", f"$B${E.R_TAX_MARGINAL}"]),
+    (E.R_DA_ADD, [f"$B${E.R_DA}", f"$B${E.R_DA_TERMINAL}"]),
+    (E.R_NWC_LESS, [f"$B${E.R_NWC}"]),
+    (E.R_CAPEX_PCT, [f"$B${E.R_CAPEX}", f"$B${E.R_CAPEX_TERMINAL}"]),
 ])
-def test_ufcf_lines_reference_their_assumption(sheet, row, reference):
+def test_ufcf_lines_reference_their_assumption(sheet, row, references):
     text = formula(sheet, row, 3)
     assert text.startswith("="), "must be a formula, not a value"
-    assert reference in text, f"row {row} should be driven by {reference}"
+    for reference in references:
+        assert reference in text, f"row {row} should be driven by {reference}"
 
 
 def test_capex_is_driven_by_its_own_year_not_one_shared_cell(sheet):
@@ -168,9 +180,15 @@ def test_capex_is_driven_by_its_own_year_not_one_shared_cell(sheet):
         assert "$B$" not in text
 
 
-def test_the_capex_intensity_row_is_a_value_per_year(sheet):
+def test_the_capex_intensity_row_interpolates_between_its_two_cells(sheet):
+    """It used to be a frozen number per year, which meant a reader could
+    not argue with where capital spending settles - only with where it
+    starts. Both ends are cells now and the row reads them."""
     for col in (3, 4):
-        assert not str(sheet.cell(row=E.R_CAPEX_PCT, column=col).value).startswith("=")
+        text = formula(sheet, E.R_CAPEX_PCT, col)
+        assert text.startswith("=")
+        assert f"$B${E.R_CAPEX}" in text
+        assert f"$B${E.R_CAPEX_TERMINAL}" in text
 
 
 def test_ufcf_adds_its_terms_and_not_the_intensity_row(sheet):
@@ -207,6 +225,33 @@ def test_terminal_value_is_a_gordon_growth_formula(sheet):
     assert text.startswith("=")
     assert f"(1+$B${E.R_TERMINAL})" in text
     assert f"($B${E.R_WACC}-$B${E.R_TERMINAL})" in text
+
+
+def test_the_terminal_value_charges_for_the_growth_it_assumes(sheet):
+    """The perpetuity is built from profit less the reinvestment that
+    growth needs, not from the final year's free cash flow.
+
+    Before this, "Return on capital, long run" was an input cell nothing
+    referenced - and the spreadsheet's own answer drifted from the figure
+    printed above it. Neither of the tests either side of this one would
+    have caught that: the Gordon denominator is unchanged, and the formula
+    still hangs off the final column.
+    """
+    text = formula(sheet, E.R_TV)
+    assert f"$B${E.R_TERMINAL_ROIC}" in text, text
+    assert f"(1-$B${E.R_TERMINAL}/$B${E.R_TERMINAL_ROIC})" in text, text
+    # Off NOPAT, not off free cash flow, which carries whatever investment
+    # the final year happened to need.
+    assert f"{E.R_NOPAT}*" in text, text
+    assert f"{E.R_UFCF}*" not in text, text
+
+
+def test_the_long_run_return_is_an_input_something_reads(sheet):
+    """Every input cell has to be wired to a formula or it is decoration."""
+    reads = [formula(sheet, r) for r in range(E.R_BASE_HEAD, 70)
+             if isinstance(sheet.cell(r, 2).value, str)
+             and str(sheet.cell(r, 2).value).startswith("=")]
+    assert any(f"$B${E.R_TERMINAL_ROIC}" in f for f in reads),         "nothing in the workbook reads the long-run return on capital"
 
 
 def test_equity_bridge_adds_cash_and_subtracts_debt_and_minority_interest(sheet):
@@ -379,7 +424,9 @@ def test_the_terminal_value_hangs_off_the_final_projected_year(horizon_case):
     years, _report, sheet = horizon_case
     last = get_column_letter(2 + years)
     text = formula(sheet, E.R_TV)
-    assert text.startswith(f"={last}{E.R_UFCF}*"), text
+    # The perpetuity is built from the final year's NOPAT, so moving the
+    # horizon has to move which column it reads.
+    assert f"{last}{E.R_NOPAT}*" in text, text
     assert formula(sheet, E.R_PV_TV) == f"=$B${E.R_TV}*{last}{E.R_DISCOUNT}"
 
 
@@ -408,66 +455,122 @@ def test_the_length_is_written_into_the_assumptions(horizon_case):
 FADE_ON = {"fade_enabled": 1, "fade_start_year": 2}
 
 
-@pytest.fixture
-def faded_sheet():
-    report = value_company(PROFITABLE, overrides=FADE_ON)
-    wb = load_workbook(BytesIO(E.workbook_bytes(report)))
-    return report, wb["DCF Model"]
+def test_year_one_reads_its_own_cell(sheet):
+    assert formula(sheet, E.R_GROWTH_PCT, 3) == f"=$B${E.R_GROWTH_Y1}"
 
 
-def test_with_the_fade_off_the_growth_row_is_what_it_always_was(sheet):
-    assert formula(sheet, E.R_REVENUE, 3) == f"=B{E.R_REVENUE}*(1+$B${E.R_GROWTH})"
-    assert formula(sheet, E.R_GROWTH_PCT, 3) == \
-        f"=C{E.R_REVENUE}/B{E.R_REVENUE}-1"
-    assert sheet.cell(row=E.R_GROWTH, column=1).value == "Revenue growth rate (per year)"
+def test_years_two_to_five_read_theirs(sheet):
+    for col in (4, 5, 6, 7):
+        assert formula(sheet, E.R_GROWTH_PCT, col) == \
+            f"=$B${E.R_GROWTH_Y25}", col
 
 
-def test_each_faded_year_compounds_off_its_own_rate(faded_sheet):
-    _report, sheet = faded_sheet
-    for col in range(3, 3 + 5):
-        letter = get_column_letter(col)
-        previous = get_column_letter(col - 1)
-        assert formula(sheet, E.R_REVENUE, col) == \
-            f"={previous}{E.R_REVENUE}*(1+{letter}{E.R_GROWTH_PCT})", letter
+def test_years_six_onward_interpolate_to_the_terminal_rate(sheet, report):
+    """And the last one reaches it exactly, so the handoff to the
+    perpetuity has no step in it."""
+    final = len(report.result.years)
+    if final <= E.HOLD_UNTIL_YEAR:
+        pytest.skip("this company's forecast has no decline phase")
+    text = formula(sheet, E.R_GROWTH_PCT, 2 + final)
+    assert f"$B${E.R_GROWTH_Y25}" in text
+    assert f"$B${E.R_TERMINAL}" in text
+    steps = final - E.HOLD_UNTIL_YEAR
+    assert f"*{steps}/{steps}" in text, text
 
 
-def test_the_faded_rates_are_the_engines_own(faded_sheet):
-    report, sheet = faded_sheet
-    for offset, year in enumerate(report.result.years):
-        cell = sheet.cell(row=E.R_GROWTH_PCT, column=3 + offset)
-        assert cell.value == pytest.approx(year.revenue_growth, rel=1e-12)
+def test_the_growth_path_is_formulas_not_frozen_numbers(sheet, report):
+    """The whole point of the file. A reader who moves either growth cell
+    should see the path move with it."""
+    for offset in range(len(report.result.years)):
+        value = sheet.cell(row=E.R_GROWTH_PCT, column=3 + offset).value
+        assert str(value).startswith("="), (offset, value)
 
 
-def test_the_last_faded_year_is_the_terminal_rate(faded_sheet):
-    report, sheet = faded_sheet
-    last = sheet.cell(row=E.R_GROWTH_PCT,
-                      column=2 + report.derived.assumptions.projection_years)
-    assert last.value == report.derived.assumptions.terminal_growth
+def test_the_growth_cells_are_editable_inputs(sheet):
+    for row in (E.R_GROWTH_Y1, E.R_GROWTH_Y25):
+        cell = sheet.cell(row=row, column=2)
+        assert "0000FF" in str(cell.font.color.rgb), row
 
 
-def test_the_sheet_says_a_fade_is_in_effect(faded_sheet):
-    report, sheet = faded_sheet
-    label = sheet.cell(row=E.R_GROWTH, column=1).value
-    assert "faded" in label.lower(), label
-    note = str(sheet.cell(row=E.R_GROWTH, column=4).value)
-    assert "faded linear from year 2" in note
-    assert sheet.cell(row=E.R_GROWTH_PCT, column=1).value.strip() == \
-        "Revenue growth applied (faded)"
+def test_the_measured_trend_is_kept_beside_them(sheet):
+    """It is what years two to five are derived from, and a reader
+    comparing the two can see how far the model has moved from the
+    company's own record."""
+    assert "measured" in sheet.cell(row=E.R_GROWTH, column=1).value.lower()
 
 
-def test_the_faded_rates_are_editable_like_any_other_input(faded_sheet):
-    """A reader who disagrees with the shape of the fade should be able to
-    argue with it in the file, which is what the file is for."""
-    _report, sheet = faded_sheet
-    cell = sheet.cell(row=E.R_GROWTH_PCT, column=3)
-    assert "0000FF" in str(cell.font.color.rgb)
+def test_every_projection_row_is_a_formula(sheet, report):
+    """Not one frozen number anywhere in the grid.
+
+    This replaces a test that compared a faded workbook against an unfaded
+    one, which no longer means anything: the decline is structural, so there
+    is no second shape to compare against. What is worth holding is the
+    thing that test was really protecting - that opening the file and
+    changing an input recalculates everything below it.
+    """
+    for row in (E.R_REVENUE, E.R_GROWTH_PCT, E.R_EBIT, E.R_TAXES, E.R_NOPAT,
+                E.R_DA_ADD, E.R_CAPEX_PCT, E.R_CAPEX_LESS, E.R_NWC_LESS,
+                E.R_UFCF, E.R_DISCOUNT, E.R_PV_UFCF):
+        for col in range(3, 3 + len(report.result.years)):
+            text = formula(sheet, row, col)
+            assert text.startswith("="), (row, col, text)
 
 
-def test_nothing_else_about_the_projection_moves(faded_sheet, sheet):
-    """Only revenue's own formula changes; every row built from revenue is
-    untouched, so a fade cannot quietly alter the rest of the model."""
-    _report, faded = faded_sheet
-    for row in (E.R_EBIT, E.R_TAXES, E.R_NOPAT, E.R_DA_ADD, E.R_CAPEX_LESS,
-                E.R_NWC_LESS, E.R_UFCF, E.R_DISCOUNT, E.R_PV_UFCF):
-        for col in range(3, 8):
-            assert formula(faded, row, col) == formula(sheet, row, col), (row, col)
+# ---------------------------------------------------------------------------
+# The sheet and the engine have to agree
+# ---------------------------------------------------------------------------
+#
+# Every other test in this file checks the SHAPE of a formula - that the
+# Gordon denominator is there, that the terminal value hangs off the final
+# column, that each year has a formula rather than a number. All of those
+# stayed true while the sheet and the engine quietly diverged: the engine
+# began charging for terminal growth and the sheet kept the old
+# free-cash-flow form. The workbook's own answer was out by 7.6% on Nvidia,
+# 21.4% on Coca-Cola and 59.2% on Amazon, and "Return on capital, long run"
+# was an input cell nothing read.
+#
+# The only check that cannot drift is to work the sheet out.
+
+def test_the_workbook_reaches_the_same_figure_the_app_printed(report, sheet):
+    """Not approximately. The spreadsheet is the same model, written out."""
+    worked_out = Sheet(sheet).at(E.R_INTRINSIC)
+    # Not bit for bit: the glide rows write their fractions to six decimals
+    # (=$B$15+($B$16-$B$15)*0.111111), so the two agree to about nine
+    # significant figures. That is four orders of magnitude tighter than
+    # the drift this test exists to catch, which was 7.6% on Nvidia.
+    assert worked_out == pytest.approx(
+        report.result.intrinsic_value_per_share, rel=1e-7)
+
+
+def test_the_bridge_agrees_line_by_line(report, sheet):
+    """So that a disagreement names the line it is on."""
+    worked = Sheet(sheet)
+    result = report.result
+    for row, engine, what in (
+        (E.R_PV_SUM, sum(y.pv_ufcf for y in result.years), "PV of the forecast"),
+        (E.R_TV, result.terminal_value, "terminal value"),
+        (E.R_PV_TV, result.pv_terminal_value, "PV of the terminal value"),
+        (E.R_EV, result.enterprise_value, "enterprise value"),
+        (E.R_EQUITY, result.equity_value, "equity value"),
+    ):
+        assert worked.at(row) == pytest.approx(engine, rel=1e-7), what
+
+
+def test_moving_the_long_run_return_moves_the_answer(report, sheet):
+    """An input cell nothing reads is decoration, and that is exactly what
+    this one had become."""
+    before = Sheet(sheet).at(E.R_INTRINSIC)
+    sheet.cell(E.R_TERMINAL_ROIC, 2).value =         float(sheet.cell(E.R_TERMINAL_ROIC, 2).value) * 2
+    after = Sheet(sheet).at(E.R_INTRINSIC)
+    assert after > before, (before, after)
+
+
+def test_every_per_year_column_works_out_too(report, sheet):
+    """The columns are the argument; the bottom line is just their sum."""
+    worked = Sheet(sheet)
+    for i, year in enumerate(report.result.years):
+        col = 3 + i
+        assert worked.at(E.R_REVENUE, col) == pytest.approx(
+            year.revenue, rel=1e-7), f"revenue, year {i + 1}"
+        assert worked.at(E.R_UFCF, col) == pytest.approx(
+            year.ufcf, rel=1e-7), f"free cash flow, year {i + 1}"

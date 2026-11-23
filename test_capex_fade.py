@@ -18,6 +18,7 @@ from dataclasses import replace
 
 import pytest
 
+import analysis as An
 from dcf import Assumptions, BaseYearData, capex_path, run_dcf
 
 BASE = BaseYearData(revenue=100_000, total_debt=5_000, cash=10_000,
@@ -163,3 +164,81 @@ class TestEngagement:
         generous = run_dcf(BASE, assume(0.1607)).intrinsic_value_per_share
         faded = self._value(0.3392, 0.1607)
         assert harsh < faded < generous
+
+
+# --- Saying it out loud ----------------------------------------------------
+
+class TestTheWarning:
+    """The path is half the job; the other half is disclosing it.
+
+    A glide from 43% of revenue to 20% is most of what Meta's figure rests
+    on, and it was being made silently. These tests pin the threshold on
+    both sides, because a warning that fires for everyone is worth as
+    little as one that never fires.
+    """
+
+    def _warnings(self, start, end):
+        class Derived:
+            assumptions = replace(assume(start, end))
+            wacc_inputs: dict = {}
+            capm_inputs: dict = {}
+            provenance: dict = {}
+            diagnostics: dict = {}
+
+        return {w.kind: w
+                for w in An.input_source_warnings(Derived(), dcf=True)}
+
+    def test_a_build_out_ending_is_disclosed(self):
+        got = self._warnings(0.43, 0.20)["capex_fade"]
+        assert got.severity == An.SEVERITY_CAUTION
+        assert "43%" in got.headline and "20%" in got.headline
+        assert got.detail == {"from": 0.43, "to": 0.20}
+
+    def test_it_points_at_the_control_that_answers_it(self):
+        """A caution the reader cannot act on is just an apology."""
+        got = self._warnings(0.43, 0.20)["capex_fade"]
+        assert "capital expenditure" in got
+
+    def test_an_ordinary_path_says_nothing(self):
+        """Coca-Cola, 3.8% to 4.3%. Nearly every company is this one."""
+        assert "capex_fade" not in self._warnings(0.038, 0.043)
+
+    def test_the_threshold_is_a_threshold(self):
+        """Exactly ten points does not warn; a shade more does.
+
+        Without this the rule could be dropped altogether and every faded
+        company would carry the caution - which is the same as none of them
+        carrying it, because nobody reads a warning that is always there.
+        """
+        assert "capex_fade" not in self._warnings(
+            0.30, 0.30 - An.CAPEX_FADE_DISCLOSE)
+        assert "capex_fade" in self._warnings(
+            0.30, 0.30 - An.CAPEX_FADE_DISCLOSE - 0.001)
+
+        # And pinned to real distances as well, because the two lines above
+        # measure the rule against its own constant: move the constant and
+        # they move with it. These say what the rule is for. Five points of
+        # revenue is a glide most companies have; fifteen is a build-out.
+        assert "capex_fade" not in self._warnings(0.20, 0.15)
+        assert "capex_fade" in self._warnings(0.35, 0.20)
+
+    def test_rising_investment_is_not_a_build_out_ending(self):
+        """Intel spends less now than its recent average. The glide runs
+        upward, and the claim the warning exists to flag is not being
+        made."""
+        assert "capex_fade" not in self._warnings(0.2288, 0.4010)
+
+    def test_a_model_with_no_capital_spending_in_it_raises_nothing(self):
+        """A dividend discount model's assumptions reach this function too,
+        and have no capital spending at all. Asking them for it must not
+        raise - a bank would stop returning a valuation."""
+        class Dividends:
+            assumptions = object()
+            wacc_inputs: dict = {}
+            capm_inputs: dict = {}
+            provenance: dict = {}
+            diagnostics: dict = {}
+
+        got = {w.kind
+               for w in An.input_source_warnings(Dividends(), dcf=False)}
+        assert "capex_fade" not in got

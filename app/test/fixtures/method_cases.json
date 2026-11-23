@@ -10,22 +10,35 @@
         "ticker": "JPM",
         "company_name": "JPMorgan Chase & Co.",
         "sector": "Financial Services",
-        "exchange": "NYSE"
+        "exchange": "NYSE",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
       "suitable": true,
-      "intrinsic_value_per_share": 98.27012103683127,
-      "current_price": 348.92,
-      "upside_downside": -0.7183591624531949,
-      "note": "$98.27 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 10.70% (with an equity risk premium of 5.50%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "intrinsic_value_per_share": 128.14425653347948,
+      "current_price": 310.53,
+      "upside_downside": -0.5873369512334412,
+      "snapshot": {
+        "currency": "USD",
+        "market_cap": 824646434816.0,
+        "pe_ratio": 15.51098901098901,
+        "pb_ratio": 2.4084792469939513,
+        "dividend_yield": 0.02016015506537595,
+        "revenue_ttm": 181847000000.0,
+        "net_margin": 0.3061969677806068,
+        "eps": 20.02,
+        "current_ratio": null
+      },
+      "note": "$128.14 is the output of these assumptions, not a fact about JPMorgan Chase & Co. It assumes a cost of equity of 9.45% (with an equity risk premium of 4.41%) and dividends growing 9.04% a year for 5 years, then 2.50% a year in perpetuity. The equity risk premium is Damodaran's implied premium for November 2026, not a survey average, and a different but defensible one moves the figure. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
       "why_not_dcf": "JPMorgan Chase & Co. is in the Financial Services sector. For banks and insurers, borrowing is an input to operations rather than financing, so unlevered free cash flow and an enterprise-to-equity bridge are not meaningful. A dividend discount or excess-return model is the appropriate tool.",
       "dividend_base": {
-        "current_annual_dividend": 6.0,
-        "detail": "Based on the latest regular dividend of $1.50, paid on 6 July 2026, which the company pays 4 times a year (quarterly).",
-        "last_regular_payment": 1.5,
-        "last_regular_payment_date": "2026-07-06",
+        "current_annual_dividend": 6.6,
+        "detail": "Based on the latest regular dividend of $1.65, paid on 6 October 2026, which the company pays 4 times a year (quarterly).",
+        "last_regular_payment": 1.65,
+        "last_regular_payment_date": "2026-10-06",
         "payments_per_year": 4,
-        "trailing_twelve_months": 6.0,
-        "dividend_yield": 0.017195918835263096,
+        "trailing_twelve_months": 6.15,
+        "dividend_yield": 0.021253985122210415,
         "payout_ratio": 0.2818886097152429,
         "return_on_equity": 0.16894174410419488,
         "sustainable_growth": 0.12131899073579505,
@@ -68,106 +81,146 @@
           }
         ],
         "special_dividends_excluded": [],
-        "regular_annual_dividend": 6.0,
+        "regular_annual_dividend": 6.6,
         "variable_annual_dividend": null,
         "variable_average_years": null,
         "variable_dividends_included": []
       },
       "valuation": {
-        "pv_dividends_sum": 28.681849235955095,
-        "terminal_value": 115.66821999613691,
-        "pv_terminal_value": 69.58827180087617,
-        "tv_pct_of_value": 0.7081325540933724
+        "pv_dividends_sum": 32.63226592339693,
+        "terminal_value": 150.0270895047259,
+        "pv_terminal_value": 95.51199061008255,
+        "tv_pct_of_value": 0.7453474169958504
       },
       "assumptions": [
         {
           "name": "cost_of_equity",
-          "value": 0.10696936029893647,
+          "value": 0.09451661219603588,
           "source": "derived",
-          "detail": "CAPM: 5.01% + 1.03x5.50%",
-          "is_percent": true
+          "detail": "CAPM: 4.92% + 1.03x4.41%",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "dividend_growth",
           "value": 0.0904307661344419,
           "source": "derived",
           "detail": "5-year dividend-per-share CAGR, 2020-2025 ($3.60 -> $5.55); within sustainable growth of 12.1%",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
           "value": 0.025,
           "source": "default",
-          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
-          "is_percent": true
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "high_growth_years",
           "value": 5.0,
           "source": "default",
-          "detail": "modelling convention, matching the DCF's forecast horizon",
-          "is_percent": false
+          "detail": "modelling convention; this model's own, not the DCF's - see DDM_HIGH_GROWTH_YEARS",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "global_levers": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0492,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
           "value": 0.025,
           "source": "default",
-          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
-          "is_percent": true
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "cost_of_equity_build_up": {
-        "risk_free_rate": 0.050060000419616696,
-        "equity_risk_premium": 0.055,
-        "beta": 1.0347156341694503,
-        "cost_of_equity": 0.10696936029893647
+        "risk_free_rate": 0.0492,
+        "equity_risk_premium": 0.0441,
+        "beta": 1.027587578141403,
+        "cost_of_equity": 0.09451661219603588
       },
       "cost_of_equity_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0492,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "beta",
-          "value": 1.0347156341694503,
+          "value": 1.027587578141403,
           "source": "derived",
-          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
-          "is_percent": false
+          "detail": "Blume-adjusted from raw 1.04; computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "sensitivity": {
         "costs_of_equity": [
-          0.0969693603,
-          0.1019693603,
-          0.1069693603,
-          0.1119693603,
-          0.1169693603
+          0.0845166122,
+          0.0895166122,
+          0.0945166122,
+          0.0995166122,
+          0.1045166122
         ],
         "growth_rates": [
           0.015,
@@ -178,42 +231,42 @@
         ],
         "grid": [
           [
-            101.57583907952284,
-            106.6383307853384,
-            112.40424568189967,
-            119.03113862435121,
-            126.72741374379635
+            132.56561465376114,
+            140.76534241694551,
+            150.3427910315167,
+            161.67703417679633,
+            175.30025523104516
           ],
           [
-            95.50520968059043,
-            99.90483647432609,
-            104.87607082418374,
-            110.53804833601136,
-            117.04548375373263
+            123.36035746567197,
+            130.33026947067432,
+            138.3805097457656,
+            147.78335393722887,
+            158.91096491298308
           ],
           [
-            90.09856769006265,
-            93.9494468851798,
-            98.27012103551232,
-            103.15214507020039,
-            108.71251667034376
+            115.31804139664186,
+            121.30083501012999,
+            128.14425652594966,
+            136.04840043286532,
+            145.28060109817886
           ],
           [
-            85.25311511864372,
-            88.64516912376196,
-            92.42725175429695,
-            96.6707363790274,
-            101.4655422838349
+            108.23214960323527,
+            113.41176236071749,
+            119.28647015869619,
+            126.00625765950582,
+            133.76760442259945
           ],
           [
-            80.88621885830435,
-            83.89120498471671,
-            87.22292885472217,
-            90.93774440880036,
-            95.10575558871756
+            101.94230890673045,
+            106.46055306334527,
+            111.54701108516481,
+            117.31606294366708,
+            123.91499584440203
           ]
         ],
-        "centre_cost_of_equity": 0.1069693603,
+        "centre_cost_of_equity": 0.0945166122,
         "centre_terminal_growth": 0.025,
         "centre_row": 2,
         "centre_col": 2
@@ -221,37 +274,49 @@
       "projection": [
         {
           "period": 1,
-          "dividend": 6.542584596806652,
-          "discount_factor": 0.9033673702856152,
-          "pv_dividend": 5.910357442088397
+          "dividend": 7.1968430564873165,
+          "discount_factor": 0.9136453379118679,
+          "pv_dividend": 6.575362106243034
         },
         {
           "period": 2,
-          "dividend": 7.134235534395276,
-          "discount_factor": 0.8160726056967479,
-          "pv_dividend": 5.822054182208284
+          "dividend": 7.847659087834803,
+          "discount_factor": 0.8347478034880912,
+          "pv_dividend": 6.550816186093459
         },
         {
           "period": 3,
-          "dividend": 7.7793899195542,
-          "discount_factor": 0.7372133637704008,
-          "pv_dividend": 5.735070210676099
+          "dividend": 8.55732891150962,
+          "discount_factor": 0.7626634389890664,
+          "pv_dividend": 6.526361896212491
         },
         {
           "period": 4,
-          "dividend": 8.482886110038041,
-          "discount_factor": 0.6659744977686797,
-          "pv_dividend": 5.649385816761494
+          "dividend": 9.331174721041844,
+          "discount_factor": 0.6968038954281928,
+          "pv_dividend": 6.5019988945430365
         },
         {
           "period": 5,
-          "dividend": 9.249999999999996,
-          "discount_factor": 0.6016196307265754,
-          "pv_dividend": 5.564981584220821
+          "dividend": 10.174999999999995,
+          "discount_factor": 0.636631630496797,
+          "pv_dividend": 6.477726840304907
         }
       ],
       "warnings": [
         "JPMorgan Chase & Co. returned $34.6bn through share buybacks against $16.6bn in dividends in its 2025 financial year. A dividend discount model counts only dividends, so it does not see most of the cash this company returns to shareholders and is likely to understate its value on that basis."
+      ],
+      "warning_items": [
+        {
+          "text": "JPMorgan Chase & Co. returned $34.6bn through share buybacks against $16.6bn in dividends in its 2025 financial year. A dividend discount model counts only dividends, so it does not see most of the cash this company returns to shareholders and is likely to understate its value on that basis.",
+          "severity": "serious",
+          "kind": "dividends_only",
+          "headline": "This model counts dividends only, and this company returns $34.6bn through buybacks against $16.6bn of dividends. It is likely to understate.",
+          "detail": {
+            "buybacks": 34591000000.0,
+            "dividends": 16625000000.0
+          }
+        }
       ]
     }
   },
@@ -266,13 +331,26 @@
         "ticker": "TRV",
         "company_name": "The Travelers Companies, Inc.",
         "sector": "Financial Services",
-        "exchange": "NYSE"
+        "exchange": "NYSE",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
       "suitable": true,
-      "intrinsic_value_per_share": 121.41902161479248,
-      "current_price": 378.92,
-      "upside_downside": -0.6795655504729429,
-      "note": "$121.42 is the output of these assumptions, not a fact about The Travelers Companies, Inc. It assumes a cost of equity of 7.26% (with an equity risk premium of 5.50%) and dividends growing 5.24% a year for 5 years, then 2.50% a year in perpetuity; the equity risk premium in particular has no single correct value. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "intrinsic_value_per_share": 116.35948413771675,
+      "current_price": 393.24,
+      "upside_downside": -0.704100589620291,
+      "snapshot": {
+        "currency": "USD",
+        "market_cap": 80593100800.0,
+        "pe_ratio": 14.336128326649654,
+        "pb_ratio": 2.4500851462272757,
+        "dividend_yield": 0.012147441782014174,
+        "revenue_ttm": 48828000000.0,
+        "net_margin": 0.1278364872614074,
+        "eps": 27.43,
+        "current_ratio": null
+      },
+      "note": "$116.36 is the output of these assumptions, not a fact about The Travelers Companies, Inc. It assumes a cost of equity of 7.47% (with an equity risk premium of 4.41%) and dividends growing 5.24% a year for 5 years, then 2.50% a year in perpetuity. The equity risk premium is Damodaran's implied premium for November 2026, not a survey average, and a different but defensible one moves the figure. It values only the dividends paid, so cash returned through share buybacks is not counted. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
       "why_not_dcf": "The Travelers Companies, Inc. is in the Financial Services sector. For banks and insurers, borrowing is an input to operations rather than financing, so unlevered free cash flow and an enterprise-to-equity bridge are not meaningful. A dividend discount or excess-return model is the appropriate tool.",
       "dividend_base": {
         "current_annual_dividend": 5.0,
@@ -281,7 +359,7 @@
         "last_regular_payment_date": "2026-09-10",
         "payments_per_year": 4,
         "trailing_twelve_months": 4.7,
-        "dividend_yield": 0.013195397445371054,
+        "dividend_yield": 0.012714881497304445,
         "payout_ratio": 0.19169522273735135,
         "return_on_equity": 0.1879700672539547,
         "sustainable_growth": 0.15193710334375293,
@@ -330,100 +408,140 @@
         "variable_dividends_included": []
       },
       "valuation": {
-        "pv_dividends_sum": 23.61863068308431,
-        "terminal_value": 138.86898197450344,
-        "pv_terminal_value": 97.80039093170818,
-        "tv_pct_of_value": 0.805478331409921
+        "pv_dividends_sum": 23.485510424405348,
+        "terminal_value": 133.13897683741655,
+        "pv_terminal_value": 92.8739737133114,
+        "tv_pct_of_value": 0.7981641926445018
       },
       "assumptions": [
         {
           "name": "cost_of_equity",
-          "value": 0.07263739165525562,
+          "value": 0.07468759893028497,
           "source": "derived",
-          "detail": "CAPM: 5.01% + 0.41x5.50%",
-          "is_percent": true
+          "detail": "CAPM: 4.92% + 0.578x4.41%",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "dividend_growth",
           "value": 0.05237826812572166,
           "source": "derived",
           "detail": "5-year dividend-per-share CAGR, 2020-2025 ($3.37 -> $4.35); within sustainable growth of 15.2%",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
           "value": 0.025,
           "source": "default",
-          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
-          "is_percent": true
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "high_growth_years",
           "value": 5.0,
           "source": "default",
-          "detail": "modelling convention, matching the DCF's forecast horizon",
-          "is_percent": false
+          "detail": "modelling convention; this model's own, not the DCF's - see DDM_HIGH_GROWTH_YEARS",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "global_levers": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0492,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
           "value": 0.025,
           "source": "default",
-          "detail": "global default (~long-run nominal GDP growth), shared with the DCF",
-          "is_percent": true
+          "detail": "conservative long-run default; adjustable",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "cost_of_equity_build_up": {
-        "risk_free_rate": 0.050060000419616696,
-        "equity_risk_premium": 0.055,
-        "beta": 0.4104980224661624,
-        "cost_of_equity": 0.07263739165525562
+        "risk_free_rate": 0.0492,
+        "equity_risk_premium": 0.0441,
+        "beta": 0.5779500891221082,
+        "cost_of_equity": 0.07468759893028497
       },
       "cost_of_equity_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0492,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "beta",
-          "value": 0.4104980224661624,
+          "value": 0.5779500891221082,
           "source": "derived",
-          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
-          "is_percent": false
+          "detail": "Blume-adjusted from raw 0.37; computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "sensitivity": {
         "costs_of_equity": [
-          0.0626373917,
-          0.0676373917,
-          0.0726373917,
-          0.0776373917,
-          0.0826373917
+          0.0646875989,
+          0.0696875989,
+          0.0746875989,
+          0.0796875989,
+          0.0846875989
         ],
         "growth_rates": [
           0.015,
@@ -434,42 +552,42 @@
         ],
         "grid": [
           [
-            125.77487167211746,
-            138.23493892586328,
-            154.00556163814417,
-            174.60825636685433,
-            202.6655962199486
+            120.51493453482979,
+            131.8252717017019,
+            145.9854505018183,
+            164.2278313710195,
+            188.61499374668375
           ],
           [
-            113.66681099786058,
-            123.57198084639435,
-            135.80026884395267,
-            151.27753012186668,
-            171.49697834295915
+            109.34288772555504,
+            118.41345930082794,
+            129.51380463851993,
+            143.41108041427177,
+            161.31476661232347
           ],
           [
-            103.66219554600029,
-            111.6972524321973,
-            121.41902149961491,
-            133.4208946446508,
-            148.6115841775757
+            100.0451899424873,
+            107.4565421153227,
+            116.35948420936788,
+            127.25468865654771,
+            140.89513462731583
           ],
           [
-            95.25724538512604,
-            101.88506641116999,
-            109.77203436907905,
-            119.31462780866394,
-            131.09530220468426
+            92.18715242832108,
+            98.3375299217388,
+            105.61254583723534,
+            114.35171298494139,
+            125.04649362785045
           ],
           [
-            88.09714714430092,
-            93.64144761122478,
-            100.14767579614488,
-            107.88995082434354,
-            117.25747751975274
+            85.45884154259123,
+            90.6301939322363,
+            96.66794947512413,
+            103.80974974923673,
+            112.3888906138025
           ]
         ],
-        "centre_cost_of_equity": 0.0726373917,
+        "centre_cost_of_equity": 0.0746875989,
         "centre_terminal_growth": 0.025,
         "centre_row": 2,
         "centre_col": 2
@@ -478,36 +596,48 @@
         {
           "period": 1,
           "dividend": 5.261891340628608,
-          "discount_factor": 0.9322815033110451,
-          "pv_dividend": 4.9055639693006095
+          "discount_factor": 0.9305029675557558,
+          "pv_dividend": 4.896205507410854
         },
         {
           "period": 2,
           "dividend": 5.537500096116466,
-          "discount_factor": 0.8691488014159021,
-          "pv_dividend": 4.812911571380069
+          "discount_factor": 0.8658357726300681,
+          "pv_dividend": 4.794565674160077
         },
         {
           "period": 3,
           "dividend": 5.827544760897064,
-          "discount_factor": 0.8102913511850104,
-          "pv_dividend": 4.72200911839841
+          "discount_factor": 0.805662755848209,
+          "pv_dividend": 4.695035771893121
         },
         {
           "period": 4,
           "dividend": 6.132781462897975,
-          "discount_factor": 0.7554196390026994,
-          "pv_dividend": 4.6328235587848345
+          "discount_factor": 0.7496715851659068,
+          "pv_dividend": 4.597572000766814
         },
         {
           "period": 5,
           "dividend": 6.454005934718101,
-          "discount_factor": 0.7042637566801236,
-          "pv_dividend": 4.545322465220383
+          "discount_factor": 0.6975716346891039,
+          "pv_dividend": 4.502131470174484
         }
       ],
       "warnings": [
         "The Travelers Companies, Inc. returned $3.1bn through share buybacks against $1.0bn in dividends in its 2025 financial year. A dividend discount model counts only dividends, so it does not see most of the cash this company returns to shareholders and is likely to understate its value on that basis."
+      ],
+      "warning_items": [
+        {
+          "text": "The Travelers Companies, Inc. returned $3.1bn through share buybacks against $1.0bn in dividends in its 2025 financial year. A dividend discount model counts only dividends, so it does not see most of the cash this company returns to shareholders and is likely to understate its value on that basis.",
+          "severity": "serious",
+          "kind": "dividends_only",
+          "headline": "This model counts dividends only, and this company returns $3.1bn through buybacks against $1.0bn of dividends. It is likely to understate.",
+          "detail": {
+            "buybacks": 3131000000.0,
+            "dividends": 979000000.0
+          }
+        }
       ]
     }
   },
@@ -522,294 +652,579 @@
         "ticker": "AAPL",
         "company_name": "Apple Inc.",
         "sector": "Technology",
-        "exchange": "NasdaqGS"
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
       "suitable": true,
-      "intrinsic_value_per_share": 91.98353550900097,
-      "current_price": 332.41,
-      "upside_downside": -0.7232828870701815,
-      "note": "$91.98 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 10.76%, an equity risk premium of 5.50%, and 2.50% growth in perpetuity; the equity risk premium in particular has no single correct value. Move any of them and the figure moves materially - the sensitivity table shows by how much.",
+      "intrinsic_value_per_share": 199.45202438267285,
+      "current_price": 342.56,
+      "upside_downside": -0.41776032116221146,
+      "note": "$199.45 is the output of these assumptions, not a fact about Apple Inc. It assumes a WACC of 9.28%, an equity risk premium of 4.41%, and 4.00% growth in perpetuity. The equity risk premium is Damodaran's implied premium, computed from what the S&P 500 costs today against the cash flows it is expected to produce (November 2026); a different but defensible premium moves the figure materially, and the sensitivity table shows by how much. The growth in perpetuity defaults to the lowest of the risk-free rate, long-run US nominal growth and the discount rate less three points, and that is as high as it can be set: it can be moved down but not up.",
+      "fx_clause": null,
       "base_year": {
-        "revenue": 416161.0,
-        "total_debt": 98657.0,
-        "cash": 132420.0,
-        "shares": 15004.697,
-        "current_price": 332.41,
-        "fiscal_year": "2025"
+        "revenue": 478834.0,
+        "total_debt": 80111.0,
+        "cash": 136935.0,
+        "shares": 14778.629,
+        "current_price": 342.56,
+        "fiscal_year": "2026",
+        "base_label": "TTM as of 2026-09-30",
+        "base_period": "ttm",
+        "period_end": "2026-09-30",
+        "base_capex": 9041.0,
+        "base_notes": [],
+        "minority_interest": 0.0
       },
       "valuation": {
-        "pv_ufcf_sum": 436819.29451626295,
-        "terminal_value": 1516216.862577705,
-        "pv_terminal_value": 909602.7847850376,
-        "enterprise_value": 1346422.0793013005,
-        "equity_value": 1380185.0793013005,
-        "tv_pct_of_ev": 0.6755703124365416
+        "pv_ufcf_sum": 1260588.451130773,
+        "terminal_value": 3961032.660024132,
+        "pv_terminal_value": 1630215.0205197032,
+        "enterprise_value": 2890803.471650476,
+        "equity_value": 2947627.471650476,
+        "tv_pct_of_ev": 0.5639314593699958
       },
       "assumptions": [
         {
           "name": "revenue_growth",
-          "value": 0.01812535743479393,
+          "value": 0.07701326503022221,
           "source": "derived",
-          "detail": "3-year revenue CAGR, FY2022-FY2025 (394.3bn -> 416.2bn)",
-          "is_percent": true
+          "detail": "3-year revenue CAGR, FY2023-FY2026 (383.3bn -> 478.8bn)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "operating_margin",
-          "value": 0.31510222870075566,
+          "value": 0.3300997840587761,
           "source": "derived",
-          "detail": "median operatingIncome / revenue over 3 years",
-          "is_percent": true
+          "detail": "the latest year's 33.0%; the margin has moved one way for 4 years (improving) rather than spiking, so the level reached is used",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "tax_rate",
-          "value": 0.15610002335586043,
+          "value": 0.169947939235228,
           "source": "derived",
           "detail": "median effective rate over 3 profitable year(s)",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "da_pct",
-          "value": 0.029268479803598143,
+          "value": 0.028109313462818475,
           "source": "derived",
           "detail": "median D&A / revenue over 3 years",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_terminal_pct",
+          "value": 0.024531108139415735,
+          "source": "derived",
+          "detail": "mean capex / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "capex_pct",
-          "value": 0.02859230076835775,
+          "value": 0.01888128244861476,
           "source": "derived",
-          "detail": "median capex / revenue over 3 years",
-          "is_percent": true
+          "detail": "capex / revenue, trailing twelve months; fades from 1.9% (current) to 2.5% (3-yr mean) over the forecast",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "nwc_pct",
-          "value": -0.1,
-          "source": "derived (clamped)",
-          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025; raw -28.7% clamped to [-10%, 30%]",
-          "is_percent": true
+          "value": -0.12447757140612517,
+          "source": "derived",
+          "detail": "median working capital as a share of revenue across FY2023-FY2026 (4 years)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "wacc",
-          "value": 0.10759735053789304,
+          "value": 0.09283942293697969,
           "source": "derived",
-          "detail": "CAPM: 5.01% + 1.08x5.50% = 10.93% equity; debt 2.92% (2.47% after tax); weights 98.0%E / 2.0%D",
-          "is_percent": true
+          "detail": "CAPM: 4.92% + 1.01x4.41% = 9.39% equity; debt 3.54% (2.94% after tax); weights 98.4%E / 1.6%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
-          "value": 0.025,
-          "source": "default",
-          "detail": "global default (~long-run nominal GDP growth)",
-          "is_percent": true
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "projection_years",
-          "value": 5.0,
+          "value": 10.0,
           "source": "default",
-          "detail": "modelling convention",
-          "is_percent": false
+          "detail": "10 years, for every company: a shorter forecast only moves value into the perpetuity",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "years_two_to_five_growth",
+          "value": 0.07701326503022221,
+          "source": "derived",
+          "detail": "the 3-year rate, held for years two to five",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "year_one_growth",
+          "value": 0.1505979656911629,
+          "source": "derived",
+          "detail": "the latest financial year's own growth",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_enabled",
+          "value": 0.0,
+          "source": "default",
+          "detail": "replaced by the three-phase growth path",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_start_year",
+          "value": 3.0,
+          "source": "default",
+          "detail": "unused while the fade is off",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "marginal_tax_rate",
+          "value": 0.25,
+          "source": "default",
+          "detail": "the US marginal rate, reached by year 10; the effective 17.0% is what was paid, and the reasons it sits below the statutory rate expire",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "terminal_roic",
+          "value": 0.25,
+          "source": "derived (clamped)",
+          "detail": "halfway from the 96.8% it earns now to its 9.3% cost of capital, capped at 25%: a perpetual return far above the cost of capital is a claim that an advantage never erodes",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "da_terminal_pct",
+          "value": 0.020469285475988048,
+          "source": "derived",
+          "detail": "83% of the 2.5% invested, which is what Computers/Peripherals companies cover out of depreciation (Damodaran); the 0.4% gap is net investment, and it does not go away",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "global_levers": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0492,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
-          "value": 0.025,
-          "source": "default",
-          "detail": "global default (~long-run nominal GDP growth)",
-          "is_percent": true
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "wacc_build_up": {
         "cost_of_debt_by_year": [
           [
             "2023",
-            0.0340288202390583
-          ],
-          [
-            "2022",
-            0.024410963695874872
+            0.035404364107734405
           ]
         ],
-        "risk_free_rate": 0.050060000419616696,
-        "equity_risk_premium": 0.055,
-        "beta": 1.0768004457809686,
-        "cost_of_equity": 0.10928402493756997,
-        "cost_of_debt": 0.029219891967466587,
-        "after_tax_cost_of_debt": 0.024658666148889334,
-        "tax_rate": 0.15610002335586043,
-        "equity_value": 4851251544064.0,
-        "debt_value": 98657000000.0,
-        "weight_equity": 0.9800689246838084,
-        "weight_debt": 0.01993107531619162,
-        "wacc": 0.10759735053789304
+        "risk_free_rate": 0.0492,
+        "equity_risk_premium": 0.0441,
+        "beta": 1.012710345742786,
+        "cost_of_equity": 0.09386052624725685,
+        "cost_of_debt": 0.035404364107734405,
+        "after_tax_cost_of_debt": 0.029387465387691273,
+        "tax_rate": 0.169947939235228,
+        "equity_value": 4978144444416.0,
+        "debt_value": 80111000000.0,
+        "weight_equity": 0.9841623261457787,
+        "weight_debt": 0.015837673854221336,
+        "wacc": 0.09283942293697969
       },
       "wacc_inputs": [
         {
           "name": "risk_free_rate",
-          "value": 0.050060000419616696,
+          "value": 0.0492,
           "source": "derived",
-          "detail": "US Treasury 10-year (^TNX) as of 2026-09-16",
-          "is_percent": true
+          "detail": "US Treasury 10-year par yield as of 2026-11-20 (Daily Treasury Par Yield Curve Rates)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "equity_risk_premium",
-          "value": 0.055,
-          "source": "default",
-          "detail": "global default (developed-market survey estimates cluster 4.5-6%)",
-          "is_percent": true
+          "value": 0.0441,
+          "source": "published",
+          "detail": "Damodaran implied ERP, November 2026",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": "November 2026",
+          "is_stale": false
         },
         {
           "name": "beta",
-          "value": 1.0768004457809686,
+          "value": 1.012710345742786,
           "source": "derived",
-          "detail": "computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
-          "is_percent": false
+          "detail": "Blume-adjusted from raw 1.02; computed from 59 monthly returns vs ^GSPC (5y), the convention market data providers use",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "cost_of_debt",
-          "value": 0.029219891967466587,
+          "value": 0.035404364107734405,
           "source": "derived",
-          "detail": "median interest expense / average debt (FY2023, FY2022)",
-          "is_percent": true
+          "detail": "median interest expense / average debt (FY2023)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
       "sensitivity": {
         "waccs": [
-          0.0975973505,
-          0.1025973505,
-          0.1075973505,
-          0.1125973505,
-          0.1175973505
+          0.0828394229,
+          0.0878394229,
+          0.09283942293697969,
+          0.0978394229,
+          0.1028394229
         ],
         "growth_rates": [
-          0.015,
-          0.02,
-          0.025,
           0.03,
-          0.035
+          0.035,
+          0.04,
+          0.045,
+          0.05
         ],
         "grid": [
           [
-            94.93687571719747,
-            99.31372043248615,
-            104.29345832295878,
-            110.00987270350666,
-            116.63949097126182
+            214.60806506149544,
+            227.14957411157647,
+            242.45973446824289,
+            261.632237335387,
+            286.4267919815775
           ],
           [
-            89.63678068301134,
-            93.44411911652656,
-            97.742110698504,
-            102.63213374614459,
-            108.24556133722808
+            196.96207900752046,
+            206.882418377065,
+            218.74045951381856,
+            233.21144320920232,
+            251.3274533965487
           ],
           [
-            84.90922640886528,
-            88.2444824887616,
-            91.98353555000256,
-            96.20444179787276,
-            101.00676130928487
+            182.09178720642458,
+            190.07528475311577,
+            199.45202438267285,
+            210.65608813084776,
+            224.32416712427892
           ],
           [
-            80.66621404463748,
-            83.60628406975705,
-            86.88198867838146,
-            90.55428041586596,
-            94.69982178285738
+            169.38516158576365,
+            175.90449363934377,
+            183.44822073847814,
+            192.30475307105442,
+            202.88303547510247
           ],
           [
-            76.83689904959148,
-            79.44323695692373,
-            82.33104489479774,
-            85.54852124403246,
-            89.15553506992445
+            158.3981287404456,
+            163.78907639812917,
+            169.9474922362671,
+            177.0703204099012,
+            185.42901519224262
           ]
         ],
-        "centre_wacc": 0.1075973505,
-        "centre_terminal_growth": 0.025,
+        "centre_wacc": 0.09283942293697969,
+        "centre_terminal_growth": 0.04,
         "centre_row": 2,
         "centre_col": 2
       },
       "projection": [
         {
           "period": 1,
-          "revenue": 423704.06687542127,
-          "ebit": 133510.09578201926,
-          "nopat": 112669.16671220289,
-          "da": 12401.173924045665,
-          "capex": 12114.67411687841,
-          "delta_nwc": -754.3066875421268,
-          "ufcf": 113709.97320691227,
-          "discount_factor": 0.9028551752262322,
-          "pv_ufcf": 102663.63778469694
+          "revenue": 550945.4263037622,
+          "revenue_growth": 0.1505979656911629,
+          "ebit": 181866.96625104226,
+          "nopat": 150959.05012171488,
+          "da": 15486.697688878608,
+          "capex": 10402.556207813803,
+          "capex_pct": 0.01888128244861476,
+          "delta_nwc": -8976.255216924097,
+          "ufcf": 165019.44681970376,
+          "discount_factor": 0.9150475165990296,
+          "pv_ufcf": 151000.63500291557
         },
         {
           "period": 2,
-          "revenue": 431383.8545341141,
-          "ebit": 135930.01398922194,
-          "nopat": 114711.33563074196,
-          "da": 12625.94963403004,
-          "capex": 12334.25691545288,
-          "delta_nwc": -767.9787658692862,
-          "ufcf": 115771.0071151884,
-          "discount_factor": 0.8151474674327904,
-          "pv_ufcf": 94370.44325208939
+          "revenue": 593375.5324368826,
+          "revenue_growth": 0.07701326503022221,
+          "ebit": 195873.13512317624,
+          "nopat": 160842.67188910831,
+          "da": 16175.667100822015,
+          "capex": 11576.18750686624,
+          "capex_pct": 0.019509040858703756,
+          "delta_nwc": -5281.59656595496,
+          "ufcf": 170723.74804901908,
+          "discount_factor": 0.8373119576340515,
+          "pv_ufcf": 142949.03569354676
         },
         {
           "period": 3,
-          "revenue": 439202.8410891441,
-          "ebit": 138393.79407889314,
-          "nopat": 116790.51959087179,
-          "da": 12854.799484100538,
-          "capex": 12557.819730738041,
-          "delta_nwc": -781.8986555029987,
-          "ufcf": 117869.39799973728,
-          "discount_factor": 0.7359601095442514,
-          "pv_ufcf": 86747.17506380161
+          "revenue": 639073.3195788935,
+          "revenue_growth": 0.07701326503022221,
+          "ebit": 210957.96479071796,
+          "nopat": 171353.28900566895,
+          "da": 16878.903810829444,
+          "capex": 12868.891154401219,
+          "capex_pct": 0.020136799268792752,
+          "delta_nwc": -5688.349562071567,
+          "ufcf": 181051.65122416875,
+          "discount_factor": 0.7661802274517107,
+          "pv_ufcf": 138718.1953154414
         },
         {
           "period": 4,
-          "revenue": 447163.54957026185,
-          "ebit": 140902.23106333034,
-          "nopat": 118907.38950345163,
-          "da": 13087.797319502466,
-          "capex": 12785.434701959377,
-          "delta_nwc": -796.0708481117734,
-          "ufcf": 120005.8229691065,
-          "discount_factor": 0.6644653936620921,
-          "pv_ufcf": 79739.7164009107
+          "revenue": 688290.4425133667,
+          "revenue_growth": 0.07701326503022221,
+          "ebit": 227204.5264433818,
+          "nopat": 182528.85520378756,
+          "da": 17594.519054113593,
+          "capex": 14292.046593391848,
+          "capex_pct": 0.020764557678881752,
+          "delta_nwc": -6126.42793447993,
+          "ufcf": 191957.75559898923,
+          "discount_factor": 0.7010913143969677,
+          "pv_ufcf": 134579.91518158725
         },
         {
           "period": 5,
-          "revenue": 455268.54873803403,
-          "ebit": 143456.13436471313,
-          "nopat": 121062.62843983996,
-          "da": 13325.018323952587,
-          "capex": 13017.175275891608,
-          "delta_nwc": -810.4999167772185,
-          "ufcf": 122180.97140467816,
-          "discount_factor": 0.5999160194265556,
-          "pv_ufcf": 73298.32201476433
+          "revenue": 741297.9367804176,
+          "revenue_growth": 0.07701326503022221,
+          "ebit": 244702.2888544321,
+          "nopat": 194409.45136118727,
+          "da": 18320.248526042666,
+          "capex": 15858.079779708549,
+          "capex_pct": 0.02139231608897075,
+          "delta_nwc": -6598.244152686596,
+          "ufcf": 203469.86426020798,
+          "discount_factor": 0.6415318661480948,
+          "pv_ufcf": 130532.40172375075
+        },
+        {
+          "period": 6,
+          "revenue": 792900.1398519627,
+          "revenue_growth": 0.06961061202417777,
+          "ebit": 261736.16494530626,
+          "nopat": 205614.35454477527,
+          "da": 18922.445654016563,
+          "capex": 17459.720149855108,
+          "capex_pct": 0.022020074499059746,
+          "delta_nwc": -6423.316917551628,
+          "ufcf": 213500.39696648836,
+          "discount_factor": 0.5870321409379552,
+          "pv_ufcf": 125331.59512234098
+        },
+        {
+          "period": 7,
+          "revenue": 842224.8392573457,
+          "revenue_growth": 0.06220795901813333,
+          "ebit": 278018.23756778723,
+          "nopat": 215932.32245833753,
+          "da": 19384.61445077005,
+          "capex": 19074.56743143502,
+          "capex_pct": 0.022647832909148742,
+          "delta_nwc": -6139.818792319218,
+          "ufcf": 222382.18826999178,
+          "discount_factor": 0.5371623027290875,
+          "pv_ufcf": 119455.32833704226
+        },
+        {
+          "period": 8,
+          "revenue": 888383.2293038269,
+          "revenue_growth": 0.054805306012088884,
+          "ebit": 293255.11215463147,
+          "nopat": 225158.15101770306,
+          "da": 19692.852762680635,
+          "capex": 20677.644980140543,
+          "capex_pct": 0.02327559131923774,
+          "delta_nwc": -5745.6842930026505,
+          "ufcf": 229919.0430932458,
+          "discount_factor": 0.49152903112286767,
+          "pv_ufcf": 113011.88448831996
+        },
+        {
+          "period": 9,
+          "revenue": 930494.9512589055,
+          "revenue_growth": 0.047402653006044446,
+          "ebit": 307156.1824783461,
+          "nopat": 233099.1907903187,
+          "da": 19836.456510086613,
+          "capex": 22241.946241314454,
+          "capex_pct": 0.02390334972932674,
+          "delta_nwc": -5241.964876698178,
+          "ufcf": 235935.66593578903,
+          "discount_factor": 0.4497724192653072,
+          "pv_ufcf": 106117.35525891116
+        },
+        {
+          "period": 10,
+          "revenue": 967714.7493092617,
+          "revenue_growth": 0.04,
+          "ebit": 319442.4297774799,
+          "nopat": 239581.8223331099,
+          "da": 19808.429462935484,
+          "capex": 23739.115163413087,
+          "capex_pct": 0.024531108139415735,
+          "delta_nwc": -4633.030069534774,
+          "ufcf": 240284.1667021671,
+          "discount_factor": 0.41156313528345695,
+          "pv_ufcf": 98892.10500691672
         }
       ],
+      "capital_returns": {
+        "roic": 0.6935257449966272,
+        "wacc": 0.09283942293697969,
+        "spread": 0.6006863220596476,
+        "verdict": "above",
+        "reads_as": "earns more on the capital in the business than that capital costs",
+        "detail": "median of 3 year(s): operating profit after tax at 17.0%, over total assets less non-debt current liabilities and cash"
+      },
+      "snapshot": {
+        "currency": "USD",
+        "market_cap": 4978144444416.0,
+        "pe_ratio": 38.14699331848552,
+        "pb_ratio": 44.4108413943422,
+        "dividend_yield": 0.0031580039863315524,
+        "revenue_ttm": 478834000000.0,
+        "net_margin": 0.27603511864236874,
+        "eps": 8.98,
+        "current_ratio": 1.0231998352117235
+      },
+      "growth_cost_note": null,
+      "growth_path": [
+        0.1505979656911629,
+        0.07701326503022221,
+        0.07701326503022221,
+        0.07701326503022221,
+        0.07701326503022221,
+        0.06961061202417777,
+        0.06220795901813333,
+        0.054805306012088884,
+        0.047402653006044446,
+        0.04
+      ],
+      "reference": {
+        "current_roic": 0.9683981553317943,
+        "wacc": 0.09283942293697969,
+        "terminal_net_investment": 0.03961197408705314,
+        "growth_decline_pattern": "linear",
+        "growth_decline_fell_back": false
+      },
       "warnings": [
-        "The forecast has Apple Inc. growing 1.8% a year for the next 5 years, then 2.5% a year forever after. Growing faster in the long run than in the near term is unusual, so it is worth checking whether either assumption is too low or too high.",
-        "Apple Inc.'s recent figures show it freeing up an unusually large amount of cash from stock, customer payments and supplier bills as it grew. A company can rarely keep doing that indefinitely, so the forecast assumes a more typical level to keep the estimate realistic."
-      ]
+        "The model adjusted one of the assumptions for Apple Inc. to keep it within a realistic range, because the company's recent figures were unusually extreme."
+      ],
+      "warning_items": [
+        {
+          "text": "The model adjusted one of the assumptions for Apple Inc. to keep it within a realistic range, because the company's recent figures were unusually extreme.",
+          "severity": "info",
+          "kind": "clamped",
+          "headline": "The model adjusted one of the assumptions for Apple Inc. to keep it within a realistic range, because the company's recent figures were unusually extreme.",
+          "detail": {}
+        }
+      ],
+      "method_fit_warnings": []
     }
   },
   {
@@ -824,7 +1239,9 @@
         "ticker": "RIVN",
         "company_name": "Rivian Automotive, Inc.",
         "sector": "Consumer Cyclical",
-        "exchange": "NasdaqGS"
+        "exchange": "NasdaqGS",
+        "price_as_of": "2026-11-20",
+        "price_as_of_text": "close as of 20 November 2026"
       },
       "suitable": false,
       "intrinsic_value_per_share": null,
@@ -835,69 +1252,196 @@
       "assumptions": [
         {
           "name": "revenue_growth",
-          "value": 0.15,
+          "value": 0.25,
           "source": "derived (clamped)",
-          "detail": "3-year revenue CAGR, FY2022-FY2025 (1.7bn -> 5.4bn); raw 48.1% clamped to [0%, 15%]",
-          "is_percent": true
+          "detail": "3-year revenue CAGR, FY2022-FY2025 (1.7bn -> 5.4bn); raw 48.1% clamped to [0%, 25%]",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "operating_margin",
-          "value": -0.9434607645875251,
+          "value": -0.6654909968442547,
           "source": "derived",
-          "detail": "median operatingIncome / revenue over 3 years",
-          "is_percent": true
+          "detail": "the latest year's -66.5%; the margin has moved one way for 4 years (improving) rather than spiking, so the level reached is used",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "tax_rate",
-          "value": 0.21,
-          "source": "default",
-          "detail": "no profitable year in window; used US statutory rate",
-          "is_percent": true
+          "value": 0.2563,
+          "source": "derived",
+          "detail": "normalized effective rate as published, median over 3 year(s), because no profitable year in the window",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "da_pct",
           "value": 0.20744466800804828,
           "source": "derived",
           "detail": "median D&A / revenue over 3 years",
-          "is_percent": true
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "capex_terminal_pct",
+          "value": 0.2594673640706971,
+          "source": "derived",
+          "detail": "mean capex / revenue over 3 years",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "capex_pct",
-          "value": 0.2313937753721245,
+          "value": 0.2412037037037037,
           "source": "derived",
-          "detail": "median capex / revenue over 3 years",
-          "is_percent": true
+          "detail": "capex / revenue, trailing twelve months; fades from 24.1% (current) to 25.9% (3-yr mean) over the forecast",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "nwc_pct",
-          "value": 0.2866720300348619,
+          "value": -0.02615096556693046,
           "source": "derived",
-          "detail": "aggregate change in NWC / change in revenue, FY2022-FY2025",
-          "is_percent": true
+          "detail": "median working capital as a share of revenue across FY2022-FY2025 (4 years)",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "wacc",
-          "value": 0.12221178196914914,
+          "value": 0.09872311197298189,
           "source": "derived",
-          "detail": "CAPM: 5.01% + 1.67x5.50% = 14.17% equity; debt 6.56% (5.19% after tax); weights 78.3%E / 21.7%D",
-          "is_percent": true
+          "detail": "CAPM: 4.92% + 1.45x4.41% = 11.32% equity; debt 6.84% (5.09% after tax); weights 76.8%E / 23.2%D",
+          "is_percent": true,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "terminal_growth",
-          "value": 0.025,
-          "source": "default",
-          "detail": "global default (~long-run nominal GDP growth)",
-          "is_percent": true
+          "value": 0.04,
+          "source": "derived",
+          "detail": "held at long-run US nominal growth (Fed SEP, Sep 2026: 2.0% real GDP + 2.0% PCE inflation) rather than at the 4.92% risk-free rate, because no company outgrows its own economy in perpetuity; adjustable downward to 0%",
+          "is_percent": true,
+          "min_value": 0.0,
+          "max_value": 0.04,
+          "as_of": null,
+          "is_stale": false
         },
         {
           "name": "projection_years",
-          "value": 5.0,
+          "value": 10.0,
           "source": "default",
-          "detail": "modelling convention",
-          "is_percent": false
+          "detail": "10 years, for every company: a shorter forecast only moves value into the perpetuity",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "years_two_to_five_growth",
+          "value": 0.25,
+          "source": "derived",
+          "detail": "the 3-year rate, held for years two to five",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "year_one_growth",
+          "value": 0.08390342052313882,
+          "source": "derived",
+          "detail": "the latest financial year's own growth",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_enabled",
+          "value": 0.0,
+          "source": "default",
+          "detail": "replaced by the three-phase growth path",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "fade_start_year",
+          "value": 3.0,
+          "source": "default",
+          "detail": "unused while the fade is off",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "marginal_tax_rate",
+          "value": 0.25,
+          "source": "default",
+          "detail": "the US marginal rate, reached by year 10; the effective 25.6% is what was paid, and the reasons it sits below the statutory rate expire",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "terminal_roic",
+          "value": 0.09872311197298189,
+          "source": "default",
+          "detail": "the discount rate, because the company's own return on capital could not be measured; growth then creates no value",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
+        },
+        {
+          "name": "da_terminal_pct",
+          "value": 0.1746390601760725,
+          "source": "derived",
+          "detail": "67% of the 25.9% invested, which is what Total Market companies cover out of depreciation (Damodaran); the 8.5% gap is net investment, and it does not go away",
+          "is_percent": false,
+          "min_value": null,
+          "max_value": null,
+          "as_of": null,
+          "is_stale": false
         }
       ],
-      "speculative_estimate_available": true
+      "speculative_estimate_available": true,
+      "hypothetical_available": false,
+      "hypothetical_placeholders": null,
+      "hypothetical_framing": null
     }
   }
 ]

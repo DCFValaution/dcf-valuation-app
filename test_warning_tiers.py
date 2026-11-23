@@ -183,8 +183,8 @@ def _warnings_for(tv_share, monkeypatch):
 
     real_run = A.run_dcf
 
-    def fake_run(b, a):
-        result = real_run(b, a)
+    def fake_run(b, a, **kwargs):
+        result = real_run(b, a, **kwargs)
         object.__setattr__(result, "tv_pct_of_ev", tv_share)
         return result
 

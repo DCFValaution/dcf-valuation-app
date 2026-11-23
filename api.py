@@ -84,6 +84,7 @@ from analysis import (GLOBAL_LEVERS, RELATIVE_FRAMING, SPECULATIVE_HEADLINE,
                       speculative_disclaimer, speculative_estimate_available,
                       value_company, value_company_relatively,
                       value_company_hypothetically, value_company_speculatively)
+from dcf import growth_path
 from assumptions import (DAMODARAN_ERP_AS_OF, erp_is_stale,
                          risk_free_as_of_text, risk_free_is_stale)
 from analysis import (SEVERITY_CAUTION, SEVERITY_INFO, SEVERITY_SERIOUS,
@@ -436,6 +437,66 @@ class Overrides(BaseModel):
     fade_pattern: Literal["linear", "exponential"] | None = Field(
         None, description="Equal percentage-point steps, or equal-proportion decay")
 
+    # --- The three-phase growth path ---------------------------------------
+    year_one_growth: float | None = Field(
+        None, ge=REVENUE_GROWTH_OUTER[0], le=REVENUE_GROWTH_OUTER[1],
+        description="Growth in the FIRST forecast year. Derived from the "
+                    "latest financial year's own growth, which is a different "
+                    "claim from the multi-year trend and is capped harder.")
+    years_two_to_five_growth: float | None = Field(
+        None, ge=REVENUE_GROWTH_OUTER[0], le=REVENUE_GROWTH_OUTER[1],
+        description="Growth held through years two to five. Derived from the "
+                    "3-year trend. From year six it declines to the terminal "
+                    "rate, reaching it exactly at the final forecast year.")
+    reinvestment_method: Literal["capex_path", "sales_to_capital"] | None =         Field(
+            None,
+            description="How the forecast pays for growth. The capital "
+                        "spending path makes investment a share of REVENUE; "
+                        "sales-to-capital makes it a share of the GROWTH it "
+                        "buys, which is Damodaran's approach and what the "
+                        "terminal rule here already does. The first is the "
+                        "default because the second divides by invested "
+                        "capital from the balance sheet, which buybacks make "
+                        "unreliable.")
+    growth_decline_pattern: Literal["linear", "exponential"] | None = Field(
+        None,
+        description="The shape of the decline over years six to ten. Linear "
+                    "takes equal percentage-point steps; exponential drops "
+                    "faster early and flattens near the terminal rate. "
+                    "Exponential is a ratio, so where either end is not "
+                    "positive the straight line is used and the diagnostics "
+                    "say so.")
+
+    # --- Tax, margin and the terminal return --------------------------------
+    marginal_tax_rate: float | None = Field(
+        None, ge=0.0, le=0.60,
+        description="The rate the effective rate converges to by the final "
+                    "forecast year. An effective rate is what was paid, and "
+                    "the reasons it sits below the statutory rate expire.")
+    target_operating_margin: float | None = Field(
+        None, ge=-1.0, le=1.0,
+        description="Optional. Nothing is derived: the margin from the "
+                    "filings is held unless a target and a year are both "
+                    "supplied, because that margin is the one figure in the "
+                    "model that came from the company.")
+    margin_convergence_year: int | None = Field(
+        None, ge=1, le=20,
+        description="The year the target margin is reached. Required with "
+                    "target_operating_margin; ignored without it.")
+    terminal_roic: float | None = Field(
+        None, ge=0.0, le=1.0,
+        description="Return on new capital in perpetuity, which sets how much "
+                    "of its profit the company must reinvest to grow at the "
+                    "terminal rate (g / ROIC). Derived as halfway from what "
+                    "the company earns now to its cost of capital, floored at "
+                    "that cost and capped.")
+    da_terminal_pct: float | None = Field(
+        None, ge=0.0, le=1.0,
+        description="Depreciation as a share of revenue in the final forecast "
+                    "year. Derived as the industry's own cover of the "
+                    "investment that produces it; the gap between the two is "
+                    "net investment.")
+
     risk_free_rate: float | None = Field(None, description="Overrides the live Treasury yield")
     equity_risk_premium: float | None = Field(None, description="Excess return demanded over risk-free")
     beta: float | None = Field(None, description="Overrides the company's reported beta")
@@ -659,6 +720,36 @@ class CapitalReturnsOut(BaseModel):
     detail: str = Field(..., description="How the figure was arrived at")
 
 
+class ReferenceOut(BaseModel):
+    """Figures a reader needs beside a slider but does not set.
+
+    The terminal-return control is unreadable without them: 20% means
+    nothing until you know the company earns 32% on its capital now and
+    that its cost of capital is 9%.
+    """
+    current_roic: float | None = Field(
+        None,
+        description="Operating profit after tax over invested capital, from "
+                    "the filings. Null where the books do not support it - "
+                    "negative invested capital after years of buybacks, or no "
+                    "operating profit - because a made-up figure would be "
+                    "worse than the absence.")
+    wacc: float = Field(..., description="The discount rate in use.")
+    terminal_net_investment: float | None = Field(
+        None,
+        description="What the perpetuity reinvests, as a share of revenue. "
+                    "Where the last forecast year invests less than this the "
+                    "two charge different amounts for the same thing; the gap "
+                    "is recorded rather than closed - see PARKED.md.")
+    growth_decline_pattern: str = Field(
+        "linear", description="The shape actually used for years six to ten.")
+    growth_decline_fell_back: bool = Field(
+        False,
+        description="True when an exponential decline was asked for and the "
+                    "straight line used instead, because a ratio between two "
+                    "rates needs both of them positive.")
+
+
 class ValuationResponse(BaseModel):
     method: Literal["dcf"] = Field(
         "dcf", description="Which method produced the value: discounted cash flow")
@@ -712,6 +803,14 @@ class ValuationResponse(BaseModel):
                     "watches the figure drop has every reason to think the app is "
                     "broken. Null for every other company - it is an explanation of "
                     "one company's economics, not a general caveat.")
+    growth_path: list[float] = Field(
+        default_factory=list,
+        description="The growth rate used in each forecast year, in order. "
+                    "Sent so a reader sees the whole path rather than "
+                    "inferring it from three inputs and a shape.")
+    reference: ReferenceOut | None = Field(
+        None,
+        description="Figures a reader needs beside a slider but does not set.")
     warnings: list[str]
     warning_items: list[WarningOut] = Field(
         default_factory=list,
@@ -1437,6 +1536,17 @@ def _serialise(report: ValuationReport) -> ValuationResponse:
             )
             for y in r.years
         ],
+        growth_path=list(growth_path(report.derived.assumptions)),
+        reference=ReferenceOut(
+            current_roic=report.derived.diagnostics.get("current_roic"),
+            wacc=report.derived.assumptions.wacc,
+            terminal_net_investment=report.derived.diagnostics.get(
+                "terminal_net_investment"),
+            growth_decline_pattern=str(report.derived.diagnostics.get(
+                "growth_decline_pattern", "linear")),
+            growth_decline_fell_back=bool(report.derived.diagnostics.get(
+                "growth_decline_fell_back", False)),
+        ),
         warnings=report.suitability.warnings,
         warning_items=_warning_items(report),
         method_fit_warnings=report.suitability.method_fit,
