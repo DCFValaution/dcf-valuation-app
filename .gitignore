@@ -107,3 +107,14 @@ device_export.xlsx
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# The Firestore rules suite's dependencies (firebase-tools is ~400 MB).
+# `npm install` in firebase/ restores them; the lockfile is committed.
+firebase/node_modules/
+firebase/firestore-debug.log
+firebase/*-debug.log
+
+# Captured automatically by app/android/settings.gradle.kts when a
+# plugin goes missing from .flutter-plugins-dependencies.
+strip-evidence/
+web-build-log.txt
