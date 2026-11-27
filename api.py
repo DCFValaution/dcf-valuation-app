@@ -2074,12 +2074,36 @@ def health() -> dict:
 
     The old `fmp_key_configured` flag is gone: the backend reads Yahoo
     Finance, which needs no credentials, so there is no key to report on.
+
+    WHY THE `accounts` BLOCK IS HERE
+    --------------------------------
+    Because a missing variable is invisible from outside, and twice now
+    that has cost a deploy cycle to find. The free allowance degrades
+    rather than breaks when it cannot attribute a caller - valuations
+    keep working, the pill just never appears - so a misconfigured
+    instance looks healthy from every angle except the one nobody checks.
+
+    BOOLEANS ONLY. Never the project id, never the number, never a token.
+    This endpoint is public, and "is it set" is all anybody needs to
+    debug it; the values themselves would be an invitation.
+
+    Still touches nothing: these read process environment, already in
+    memory, so the cold-start cost is unchanged.
     """
     return {
         "status": "ok",
         "data_source": data_source_name(),
         "requires_api_key": requires_api_key(),
         "commit": BUILD_COMMIT,
+        "accounts": {
+            # Without this, every caller is unattributable and every
+            # valuation comes back degraded and uncounted.
+            "firebase_project_configured": identity.project_id() is not None,
+            "app_check_number_configured":
+                app_check.project_number() is not None,
+            "app_check_enforced": app_check.enforced(),
+            "usage_counter_disabled": usage_store.disabled(),
+        },
     }
 
 

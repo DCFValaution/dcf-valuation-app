@@ -302,3 +302,51 @@ class TestAppCheck:
             api.app_check, "attest",
             lambda header, number=None: app_check.Attestation(app_id="1:x"))
         assert value(client, "AAA").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Health says whether the accounts are configured at all
+# ---------------------------------------------------------------------------
+
+class TestHealthReportsConfiguration:
+    """A missing environment variable is invisible from outside, and the
+    free allowance degrades rather than breaks when it cannot attribute a
+    caller - so a misconfigured instance looks healthy from every angle
+    except the one nobody checks. Twice that cost a deploy cycle."""
+
+    def test_says_when_firebase_is_not_configured(
+            self, client, monkeypatch):
+        monkeypatch.delenv("FIREBASE_PROJECT_ID", raising=False)
+        body = client.get("/health").json()
+        assert body["accounts"]["firebase_project_configured"] is False
+
+    def test_says_when_it_is(self, client, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        body = client.get("/health").json()
+        assert body["accounts"]["firebase_project_configured"] is True
+
+    def test_reports_app_check_and_the_counter(self, client, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_NUMBER", "123456")
+        monkeypatch.setenv(app_check.ENFORCED_ENV, "1")
+        monkeypatch.setenv("USAGE_COUNTER_DISABLED", "1")
+        accounts = client.get("/health").json()["accounts"]
+        assert accounts["app_check_number_configured"] is True
+        assert accounts["app_check_enforced"] is True
+        assert accounts["usage_counter_disabled"] is True
+
+    def test_never_reveals_the_values(self, client, monkeypatch):
+        """Booleans only. This endpoint is public."""
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-secret-id")
+        monkeypatch.setenv("FIREBASE_PROJECT_NUMBER", "999888777")
+        raw = client.get("/health").text
+        assert "intrinsic-secret-id" not in raw
+        assert "999888777" not in raw
+
+    def test_health_still_needs_no_upstream(self, client, monkeypatch):
+        """It is the wake-up ping for a sleeping instance. Anything that
+        reaches a network here is paid for by a user watching a spinner."""
+        def boom(*args, **kwargs):
+            raise AssertionError("health must not touch the network")
+
+        monkeypatch.setattr(analysis, "fetch_financials", boom)
+        assert client.get("/health").status_code == 200
