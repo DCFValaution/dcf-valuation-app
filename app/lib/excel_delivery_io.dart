@@ -14,8 +14,16 @@ Future<DeliveryOutcome> deliverWorkbook({
   required String filename,
   required String ticker,
   required String mimeType,
+  /// What the share sheet calls it. Defaults to the workbook wording,
+  /// because that is what every existing caller means - but the account
+  /// screen hands this same path a JSON export of someone's own data, and
+  /// "AAPL DCF model" would be the wrong thing to put on it.
+  String? subject,
+  String? text,
   void Function(String message)? announce,
 }) async {
+  final shareSubject = subject ?? '$ticker DCF model';
+  final shareText = text ?? 'DCF model for $ticker';
   try {
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/$filename');
@@ -26,8 +34,8 @@ Future<DeliveryOutcome> deliverWorkbook({
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: mimeType)],
-        subject: '$ticker DCF model',
-        text: 'DCF model for $ticker',
+        subject: shareSubject,
+        text: shareText,
       ),
     );
     return const DeliveryDone();

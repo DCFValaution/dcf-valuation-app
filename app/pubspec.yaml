@@ -28,11 +28,16 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  cloud_firestore: ^7.2.0
+  firebase_app_check: ^0.5.2
+  firebase_auth: ^7.1.0
+  firebase_core: ^5.2.0
   flutter:
     sdk: flutter
 
 
   # Calls the FastAPI valuation backend.
+  google_sign_in: ^7.2.0
   http: ^1.2.2
   path_provider: ^2.1.6
   share_plus: ^13.3.0
@@ -61,6 +66,16 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    # Google's own sign-in mark, taken unaltered from their branding
+    # guidelines (developers.google.com/identity/branding-guidelines).
+    #
+    # Bundled rather than drawn. Their guidelines require the supplied
+    # asset and forbid recolouring, redrawing or distorting it, and an
+    # approximation on a sign-in button is a compliance problem rather
+    # than a detail. The only thing the app does to it is scale it.
+    - assets/google_g.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -52,8 +52,16 @@ Future<DeliveryOutcome> deliverWorkbook({
   required String filename,
   required String ticker,
   required String mimeType,
+  /// What the share sheet calls it. Defaults to the workbook wording,
+  /// because that is what every existing caller means - but the account
+  /// screen hands this same path a JSON export of someone's own data, and
+  /// "AAPL DCF model" would be the wrong thing to put on it.
+  String? subject,
+  String? text,
   void Function(String message)? announce,
 }) async {
+  final shareSubject = subject ?? '$ticker DCF model';
+  final shareText = text ?? 'DCF model for $ticker';
   final data = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
   final parts = <JSAny>[data.toJS].toJS;
 
@@ -66,8 +74,8 @@ Future<DeliveryOutcome> deliverWorkbook({
     );
     final share = web.ShareData(
       files: <web.File>[file].toJS,
-      title: '$ticker DCF model',
-      text: 'DCF model for $ticker',
+      title: shareSubject,
+      text: shareText,
     );
     if (web.window.navigator.canShare(share)) {
       await web.window.navigator.share(share).toDart;

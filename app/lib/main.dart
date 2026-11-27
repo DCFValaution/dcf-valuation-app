@@ -8,6 +8,8 @@ import 'assumption_sliders.dart';
 import 'dcf_engine.dart';
 import 'export_button.dart';
 import 'formatting.dart';
+import 'free_valuations.dart';
+import 'sign_in_sheet.dart';
 import 'hypothetical_screen.dart';
 import 'relative_controller.dart';
 import 'relative_view.dart';
@@ -15,9 +17,41 @@ import 'ui.dart';
 import 'search_dropdown.dart';
 import 'sensitivity_table.dart';
 import 'speculative_screen.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:http/http.dart' as http;
+
+import 'account_service.dart';
+import 'allowance.dart';
+import 'delete_account_page.dart';
+import 'firebase_account_service.dart';
+import 'firebase_emulator.dart';
+import 'firebase_options.dart';
+import 'loading_states.dart';
+import 'account_screen.dart';
+import 'save_actions.dart';
+import 'saves_screen.dart';
+import 'user_data_store.dart';
+import 'valuation_gate.dart';
+import 'watchlist_screen.dart';
+
+import 'delete_account_route.dart';
 import 'theme.dart';
 import 'ticker_search.dart';
 import 'valuation_api.dart';
+
+/// The reCAPTCHA Enterprise site key, for App Check on the web.
+///
+/// A public key - it ships in the page either way - but environment
+/// specific, so it is a define rather than a constant. Empty means "do not
+/// activate the web provider", which is the right behaviour for a local
+/// build: activating with no key throws, and a developer build that
+/// refuses to start because of an anti-abuse measure helps nobody.
+///
+///     flutter build web --dart-define=RECAPTCHA_SITE_KEY=6Lxxxxx
+const String kRecaptchaSiteKey =
+    String.fromEnvironment('RECAPTCHA_SITE_KEY');
 
 /// Which analysis of a valued company is on screen.
 enum _Lens { intrinsic, relative }
@@ -124,13 +158,92 @@ enum ValueStatus {
   corrected,
 }
 
-void main() => runApp(const DcfApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Firebase is started before the first frame, but the app does not
+  // depend on it starting: a failure here leaves `service` null, every
+  // screen signed out, and valuing a company - which is the product -
+  // entirely unaffected. An app that will not open because an optional
+  // account system could not reach Google would be a worse app than one
+  // with no accounts at all.
+  AccountService? service;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await connectToEmulators();
+
+    // App Check before anything is asked of Firebase, so the first
+    // request already carries an attestation.
+    //
+    // Never fatal. A device that cannot attest - an emulator, a debug
+    // build whose token is not registered, a Play Integrity hiccup -
+    // still gets the whole app. It arrives at the backend unattested
+    // instead, which costs it nothing until App Check enforcement is
+    // turned on, and the order of that rollout is in PLAY_RELEASE.md.
+    try {
+      await FirebaseAppCheck.instance.activate(
+        // Play Integrity in a shipped build; the debug provider in a
+        // debug one, whose token has to be registered by hand in the
+        // Firebase console. See PLAY_RELEASE.md.
+        providerAndroid: kDebugMode
+            ? const AndroidDebugProvider()
+            : const AndroidPlayIntegrityProvider(),
+        providerWeb: kRecaptchaSiteKey.isEmpty
+            ? null
+            : ReCaptchaEnterpriseProvider(kRecaptchaSiteKey),
+      );
+      logStep('app-check', 'activated');
+    } catch (error, stack) {
+      logFailure('App Check did not activate', error, stack);
+    }
+
+    final accounts = FirebaseAccountService();
+    // Every installation gets an anonymous account before the first
+    // screen. This is what lets the free allowance be counted per
+    // installation on the server rather than per IP address - and an
+    // address is shared by a household, an office or a campus.
+    await accounts.ensureSignedIn();
+    service = accounts;
+  } catch (error, stack) {
+    // logFailure, NOT debugPrint: debugPrint is stripped from release, so
+    // in the build that reaches readers the ONLY evidence that accounts
+    // are dead was a snackbar saying "signing in is unavailable" - which
+    // names no cause and cannot be acted on by anyone.
+    //
+    // The error this hides is worth the line. A missing native plugin
+    // reads as "Unable to establish connection on channel", which says
+    // nothing about Firebase to anyone who has not seen it before.
+    logFailure('Firebase did not start; running signed out', error, stack);
+  }
+  runApp(DcfApp(accounts: service));
+}
 
 class DcfApp extends StatelessWidget {
-  const DcfApp({super.key, this.api});
+  const DcfApp({
+    super.key,
+    this.api,
+    this.path,
+    this.accounts,
+    this.storeFor,
+  });
 
   /// Injected by tests; the app builds its own.
   final ValuationApi? api;
+
+  /// The path the app was opened at. Null means "ask the browser", which
+  /// is what the real app does; a test passes one rather than arranging a
+  /// URL it cannot control.
+  final String? path;
+
+  /// Signing in, and everything stored behind it. Null when Firebase did
+  /// not start, which every screen treats as "signed out" rather than as
+  /// an error: the app works without an account by design.
+  final AccountService? accounts;
+
+  /// Builds the store for a signed-in account. Injected by tests; the app
+  /// uses Firestore.
+  final UserDataStore Function(Account)? storeFor;
 
   @override
   Widget build(BuildContext context) {
@@ -142,15 +255,37 @@ class DcfApp extends StatelessWidget {
       // Follows the device setting; both themes are designed, neither is a
       // tinted afterthought of the other.
       themeMode: ThemeMode.system,
-      home: ValuationScreen(api: api),
+      home: _home(),
     );
+  }
+
+  /// The deletion page when the URL asks for it, the app otherwise.
+  ///
+  /// Google Play requires a way to ask for deletion from OUTSIDE the app,
+  /// and `render.yaml` already rewrites every path to index.html, so this
+  /// route costs no new service and no DNS. `path` is injected by tests;
+  /// in the app it is the address bar, which on Android is always "/".
+  Widget _home() {
+    if (isDeleteRoute(path ?? Uri.base.path)) {
+      return DeleteAccountRoute(service: accounts);
+    }
+    return ValuationScreen(api: api, accounts: accounts, storeFor: storeFor);
   }
 }
 
 class ValuationScreen extends StatefulWidget {
-  const ValuationScreen({super.key, this.api});
+  const ValuationScreen({super.key, this.api, this.accounts, this.storeFor});
 
   final ValuationApi? api;
+
+  /// Signing in, and everything behind it. Null when Firebase did not
+  /// start, which the whole screen treats as "signed out" rather than as
+  /// an error: valuing a company is the product and needs no account.
+  final AccountService? accounts;
+
+  /// Builds the store for a signed-in account. Injected so a test can
+  /// hand back an in-memory one without Firebase.
+  final UserDataStore Function(Account)? storeFor;
 
   @override
   State<ValuationScreen> createState() => _ValuationScreenState();
@@ -158,7 +293,30 @@ class ValuationScreen extends StatefulWidget {
 
 class _ValuationScreenState extends State<ValuationScreen> {
   final _controller = TextEditingController();
-  late final ValuationApi _api = widget.api ?? ValuationApi();
+  /// Every request signed, and every response read for the allowance.
+  ///
+  /// The decorator is why this is one line rather than fifteen: the API
+  /// client calls out from a dozen places, and threading two headers
+  /// through all of them would be a dozen chances to miss one. The one
+  /// missed would go out unattributed and spend the per-address cap
+  /// instead of the reader's own allowance.
+  late final ValuationApi _api = widget.api ??
+      ValuationApi(
+        client: AuthedClient(
+          http.Client(),
+          tokens: widget.accounts?.tokens,
+          onAllowance: _onAllowance,
+        ),
+      );
+
+  /// What the server last said about the free allowance, or null if it has
+  /// not said anything yet. NEVER computed here - see allowance.dart.
+  Allowance? _allowance;
+
+  void _onAllowance(Allowance allowance) {
+    if (!mounted || _allowance == allowance) return;
+    setState(() => _allowance = allowance);
+  }
 
   /// Debounces and caches company search, so typing a name costs one request
   /// per pause rather than one per keystroke.
@@ -203,6 +361,13 @@ class _ValuationScreenState extends State<ValuationScreen> {
   /// Intrinsic value from the un-overridden run, kept so the effect of moving
   /// the sliders is visible rather than having to be remembered.
   double? _baselineValue;
+
+  /// What a reopened save was worth on the day it was saved.
+  ///
+  /// Cleared on any fresh valuation, because it belongs to one save and
+  /// would otherwise be shown beside a figure it has nothing to do with -
+  /// the same mistake the Advanced panel's old fade toggle made.
+  double? _savedAtValue;
 
   /// True while re-valuing with overrides, as opposed to a fresh search.
   bool _revaluing = false;
@@ -463,6 +628,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
     // without it would make the panel assert something the figure does not
     // support.
     _reinvestmentMethod = kReinvestmentCapexPath;
+    _savedAtValue = null;
     // Same obligation again: a target margin left switched on over a figure
     // computed without it would have the panel assert a claim the number
     // does not carry.
@@ -599,6 +765,9 @@ class _ValuationScreenState extends State<ValuationScreen> {
         };
         _slider = Map.of(_derived);
         _baselineValue = result.intrinsicValuePerShare;
+        // A save being reopened: its assumptions go on now, because the
+        // sliders they belong to have only just come into existence.
+        _applyPendingSave();
       }
     });
   }
@@ -760,6 +929,160 @@ class _ValuationScreenState extends State<ValuationScreen> {
   ///
   /// Debounced, because releasing and grabbing another slider in quick
   /// succession would otherwise fire a request per gesture.
+  /// Value a company the reader picked rather than typed.
+  ///
+  /// Goes through the same path as the button, so the field shows what is
+  /// being valued and Back behaves the same way.
+  void _valueTicker(String ticker) {
+    _controller.text = ticker;
+    _submit();
+  }
+
+  /// The store for a signed-in account.
+  ///
+  /// Injected in tests; in the app it is Firestore, which the reader's
+  /// device talks to directly. That is the measurement behind the whole
+  /// design: waking the free Render instance took 19.4 seconds, and a
+  /// watchlist that waited on it would be a spinner rather than a screen.
+  UserDataStore _storeFor(Account account) =>
+      widget.storeFor?.call(account) ??
+      FirestoreUserDataStore(uid: account.uid);
+
+  /// The watchlist when signed in, the account screen when not.
+  ///
+  /// One button rather than two, because "Account" for somebody with no
+  /// account is a page about nothing, and a watchlist for somebody with
+  /// no watchlist is the same page with a different title.
+  Future<void> _openAccountArea() async {
+    final accounts = widget.accounts;
+    final account = (accounts?.signedIn ?? false) ? accounts!.current : null;
+    if (accounts == null || account == null) {
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => AccountScreen(
+          service: accounts ?? FakeAccountService(),
+          onSignedOut: () => Navigator.of(context).maybePop(),
+        ),
+      ));
+      return;
+    }
+    final store = _storeFor(account);
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => DefaultTabController(
+        length: 2,
+        child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Yours'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(key: Key('tab-watchlist'), text: 'Watchlist'),
+              Tab(key: Key('tab-saved'), text: 'Saved'),
+            ],
+          ),
+          actions: [
+            IconButton(
+              key: const Key('open-account'),
+              icon: const Icon(Icons.account_circle_outlined),
+              tooltip: 'Account',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  // The counts make the deletion copy count what it
+                  // removes - "your 3 watchlist companies and your 1
+                  // saved valuation" - rather than describing it.
+                  // The counts are a nicety, so a failure here shows
+                  // the screen with zeros rather than blocking the one
+                  // route to deleting an account. The error is logged,
+                  // because a denial means the rules are not what
+                  // anybody thinks they are.
+                  builder: (_) => StreamBuilder<List<WatchlistEntry>>(
+                    stream: store.watchlist(),
+                    builder: (context, watch) {
+                      if (watch.hasError) {
+                        logFailure('account watchlist count', watch.error!);
+                      }
+                      return StreamBuilder<List<SavedRef>>(
+                        stream: store.saves(),
+                        builder: (context, saves) {
+                          if (saves.hasError) {
+                            logFailure('account saves count', saves.error!);
+                          }
+                          return AccountScreen(
+                            service: accounts,
+                            watchlistCount: watch.data?.length ?? 0,
+                            savesCount: saves.data?.length ?? 0,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        body: TabBarView(
+          children: [
+            WatchlistScreen(
+              store: store,
+              api: _api,
+              onOpenCompany: (ticker) {
+                Navigator.of(context).pop();
+                _controller.text = ticker;
+                _submit();
+              },
+            ),
+            SavesScreen(
+              store: store,
+              // Opening a save puts its assumptions on the sliders and
+              // revalues from today's market data: the point of a save is
+              // the comparison, so the figure has to be recomputed rather
+              // than recalled.
+              onOpen: (ref, loaded) {
+                Navigator.of(context).pop();
+                _controller.text = ref.ticker;
+                _pendingSavedAssumptions = loaded.assumptions;
+                _savedAtValue = ref.savedValue;
+                _submit();
+              },
+            ),
+          ],
+        ),
+      ),
+      ),
+    ));
+  }
+
+  /// A save's assumptions, waiting for the valuation they belong to.
+  ///
+  /// They cannot be applied before `_submit()`, which resets the sliders
+  /// to the derived model - as it must, since it is also how a fresh
+  /// company is valued. So they are held here and applied in
+  /// `_applyPendingSave`, once the sliders exist to hold them.
+  Map<String, double>? _pendingSavedAssumptions;
+
+  /// Put a save's assumptions onto the sliders, once there are sliders.
+  ///
+  /// Only the ones this build still has a control for. A migrated save can
+  /// carry a name that no longer exists, and sending it would make the
+  /// backend refuse the whole valuation - the save would look broken when
+  /// it is merely old.
+  void _applyPendingSave() {
+    final saved = _pendingSavedAssumptions;
+    if (saved == null || _derived.isEmpty) return;
+    _pendingSavedAssumptions = null;
+
+    var applied = false;
+    for (final entry in saved.entries) {
+      if (_specs.any((s) => s.name == entry.key)) {
+        _slider[entry.key] = entry.value;
+        applied = true;
+      }
+    }
+    // Confirm with the backend, exactly as releasing a slider does: the
+    // local engine's preview is not the figure this screen promises.
+    if (applied) _confirmNow();
+  }
+
   /// The forecast horizon, as the backend set it.
   ///
   /// From the full assumption set rather than the slider map: the horizon
@@ -1011,6 +1334,36 @@ class _ValuationScreenState extends State<ValuationScreen> {
             ],
           ),
           actions: [
+            // Unobtrusive by design: a hairline pill at label weight, not
+            // a badge and not a colour that asks to be dealt with. It is
+            // a courtesy, and it is absent entirely for a reader who is
+            // not metered or whose count the server could not read.
+            if (_allowance?.showCount ?? false)
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.xs),
+                child: Center(child: FreeCountPill(allowance: _allowance!)),
+              ),
+            // The only route into the accounts that is not a save. Hidden
+            // entirely when Firebase did not start, because a button that
+            // opens a page about a feature the build cannot offer is
+            // worse than no button.
+            if (widget.accounts != null)
+              IconButton(
+                key: const Key('account-button'),
+                icon: Icon(
+                  // `signedIn`, not `current != null`. Every installation
+                  // now has an anonymous account, so `current` is almost
+                  // never null and would make this icon say "signed in" to
+                  // somebody who has never signed in to anything.
+                  (widget.accounts?.signedIn ?? false)
+                      ? Icons.account_circle_rounded
+                      : Icons.account_circle_outlined,
+                ),
+                tooltip: (widget.accounts?.signedIn ?? false)
+                    ? 'Watchlist and account'
+                    : 'Account',
+                onPressed: _openAccountArea,
+              ),
             // Always reachable, including before the first valuation - the
             // disclaimer should not depend on having searched something.
             IconButton(
@@ -1106,6 +1459,22 @@ class _ValuationScreenState extends State<ValuationScreen> {
                   ],
                 ),
               ),
+              // The last one, and only the last one. Above the result
+              // area rather than inside it, so it is visible on the home
+              // screen BEFORE the valuation that will use it up - which
+              // is the only moment at which saying so is any use.
+              if ((_allowance?.onLastOne ?? false) && !_hasResult)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    0,
+                    AppSpacing.xl,
+                    AppSpacing.lg,
+                  ),
+                  child: LastFreeValuationCard(
+                    onSignIn: widget.accounts == null ? null : _signInNow,
+                  ),
+                ),
               Expanded(
                 // The dropdown floats over the result rather than pushing it
                 // down, so opening it does not shift what is already on screen.
@@ -1140,6 +1509,19 @@ class _ValuationScreenState extends State<ValuationScreen> {
     );
   }
 
+  /// Sign in from the "one left" card, without waiting for the gate.
+  ///
+  /// The same sheet the rest of the app uses, so there is one sign-in
+  /// path and one set of failure messages rather than two.
+  Future<void> _signInNow() async {
+    await requireAccount(
+      context,
+      widget.accounts,
+      reason: 'Signing in lifts the free limit — and keeps your watchlist '
+          'and saved valuations.',
+    );
+  }
+
   Widget _buildResultArea() {
     if (_loading) {
       // The shape of the answer, drawn flat, rather than a spinner in the
@@ -1171,7 +1553,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
 
     final result = _result;
     if (result == null) {
-      return const _EmptyState();
+      return _EmptyState(onTry: _valueTicker);
     }
 
     // The backend's outcomes are distinct by design; render each on its own
@@ -1238,6 +1620,7 @@ class _ValuationScreenState extends State<ValuationScreen> {
                               note: _displayNote,
                               status: _status,
                               // Only meaningful once something has actually been changed.
+                              savedAtValue: _savedAtValue,
                               baselineValue: (_activeOverrides.isEmpty)
                                   ? null
                                   : _baselineValue,
@@ -1268,6 +1651,19 @@ class _ValuationScreenState extends State<ValuationScreen> {
                               blockedReason: 'Set terminal growth below the discount rate before exporting.',
                               overrideCount: _activeOverrides.length,
                               onPressed: _exportExcel,
+                            ),
+                            // The only two places the sign-in sheet can
+                            // open from. Both are optional, and declining
+                            // leaves the figure above exactly as it is.
+                            const SizedBox(height: AppSpacing.md),
+                            SaveActions(
+                              ticker: result.ticker,
+                              companyName: result.companyName,
+                              assumptions: _activeOverrides,
+                              value: result.intrinsicValuePerShare,
+                              accounts: widget.accounts,
+                              storeFor: _storeFor,
+                              busy: _revaluing,
                             ),
                             // Advanced overrides: the shape of the model rather than its
                             // numbers. The standard DCF only - the dividend, speculative,
@@ -1356,6 +1752,22 @@ class _ValuationScreenState extends State<ValuationScreen> {
                 ? () => _openHypothetical(result)
                 : null,
           ),
+          // Not a failure: nothing went wrong, there is a next step, and
+          // the next step is free. Drawing it as a red box with "try
+          // again" would be advice to repeat the one thing that cannot
+          // work.
+          ValuationGated() => ValuationGateView(
+            gated: result,
+            service: widget.accounts,
+            onSignedIn: _submit,
+            // Only to somebody who can HAVE saved work. An anonymous
+            // installation cannot keep a save - the rules refuse it - so
+            // the button would lead to an empty screen.
+            onOpenSaved:
+                (widget.accounts?.signedIn ?? false) ? _openAccountArea : null,
+            onBack: _goHome,
+          ),
+
           ValuationFailure() => _FailureCard(result: result),
         },
       ),
@@ -1444,7 +1856,11 @@ class _BrandMarkPainter extends CustomPainter {
 /// First-run state: explains what the app does before any search, rather than
 /// leaving an empty screen with a lone icon.
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({this.onTry});
+
+  /// Values the company a TRY chip names. Null leaves the chips inert,
+  /// which is what they always were.
+  final ValueChanged<String>? onTry;
 
   @override
   Widget build(BuildContext context) {
@@ -1503,11 +1919,9 @@ class _EmptyState extends StatelessWidget {
           Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
-            children: const [
-              _TickerHint('AAPL'),
-              _TickerHint('MSFT'),
-              _TickerHint('NVDA'),
-              _TickerHint('GOOGL'),
+            children: [
+              for (final ticker in const ['AAPL', 'MSFT', 'NVDA', 'GOOGL'])
+                _TickerHint(ticker, onTap: onTry),
             ],
           ),
           const SizedBox(height: AppSpacing.xxl),
@@ -1565,31 +1979,52 @@ class _FeatureRow extends StatelessWidget {
 
 /// A worked example, not a control - tapping is deliberately not wired up, so
 /// this pass stays styling only.
+/// One of the suggestions under TRY.
+///
+/// It values the company. It did not until 2026-11-24: it was a Container
+/// with a rounded border and no gesture detector, which looked exactly
+/// like a chip and did nothing on every platform since it was written.
+/// An affordance that lies is worse than a missing one, because the
+/// reader concludes the app is broken rather than that the thing is
+/// decoration.
 class _TickerHint extends StatelessWidget {
-  const _TickerHint(this.ticker);
+  const _TickerHint(this.ticker, {this.onTap});
 
   final String ticker;
+  final ValueChanged<String>? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: context.scheme.surface,
+    return Material(
+      color: context.scheme.surface,
+      borderRadius: BorderRadius.circular(AppRadius.chip),
+      child: InkWell(
+        key: Key('try-$ticker'),
+        onTap: onTap == null ? null : () => onTap!(ticker),
         borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(color: colors.hairline),
-      ),
-      child: Text(
-        ticker,
-        style: context.text.labelSmall?.copyWith(
-          color: colors.textSecondary,
-          letterSpacing: 1.0,
-          fontWeight: FontWeight.w600,
+        child: Container(
+          // 44 high, because it is a touch target on a phone and was
+          // previously sized only by its text.
+          constraints: const BoxConstraints(minHeight: 44),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.chip),
+            border: Border.all(color: colors.hairline),
+          ),
+          child: Text(
+            ticker,
+            style: context.text.labelSmall?.copyWith(
+              color: colors.textSecondary,
+              letterSpacing: 1.0,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ),
     );
@@ -1699,6 +2134,7 @@ class _SuccessCard extends StatelessWidget {
     required this.note,
     required this.status,
     this.baselineValue,
+    this.savedAtValue,
     this.correctionNote,
   });
 
@@ -1724,6 +2160,9 @@ class _SuccessCard extends StatelessWidget {
   /// The value before any overrides. Non-null only when overrides are active,
   /// so the effect of the sliders is visible instead of remembered.
   final double? baselineValue;
+
+  /// What a reopened save was worth when it was saved, or null.
+  final double? savedAtValue;
 
   /// Set when the backend overruled the local preview.
   final String? correctionNote;
@@ -1812,9 +2251,10 @@ class _SuccessCard extends StatelessWidget {
               Text(_money(intrinsicValue), style: context.text.displayLarge),
               if (baselineValue != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                _BaselineDelta(
+                BaselineDelta(
                   baseline: baselineValue!,
                   current: intrinsicValue,
+                  savedAt: savedAtValue,
                 ),
               ],
               const SizedBox(height: AppSpacing.xl),
@@ -2805,11 +3245,30 @@ class _DisclaimerParagraph extends StatelessWidget {
 
 /// Shows how far the current figure has moved from the backend's own,
 /// so the sliders' effect is legible at a glance.
-class _BaselineDelta extends StatelessWidget {
-  const _BaselineDelta({required this.baseline, required this.current});
+/// How today's figure compares with the derived model, and - for a
+/// reopened save - with what it was worth when it was saved.
+///
+/// Public so it can be tested directly. It is pure presentation: give it
+/// three numbers and it says what they mean.
+class BaselineDelta extends StatelessWidget {
+  const BaselineDelta({
+    super.key,
+    required this.baseline,
+    required this.current,
+    this.savedAt,
+  });
 
   final double baseline;
   final double current;
+
+  /// What this save was worth on the day it was saved, when the figure on
+  /// screen came from reopening one.
+  ///
+  /// A different comparison from `baseline`, and both are wanted: the
+  /// baseline says "your assumptions against the model's", this says
+  /// "what has happened since". Null for an ordinary valuation, which has
+  /// no such day.
+  final double? savedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -2849,6 +3308,14 @@ class _BaselineDelta extends StatelessWidget {
                     color: colors.textSecondary,
                   ),
                 ),
+                if (savedAt != null)
+                  TextSpan(
+                    text: '  ·  saved at '
+                        '\$${savedAt!.toStringAsFixed(2)}',
+                    style: context.text.bodySmall?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
               ],
             ),
           ),

@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import 'dcf_engine.dart';
+import 'user_data_store.dart';
 
 /// Where the backend lives, as seen from the app.
 ///
@@ -737,6 +738,51 @@ enum ValuationFailureKind {
 const String kDataUnavailablePrefix =
     'The market data needed for this couldn’t be fetched right now. This is '
     'usually temporary, so try again shortly.';
+
+/// The server refused because the free allowance is spent.
+///
+/// A separate outcome rather than a failure, because it is not one: nothing
+/// went wrong, there is a next step, and the next step is free. Flattening
+/// it into an error message would get it drawn as a red box with "try
+/// again" - advice to repeat the one thing that cannot work.
+///
+/// THE APP NEVER CONSTRUCTS THIS FROM ITS OWN ARITHMETIC. It exists only
+/// when the server sends a 403, which is what keeps the limit a limit.
+class ValuationGated extends ValuationResult {
+  const ValuationGated({
+    required this.message,
+    required this.limit,
+    required this.window,
+    required this.signInLiftsLimit,
+    required this.isNetworkLimit,
+  });
+
+  final String message;
+
+  /// How many they had. Null if the server did not say.
+  final int? limit;
+
+  /// "lifetime" or "day".
+  final String window;
+
+  /// Whether signing in is the fix. False once a signed-in reader is
+  /// metered too, where the honest answer is "tomorrow", not "sign in".
+  final bool signInLiftsLimit;
+
+  /// Whether this was the per-address cap rather than the reader's own
+  /// allowance. Worth distinguishing: they have done nothing, and the
+  /// explanation is about the network they are on.
+  final bool isNetworkLimit;
+
+  factory ValuationGated.fromJson(Map<String, dynamic> body) => ValuationGated(
+        message: body['message'] as String? ??
+            'You have used your free valuations.',
+        limit: body['limit'] as int?,
+        window: body['window'] as String? ?? 'lifetime',
+        signInLiftsLimit: body['sign_in_lifts_limit'] == true,
+        isNetworkLimit: body['code'] == 'anonymous_ip_limit',
+      );
+}
 
 class ValuationFailure extends ValuationResult {
   final ValuationFailureKind kind;
@@ -1885,6 +1931,48 @@ class ValuationApi {
   ///
   /// Never throws: a search is an aid to typing, never a precondition for
   /// valuing, so every failure becomes [SearchUnavailable].
+  /// Today's figures for a whole watchlist, in one request.
+  ///
+  /// The backend values each company once per trading day and shares that
+  /// across every reader, so a ten-company list is one request and - for
+  /// everyone after the first reader that day - no computation at all.
+  ///
+  /// Throws on failure rather than returning a sentinel: the watchlist
+  /// screen already has real figures on it from the reader's own store,
+  /// so the caller's job is to say the refresh failed, not to replace
+  /// what is on screen with nothing.
+  Future<List<WatchlistEntry>> watchlist(List<String> tickers) async {
+    final wanted = tickers
+        .map((t) => t.trim().toUpperCase())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (wanted.isEmpty) return const [];
+
+    final response = await _client
+        .get(Uri.parse('$baseUrl/watchlist')
+            .replace(queryParameters: {'tickers': wanted.join(',')}))
+        .timeout(_timeout);
+
+    if (response.statusCode != 200) {
+      throw Exception('watchlist: HTTP ${response.statusCode}');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final rows = (body['rows'] as List<dynamic>? ?? const []);
+    final now = DateTime.now().toUtc();
+    return [
+      for (final raw in rows)
+        if (raw is Map<String, dynamic>)
+          WatchlistEntry(
+            ticker: '${raw['ticker']}',
+            name: raw['name'] as String?,
+            lastValue: (raw['intrinsic_value_per_share'] as num?)?.toDouble(),
+            lastPrice: (raw['current_price'] as num?)?.toDouble(),
+            refused: raw['refused'] == true,
+            asOf: now,
+          ),
+    ];
+  }
+
   Future<SearchOutcome> search(String query) async {
     final cleaned = query.trim();
     if (cleaned.isEmpty) return const SearchResults([]);
@@ -2043,6 +2131,16 @@ class ValuationApi {
             'The valuation couldn’t be read. Please try again.',
           );
         }
+
+      case 403:
+        // The free allowance, or the per-address cap, or App Check. The
+        // first two are the gate; the third is a real failure, because
+        // there is nothing the reader can do about it from here except
+        // update the app.
+        if (code == 'valuation_limit' || code == 'anonymous_ip_limit') {
+          return ValuationGated.fromJson(body);
+        }
+        return ValuationFailure(ValuationFailureKind.unexpected, message);
 
       case 422:
         // Shared status, separated by `code`: a suitability refusal, a listing
