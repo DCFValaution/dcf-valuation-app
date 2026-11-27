@@ -19,7 +19,7 @@ import 'sensitivity_table.dart';
 import 'speculative_screen.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:http/http.dart' as http;
 
 import 'account_service.dart';
@@ -181,21 +181,35 @@ Future<void> main() async {
     // still gets the whole app. It arrives at the backend unattested
     // instead, which costs it nothing until App Check enforcement is
     // turned on, and the order of that rollout is in PLAY_RELEASE.md.
-    try {
-      await FirebaseAppCheck.instance.activate(
-        // Play Integrity in a shipped build; the debug provider in a
-        // debug one, whose token has to be registered by hand in the
-        // Firebase console. See PLAY_RELEASE.md.
-        providerAndroid: kDebugMode
-            ? const AndroidDebugProvider()
-            : const AndroidPlayIntegrityProvider(),
-        providerWeb: kRecaptchaSiteKey.isEmpty
-            ? null
-            : ReCaptchaEnterpriseProvider(kRecaptchaSiteKey),
-      );
-      logStep('app-check', 'activated');
-    } catch (error, stack) {
-      logFailure('App Check did not activate', error, stack);
+    // On the web with no site key there is nothing to activate, and
+    // asking anyway is worse than not asking. `providerWeb: null` READS
+    // like "skip the web provider" and is not: the plugin null-checks it
+    // and throws, the catch below swallows it, and App Check is left half
+    // initialised - so every later getToken() throws too and Firebase Auth
+    // logs a warning on each call. Observed in production, where the
+    // console filled with them.
+    //
+    // Skipping the call outright is what this constant's documentation has
+    // claimed all along.
+    if (kIsWeb && kRecaptchaSiteKey.isEmpty) {
+      logStep('app-check', 'skipped: the web build has no site key');
+    } else {
+      try {
+        await FirebaseAppCheck.instance.activate(
+          // Play Integrity in a shipped build; the debug provider in a
+          // debug one, whose token has to be registered by hand in the
+          // Firebase console. See PLAY_RELEASE.md.
+          providerAndroid: kDebugMode
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          providerWeb: kRecaptchaSiteKey.isEmpty
+              ? null
+              : ReCaptchaEnterpriseProvider(kRecaptchaSiteKey),
+        );
+        logStep('app-check', 'activated');
+      } catch (error, stack) {
+        logFailure('App Check did not activate', error, stack);
+      }
     }
 
     final accounts = FirebaseAccountService();

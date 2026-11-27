@@ -207,6 +207,34 @@ that do not exist. Only then submit to Play.
 
 ## Turning App Check on
 
+> **Prerequisite, and it is a hard one: the web build cannot pass App
+> Check until `RECAPTCHA_SITE_KEY` exists.**
+>
+> App Check on the web needs a reCAPTCHA Enterprise site key. Without one
+> there is no web provider, so the web app sends no attestation at all -
+> and the moment enforcement is turned on, **every web request is refused
+> and the site stops working entirely**, while Android carries on fine
+> through Play Integrity. That asymmetry is what makes it easy to miss:
+> you would test on the phone and see nothing wrong.
+>
+> So, before enforcement:
+>
+> 1. Firebase console -> App Check -> Apps -> the **web** app -> register
+>    it with reCAPTCHA Enterprise, which creates the site key.
+> 2. Rebuild and deploy the web app with it:
+>    `flutter build web --dart-define=RECAPTCHA_SITE_KEY=6Lxxxxx`
+> 3. Watch the App Check metrics for the web app until verified requests
+>    appear. Only then turn enforcement on, and Android first.
+>
+> Until step 1 is done, the web build deliberately does not call
+> `activate()` at all (`kIsWeb && kRecaptchaSiteKey.isEmpty` in
+> `main.dart`). Passing a null web provider instead is what shipped, and
+> it throws inside the plugin: App Check ends up half initialised and
+> Firebase Auth logs "Error while retrieving App Check token" on every
+> single call. Harmless while enforcement is off, and pure noise that
+> hides real warnings.
+
+
 LEAVE THIS UNTIL LAST, and do it in this order. App Check enforcement is
 a hard cutover: the moment it is on, every client that cannot produce a
 token is refused, including the copy of the app on somebody's phone that
