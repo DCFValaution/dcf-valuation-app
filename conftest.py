@@ -151,3 +151,21 @@ def _no_network(request, monkeypatch):
     monkeypatch.setattr(socket, "create_connection",
                         _guard(socket.create_connection))
     monkeypatch.setattr(urllib.request, "urlopen", _denied)
+
+
+@pytest.fixture(autouse=True)
+def _reset_the_free_allowance():
+    """Every test starts with the valuation counters empty.
+
+    The per-address cap on signed-out valuations is process-global, like
+    the request rate limiter beside it, and the whole suite arrives from
+    one address called "testclient". Without this, the twenty-first
+    successful valuation in a run starts failing with a 403 and every test
+    after it fails for a reason that has nothing to do with what it tests
+    - which is exactly what happened when the gate first landed.
+    """
+    import api
+
+    api.reset_metering()
+    yield
+    api.reset_metering()

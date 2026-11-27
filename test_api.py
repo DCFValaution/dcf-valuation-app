@@ -109,6 +109,14 @@ def _mock_market_data(monkeypatch):
     # next, and that failure would look like anything but a rate limit.
     api.reset_rate_limits()
 
+    # The per-address cap on signed-out valuations is a different limit
+    # with a different purpose, and it defaults to about twenty a day.
+    # Several tests in this file make forty or sixty requests to prove
+    # something about the REQUEST rate limiter, and would otherwise be
+    # stopped by the allowance first - measuring the wrong limit and
+    # failing with the wrong code. An empty value means no cap.
+    monkeypatch.setenv("ANON_IP_DAILY_CAP", "")
+
 
 @pytest.fixture
 def client():

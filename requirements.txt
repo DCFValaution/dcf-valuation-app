@@ -31,3 +31,17 @@ numpy==2.5.2
 
 # Builds the downloadable .xlsx model.
 openpyxl==3.1.5
+
+# Promoted from a yfinance transitive to a direct dependency, for the same
+# reason curl_cffi was: usage.py imports it to talk to the Firestore REST API,
+# so it is now something this code depends on rather than something that
+# happens to be installed. Pinned to the version the counter was tested
+# against.
+requests==2.34.2
+
+# Verifying Firebase ID tokens. A Firebase ID token is an ordinary RS256 JWT
+# signed by Google, so the backend needs Google's PUBLIC keys and the project
+# id and no credential of its own - which is why the Admin SDK, and the
+# service-account private key it would want in the environment, are not here.
+# The [crypto] extra pulls in `cryptography`, which does the RSA.
+PyJWT[crypto]==2.15.1

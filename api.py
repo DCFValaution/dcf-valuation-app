@@ -67,7 +67,8 @@ import time
 from collections import defaultdict, deque
 from typing import Annotated, Any, Literal, Union
 
-from fastapi import FastAPI, HTTPException, Path, Query, Request, Response, status
+from fastapi import (Depends, FastAPI, HTTPException, Path, Query, Request,
+                     Response, status)
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -105,7 +106,15 @@ from speculative_excel_export import (hypothetical_filename_for,
                                       hypothetical_workbook_bytes,
                                       speculative_filename_for,
                                       speculative_workbook_bytes)
+import watchlist as watchlist_cache
 from excel_export import filename_for, workbook_bytes
+import logging
+
+import app_check
+import entitlement
+import gate as gating
+import identity
+import usage as usage_store
 from market_data import (DataUnavailableError, MarketDataError, RateLimitedError,
                          TickerNotFoundError, UnsupportedListingError,
                          data_source_name, requires_api_key, search_companies)
@@ -247,6 +256,11 @@ SEARCH_RATE_LIMIT_REQUESTS = 60
 # Render's own health check: throttling it would let a burst of user traffic
 # convince Render the service is down and restart it mid-request.
 _RATE_LIMIT_EXEMPT = ("/health", "/docs", "/redoc", "/openapi.json")
+
+# The one logger in this file. Used by the free-allowance code below, which
+# has two failure modes that must be visible without being fatal: a counter
+# that cannot be read, and a verifier that cannot run.
+log = logging.getLogger(__name__)
 
 _rate_lock = threading.Lock()
 _rate_history: dict[str, deque[float]] = defaultdict(deque)
@@ -1280,6 +1294,48 @@ class IntrinsicSummaryOut(BaseModel):
     full_valuation: str = Field(..., description="Where the complete intrinsic valuation lives")
 
 
+class WatchlistRowOut(BaseModel):
+    """One line of a watchlist.
+
+    Every field after `ticker` is optional, because a row exists for a
+    company that was refused a valuation and for one whose data could not
+    be fetched. Dropping either would make the watchlist disagree with the
+    valuation screen, which says out loud that no figure is shown and why.
+    """
+
+    ticker: str
+    name: str | None = None
+    method: str | None = None
+
+    intrinsic_value_per_share: float | None = None
+    current_price: float | None = None
+    upside_downside: float | None = None
+
+    valued_for: str | None = Field(
+        None, description="The trading day the intrinsic value was computed "
+                          "for. The price beside it is current; the value is "
+                          "shared across callers until the next close.")
+    price_as_of: str | None = None
+
+    refused: bool = False
+    refusal_code: str | None = None
+    headline: str | None = Field(
+        None, description="Why a refused company has no figure, in one line")
+
+    error: str | None = Field(
+        None, description="Set when this row could not be built at all. "
+                          "Transient, unlike a refusal.")
+    cached: bool = Field(
+        False, description="True when the intrinsic value came from the "
+                           "day's shared computation rather than a new one")
+
+
+class WatchlistResponse(BaseModel):
+    rows: list[WatchlistRowOut]
+    max_tickers: int = Field(
+        ..., description="Tickers beyond this many are ignored, not refused")
+
+
 class RelativeValueOut(BaseModel):
     central: float = Field(..., description="Median of the values implied by the multiples applied")
     low: float
@@ -1674,6 +1730,186 @@ class ApiError(HTTPException):
                          detail={"code": code, "message": message, **extra})
 
 
+# ---------------------------------------------------------------------------
+# The free allowance
+# ---------------------------------------------------------------------------
+#
+# Three valuations per installation while signed out, unlimited once signed
+# in. The decision lives in gate.py, the counter in usage.py and the plan in
+# entitlement.py; this is the part that knows about HTTP.
+#
+# TWO STEPS, NOT ONE, AND THE WORK IN BETWEEN
+#
+#   `_valuation_gate`      a dependency, before the handler: may they?
+#   `_metering_middleware` after the response: count it, if it worked
+#
+# Separate because a valuation that fails upstream - Yahoo throttling us, a
+# company EDGAR has nothing for - must not spend one of three. Only a 200
+# counts.
+#
+# WHY THE COUNT IS IN HEADERS AND THE REFUSAL IS IN THE BODY
+#
+# The remaining count is metadata about the request rather than part of the
+# valuation, and putting it in the body would mean adding a field to six
+# response models that have nothing to do with it. A refusal has no body of
+# its own to intrude on, so it carries the full structured reason.
+
+_usage_lock = threading.Lock()
+_usage_singleton: "usage_store.UsageStore | None" = None
+
+
+def _usage() -> "usage_store.UsageStore | None":
+    """The counter, or None when this deploy has no Firebase project set."""
+    global _usage_singleton
+    project = identity.project_id()
+    if not project or usage_store.disabled():
+        return None
+    with _usage_lock:
+        if _usage_singleton is None or _usage_singleton.project != project:
+            _usage_singleton = usage_store.UsageStore(project)
+        return _usage_singleton
+
+
+def reset_metering() -> None:
+    """Forget the per-address counts and the Firestore client. For tests."""
+    global _usage_singleton
+    gating.reset()
+    with _usage_lock:
+        _usage_singleton = None
+
+
+def _bearer(request: Request) -> str | None:
+    header = request.headers.get("authorization") or ""
+    scheme, _, token = header.partition(" ")
+    return token.strip() if scheme.lower() == "bearer" and token.strip() \
+        else None
+
+
+async def _ticker_of(request: Request) -> str | None:
+    """Which company this request values.
+
+    In the path for the GET routes and in the body for the POST ones.
+    Reading the body here is safe: `await request.json()` caches it on the
+    request, and the handler's own parsing reads the same cached copy.
+    """
+    from_path = request.path_params.get("ticker")
+    if from_path:
+        return str(from_path)
+    if request.method != "POST":
+        return None
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    value = body.get("ticker") if isinstance(body, dict) else None
+    return str(value) if value else None
+
+
+async def _valuation_gate(request: Request) -> None:
+    """Refuse a caller who is out of free valuations. Otherwise say nothing.
+
+    Attached to every /valuation route, including the Excel ones: exporting
+    a company already valued today is free because its marker exists, and
+    exporting one that was never valued is a valuation by any honest
+    reading.
+    """
+    ticker = await _ticker_of(request)
+    if not ticker:
+        return
+
+    who = identity.identify(request.headers.get("authorization"))
+    attestation = app_check.attest(request.headers.get(app_check.HEADER))
+
+    if app_check.enforced() and attestation is None:
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN, "app_check_required",
+            "This request did not come from a verified copy of the app. "
+            "Updating the app from the store usually fixes it.")
+
+    allowed = entitlement.resolve(who)
+    address = _client_key(request)
+
+    used, degraded = 0, False
+    store = _usage()
+    current = None
+    if allowed.metered:
+        if store is None or not allowed.uid:
+            # No counter to consult: either this deploy has no Firebase
+            # project configured, or the caller could not be verified.
+            # Degraded rather than refused - the per-address cap still
+            # applies, so this is not an open door.
+            degraded = True
+        else:
+            try:
+                current = store.read(
+                    allowed.uid, id_token=_bearer(request),
+                    app_check_token=request.headers.get(app_check.HEADER))
+                used = current.used(
+                    allowed.window,
+                    key=entitlement.window_key(allowed.window))
+            except usage_store.UsageUnavailable as exc:
+                log.warning("usage: %s", exc)
+                degraded = True
+
+    allowance, refusal = gating.check(
+        allowed, used=used, address=address, degraded=degraded)
+
+    if refusal is not None:
+        raise ApiError(status.HTTP_403_FORBIDDEN, **refusal.as_dict())
+
+    # Handed to the middleware, which counts it if the valuation works.
+    request.state.meter = {
+        "ticker": ticker,
+        "uid": allowed.uid,
+        "plan": allowed.plan,
+        "metered": allowed.metered,
+        "anonymous": allowed.plan == entitlement.PLAN_ANONYMOUS,
+        "id_token": _bearer(request),
+        "app_check": request.headers.get(app_check.HEADER),
+        "address": address,
+        "allowance": allowance,
+        "current": current,
+        "degraded": degraded,
+    }
+
+
+@app.middleware("http")
+async def _metering_middleware(request: Request, call_next):
+    response = await call_next(request)
+
+    meter = getattr(request.state, "meter", None)
+    if not meter:
+        return response
+
+    allowance = meter["allowance"]
+
+    if response.status_code == 200:
+        if meter["anonymous"]:
+            gating.record_anonymous_ip(meter["address"])
+
+        store = _usage()
+        if meter["metered"] and store is not None and meter["uid"] \
+                and not meter["degraded"]:
+            try:
+                counted, after = store.count(
+                    meter["uid"], meter["ticker"],
+                    id_token=meter["id_token"],
+                    app_check_token=meter["app_check"],
+                    current=meter["current"])
+                if counted:
+                    allowance.remaining = max(
+                        0, (allowance.remaining or 0) - 1)
+            except usage_store.UsageUnavailable as exc:
+                # The valuation has already been produced. Losing the
+                # count is the cheaper failure.
+                log.warning("usage: not counted (%s)", exc)
+                allowance.degraded = True
+
+    for name, value in allowance.headers().items():
+        response.headers[name] = value
+    return response
+
+
 @app.exception_handler(RequestValidationError)
 async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Give FastAPI's own 422s a `code`, so they are distinguishable from a
@@ -2011,6 +2247,7 @@ def overridable_assumptions() -> dict:
 
 @app.get(
     "/valuation/{ticker}",
+    dependencies=[Depends(_valuation_gate)],
     tags=["valuation"],
     summary="Value a company using assumptions derived from its own filings",
     response_model=ValuationResult,
@@ -2026,6 +2263,45 @@ def get_valuation(
     """
     report = _run_valuation(ticker, {})
     return _respond(report)
+
+
+@app.get(
+    "/watchlist",
+    tags=["valuation"],
+    summary="Value several companies at once, sharing the day's computation",
+    response_model=WatchlistResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "No tickers given"},
+    },
+)
+def get_watchlist(
+    tickers: str = Query(
+        ..., min_length=1, max_length=400,
+        description="Comma-separated, e.g. NVDA,KO,AMZN. Case and spacing "
+                    "are forgiven; duplicates are dropped; order is kept.",
+        examples=["NVDA,KO,AMZN"]),
+) -> Any:
+    """Each company's derived valuation and its current price.
+
+    The expensive half of a row - the discounted cash flow - is computed
+    once per ticker per trading day and shared with every caller, because a
+    DCF is built from filings that change quarterly and is not a tape. The
+    price beside it is never cached beyond the market's own clock. The
+    upside is recomputed from the pair, so a row is internally consistent
+    even though its two figures came from different moments.
+
+    No overrides: this is the derived model for every company. A saved
+    valuation with its own assumptions is a different request.
+    """
+    wanted = watchlist_cache.normalise(tickers.split(","))
+    if not wanted:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, "no_tickers",
+                       "Give at least one ticker, comma separated.")
+    rows = watchlist_cache.rows_for(wanted, valuer=value_company)
+    return WatchlistResponse(
+        rows=[WatchlistRowOut(**vars(row)) for row in rows],
+        max_tickers=watchlist_cache.MAX_TICKERS,
+    )
 
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -2091,6 +2367,7 @@ def _excel_response(report: ValuationReport) -> Any:
 
 @app.get(
     "/valuation/{ticker}/excel",
+    dependencies=[Depends(_valuation_gate)],
     tags=["excel"],
     summary="Download an .xlsx DCF model for a company",
     response_class=Response,
@@ -2116,6 +2393,7 @@ def get_valuation_excel(
 
 @app.post(
     "/valuation/excel",
+    dependencies=[Depends(_valuation_gate)],
     tags=["excel"],
     summary="Download an .xlsx DCF model with adjusted assumptions",
     response_class=Response,
@@ -2130,6 +2408,7 @@ def post_valuation_excel(request: ValuationRequest) -> Any:
 
 @app.post(
     "/valuation",
+    dependencies=[Depends(_valuation_gate)],
     tags=["valuation"],
     summary="Value a company with adjusted assumptions",
     response_model=ValuationResult,
@@ -2258,6 +2537,7 @@ SPECULATIVE_RESPONSES: dict = {
 
 @app.get(
     "/valuation/{ticker}/speculative",
+    dependencies=[Depends(_valuation_gate)],
     tags=["speculative (opt-in)"],
     summary="OPT-IN: a speculative path-to-profitability estimate for a loss-making "
             "company. NOT a valuation.",
@@ -2283,6 +2563,7 @@ def get_speculative_estimate(
 
 @app.post(
     "/valuation/speculative",
+    dependencies=[Depends(_valuation_gate)],
     tags=["speculative (opt-in)"],
     summary="OPT-IN: a speculative estimate with adjusted assumptions. NOT a valuation.",
     response_model=SpeculativeValuationResponse,
@@ -2484,6 +2765,7 @@ def _serialise_hypothetical(report: Any) -> HypotheticalResponse:
 
 @app.get(
     "/valuation/{ticker}/hypothetical",
+    dependencies=[Depends(_valuation_gate)],
     tags=["speculative (opt-in)"],
     summary="OPT-IN: arithmetic on the CALLER'S OWN assumptions for a company even a "
             "speculative estimate refuses. NOT a valuation.",
@@ -2543,6 +2825,7 @@ def get_hypothetical(
 
 @app.get(
     "/valuation/{ticker}/speculative/excel",
+    dependencies=[Depends(_valuation_gate)],
     tags=["speculative (opt-in)"],
     summary="OPT-IN: the speculative estimate as a workbook. NOT a valuation.",
     responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
@@ -2570,6 +2853,7 @@ def get_speculative_excel(
 
 @app.get(
     "/valuation/{ticker}/hypothetical/excel",
+    dependencies=[Depends(_valuation_gate)],
     tags=["speculative (opt-in)"],
     summary="OPT-IN: the user-built hypothetical as a workbook. NOT a valuation.",
     responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
@@ -2620,6 +2904,7 @@ def get_hypothetical_excel(
 
 @app.get(
     "/valuation/{ticker}/relative/excel",
+    dependencies=[Depends(_valuation_gate)],
     tags=["relative (market-based)"],
     summary="The relative peer comparison as a workbook",
     responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
@@ -2643,6 +2928,7 @@ def get_relative_excel(
 
 @app.post(
     "/valuation/relative/excel",
+    dependencies=[Depends(_valuation_gate)],
     tags=["relative (market-based)"],
     summary="The relative comparison as a workbook, with the peer group edited",
     responses={200: {"content": {XLSX_MEDIA_TYPE: {"schema": {"type": "string",
@@ -2684,6 +2970,7 @@ def _relative_workbook_response(report) -> Any:
 
 @app.get(
     "/valuation/{ticker}/relative",
+    dependencies=[Depends(_valuation_gate)],
     tags=["relative (market-based)"],
     summary="How the market prices similar companies right now: a relative second opinion "
             "from peer multiples, beside the intrinsic value",
@@ -2708,6 +2995,7 @@ def get_relative_valuation(
 
 @app.post(
     "/valuation/relative",
+    dependencies=[Depends(_valuation_gate)],
     tags=["relative (market-based)"],
     summary="A relative second opinion with the peer group replaced or edited",
     response_model=RelativeValuationResponse,
