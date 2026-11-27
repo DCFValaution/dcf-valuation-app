@@ -1770,10 +1770,31 @@ def _usage() -> "usage_store.UsageStore | None":
         return _usage_singleton
 
 
+#: identity.py's categories, translated into this endpoint's vocabulary.
+#: "unavailable" there means the project id is unset OR Google's key
+#: endpoint could not be reached; the first is ruled out before this map
+#: is consulted, so what is left is the certificates.
+_IDENTITY_REASONS = {
+    "no_token": "no_token",
+    "unavailable": "certs_unavailable",
+    "rejected": "token_invalid",
+}
+
+#: The last reason a valuation went uncounted, as a category. Never a
+#: token, a uid, or an exception message: /health is public.
+_last_degraded: "str | None" = None
+
+
+def _note_degraded(reason: str) -> None:
+    global _last_degraded
+    _last_degraded = reason
+
+
 def reset_metering() -> None:
     """Forget the per-address counts and the Firestore client. For tests."""
-    global _usage_singleton
+    global _usage_singleton, _last_degraded
     gating.reset()
+    _last_degraded = None
     with _usage_lock:
         _usage_singleton = None
 
@@ -1838,6 +1859,16 @@ async def _valuation_gate(request: Request) -> None:
             # project configured, or the caller could not be verified.
             # Degraded rather than refused - the per-address cap still
             # applies, so this is not an open door.
+            #
+            # WHICH of those it is matters enormously and is invisible
+            # from outside, because the caller gets a perfectly good
+            # valuation that simply was not counted. So say which, by
+            # category, for /health to report.
+            _note_degraded(
+                "no_project_id" if identity.project_id() is None
+                else "counter_disabled" if usage_store.disabled()
+                else _IDENTITY_REASONS.get(
+                    identity.last_failure(), "token_invalid"))
             degraded = True
         else:
             try:
@@ -1849,6 +1880,7 @@ async def _valuation_gate(request: Request) -> None:
                     key=entitlement.window_key(allowed.window))
             except usage_store.UsageUnavailable as exc:
                 log.warning("usage: %s", exc)
+                _note_degraded("firestore_error")
                 degraded = True
 
     allowance, refusal = gating.check(
@@ -2103,6 +2135,9 @@ def health() -> dict:
                 app_check.project_number() is not None,
             "app_check_enforced": app_check.enforced(),
             "usage_counter_disabled": usage_store.disabled(),
+            # Why the last valuation went uncounted, if one did. A
+            # category only - never a token, a uid or an error message.
+            "last_degraded_reason": _last_degraded,
         },
     }
 

@@ -166,6 +166,25 @@ def verify(token: str, *, project: str | None = None) -> Identity:
     )
 
 
+#: Why the most recent `identify` produced nothing. A CATEGORY, never a
+#: token, a uid or a provider's message - this is read by a public
+#: endpoint, and the whole point of a category is that it is safe to show.
+#:
+#: Verification failing on the server is invisible from outside: the
+#: caller gets a perfectly good valuation that simply was not counted. So
+#: the reason has to be recorded where it happens, or it cannot be
+#: diagnosed without reading the logs of a machine nobody can reach.
+_last_failure: str | None = None
+
+
+def last_failure() -> str | None:
+    """Why the last verification did not produce an identity, by category.
+
+    `None` means the last one succeeded, or none has been attempted.
+    """
+    return _last_failure
+
+
 def identify(authorization: str | None, *,
              project: str | None = None) -> Identity | None:
     """The caller behind an Authorization header, or None.
@@ -180,17 +199,28 @@ def identify(authorization: str | None, *,
     that is a misconfiguration of ours and would otherwise look exactly
     like a quiet afternoon with no signed-in users.
     """
+    global _last_failure
+
     if not authorization:
+        _last_failure = "no_token"
         return None
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
+        _last_failure = "no_token"
         return None
 
     try:
-        return verify(token.strip(), project=project)
+        who = verify(token.strip(), project=project)
+        _last_failure = None
+        return who
     except IdentityUnavailable as exc:
+        # The project id is unset, or Google's key endpoint could not be
+        # reached. Ours to fix either way, which is why it is logged at
+        # warning and the others are not.
+        _last_failure = "unavailable"
         log.warning("identity: %s", exc)
         return None
     except Exception as exc:
+        _last_failure = "rejected"
         log.debug("identity: token rejected (%s)", exc.__class__.__name__)
         return None

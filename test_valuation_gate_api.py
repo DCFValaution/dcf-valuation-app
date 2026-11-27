@@ -350,3 +350,95 @@ class TestHealthReportsConfiguration:
 
         monkeypatch.setattr(analysis, "fetch_financials", boom)
         assert client.get("/health").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# WHY a valuation went uncounted
+# ---------------------------------------------------------------------------
+
+class TestTheDegradedReason:
+    """Three different faults all produce the same symptom - a valuation
+    that works and is not counted - so from outside they are
+    indistinguishable, and chasing them cost two deploy cycles. The
+    category says which.
+
+    It is a CATEGORY. This endpoint is public: no tokens, no uids, no
+    exception text."""
+
+    def reason(self, client):
+        return client.get("/health").json()["accounts"]["last_degraded_reason"]
+
+    def test_nothing_to_report_before_anything_happens(self, client):
+        assert self.reason(client) is None
+
+    def test_no_firebase_project(self, client, store, monkeypatch):
+        monkeypatch.delenv("FIREBASE_PROJECT_ID", raising=False)
+        monkeypatch.setattr(api, "_usage", lambda: None)
+        signed_in_as(monkeypatch, "anonymous")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) == "no_project_id"
+
+    def test_counter_switched_off(self, client, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        monkeypatch.setenv("USAGE_COUNTER_DISABLED", "1")
+        monkeypatch.setattr(api, "_usage", lambda: None)
+        signed_in_as(monkeypatch, "anonymous")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) == "counter_disabled"
+
+    def test_the_caller_sent_no_token(self, client, store, monkeypatch):
+        """The ordinary case for a reader whose anonymous sign-in has not
+        happened yet. Not a fault, and must not be reported as one."""
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        monkeypatch.setattr(api.identity, "identify",
+                            lambda header, project=None: None)
+        monkeypatch.setattr(api.identity, "last_failure", lambda: "no_token")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) == "no_token"
+
+    def test_googles_certificates_could_not_be_fetched(
+            self, client, store, monkeypatch):
+        """The third cause, and the one invisible from outside: the code
+        is right, the token is right, and the server cannot reach the
+        endpoint that proves it."""
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        monkeypatch.setattr(api.identity, "identify",
+                            lambda header, project=None: None)
+        monkeypatch.setattr(api.identity, "last_failure",
+                            lambda: "unavailable")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) == "certs_unavailable"
+
+    def test_a_token_that_does_not_verify(self, client, store, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        monkeypatch.setattr(api.identity, "identify",
+                            lambda header, project=None: None)
+        monkeypatch.setattr(api.identity, "last_failure", lambda: "rejected")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) == "token_invalid"
+
+    def test_firestore_refused_the_read(self, client, store, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        signed_in_as(monkeypatch, "anonymous")
+        store.fail_with = U.UsageUnavailable("permission denied")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) == "firestore_error"
+
+    def test_a_counted_valuation_reports_nothing(
+            self, client, store, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        signed_in_as(monkeypatch, "anonymous")
+        assert value(client, "AAA").status_code == 200
+        assert self.reason(client) is None
+
+    def test_never_leaks_a_token_a_uid_or_an_error(
+            self, client, store, monkeypatch):
+        monkeypatch.setenv("FIREBASE_PROJECT_ID", "intrinsic-test")
+        signed_in_as(monkeypatch, "anonymous")
+        store.fail_with = U.UsageUnavailable(
+            "PERMISSION_DENIED for uid anon-install-1 with token eyJhbGciOi")
+        value(client, "AAA")
+        raw = client.get("/health").text
+        assert "eyJhbGciOi" not in raw
+        assert "anon-install-1" not in raw
+        assert "PERMISSION_DENIED" not in raw
