@@ -163,6 +163,22 @@ services:
       # Nothing here is meant to be embedded in another site, and the
       # clickjacking this prevents matters more than usual on a page whose
       # whole output is a number someone might act on.
+      # Firebase sign-in opens a pop-up and has to keep its handle on it.
+      #
+      # The default (unsafe-none) already allows this, so the app worked
+      # without the header - but anything that later sets COOP to
+      # same-origin, including a platform default, severs the opener link
+      # and sign-in fails after the Google screens with nothing on screen
+      # to say why. Stating it here makes the requirement explicit and
+      # survives that change.
+      #
+      # `same-origin-allow-popups` keeps the isolation this header exists
+      # for - other documents still cannot reach into this one - while
+      # letting a pop-up this page opened report back.
+      - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: same-origin-allow-popups
+
       - path: /*
         name: X-Frame-Options
         value: DENY
