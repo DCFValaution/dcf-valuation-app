@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "580314884974",
+    "project_id": "intrinsic-e3abf",
+    "storage_bucket": "intrinsic-e3abf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:580314884974:android:54cdeb9a7895b572bd6f7f",
+        "android_client_info": {
+          "package_name": "com.intrinsic.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "580314884974-7hp72sbebifltmvgelsuls3hv7o5csj0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.intrinsic.app",
+            "certificate_hash": "fdc83f4edf3876e88d64838a0b74d48541dbecb3"
+          }
+        },
+        {
+          "client_id": "580314884974-eieeoqvlje6m85av94m5s8vp1iq09si6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.intrinsic.app",
+            "certificate_hash": "39f2b8e4507307be5062be26d0fe2370264ee1d8"
+          }
+        },
+        {
+          "client_id": "580314884974-emf9uiq1t13pvahg2nou4ntjlhbl9d05.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKJk4ipiFheT3mq4iXlSDKBa-xDKJtoZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "580314884974-emf9uiq1t13pvahg2nou4ntjlhbl9d05.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

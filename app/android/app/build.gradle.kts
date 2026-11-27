@@ -5,6 +5,10 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase. Deliberately NOT accompanied by the Analytics or
+    // Crashlytics plugins: the data-safety form says no tracking, and a
+    // plugin that quietly starts collecting would make that false.
+    id("com.google.gms.google-services")
 }
 
 // Release signing secrets. android/key.properties is git-ignored; see
