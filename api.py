@@ -207,18 +207,61 @@ LAN_ORIGIN_PATTERN = (
     r")(:\d+)?$"
 )
 
+# ---------------------------------------------------------------------------
+# What the browser is allowed to send, and to read
+# ---------------------------------------------------------------------------
+#
+# These two lists are the whole of CORS that matters here, and both have a
+# failure mode that looks like something else entirely.
+#
+# A browser will not SEND a header it has not been given permission for. It
+# asks first, in a preflight, and a refused preflight means the real request
+# never happens - the page sees a network error, not a 4xx, so it reports
+# whatever it says when the server is unreachable. Adding a signed header to
+# the client is therefore a CHANGE TO THIS LIST as much as a change to the
+# client, and forgetting that broke every valuation on the web build.
+#
+# A browser will not let the page READ a response header it has not been
+# given permission for either, on a request that otherwise succeeded. The
+# allowance headers are the ones the counter and the gate are built from, so
+# leaving them out is a feature that silently reads nothing.
+#
+# `test_cors.py` derives both lists from the source that produces them - the
+# Dart client for the first, `gate.Allowance.headers` for the second - rather
+# than restating them, because a list here falling out of step with code
+# somewhere else is the exact bug this is paying for.
+
+ALLOWED_REQUEST_HEADERS = [
+    "Content-Type",
+    # Who is asking. Added when valuations started being counted per account.
+    "Authorization",
+    # The App Check attestation, sent whether or not enforcement is on.
+    "X-Firebase-AppCheck",
+]
+
+EXPOSED_RESPONSE_HEADERS = [
+    # The Excel export arrives as a download; the browser can only read the
+    # filename the API chose if this is exposed to it.
+    "Content-Disposition",
+    # The allowance, as `gate.Allowance.headers` writes it.
+    "X-Plan",
+    "X-Valuations-Window",
+    "X-Valuations-Limit",
+    "X-Valuations-Remaining",
+    "X-Valuations-Degraded",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=LAN_ORIGIN_PATTERN,
-    # Nothing here reads a cookie or an Authorization header, so the browser
-    # is never asked to send credentials cross-origin.
+    # Still false, and still correct: `allow_credentials` governs cookies and
+    # TLS client certificates. An Authorization header the app sets itself is
+    # an ordinary request header and is not affected by it.
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
-    # The Excel export arrives as a download; the browser can only read the
-    # filename the API chose if that header is exposed to it.
-    expose_headers=["Content-Disposition"],
+    allow_headers=ALLOWED_REQUEST_HEADERS,
+    expose_headers=EXPOSED_RESPONSE_HEADERS,
     max_age=600,
 )
 

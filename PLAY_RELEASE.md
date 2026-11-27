@@ -605,6 +605,78 @@ nothing happens — so test both before shipping.
 
 ---
 
+## Before any web deploy: one valuation, in a real browser
+
+This gate exists because two bugs in a row reached production that every
+other check passed, and both were invisible to anything that was not a
+browser.
+
+| What shipped broken | What missed it | What saw it |
+| --- | --- | --- |
+| Offline detection compared `runtimeType.toString()`, which dart2js minifies | Every Dart test (unminified, so it always matched) | A screenshot of a release build |
+| `allow_headers` listed `Content-Type` only, so the signed request was refused in preflight | The whole Python suite, and curl, and the production verification script | Loading the page |
+
+The pattern is the same both times: the thing that broke only exists in a
+real browser running a real release build. A release compile removes
+names; a browser asks permission before it sends a header, and refuses to
+hand the page a response header it was not promised. `curl` does neither.
+
+### What is automated now
+
+`tools/preflight.py` runs the Python suite, and `test_cors.py` now covers
+this class directly:
+
+- a preflight carrying `authorization` and `x-firebase-appcheck` is
+  answered 200;
+- every allowance header is exposed;
+- **and two drift tests** that read `AuthTokens.headers` out of
+  `account_service.dart` and ask `gate.Allowance.headers` what it writes,
+  so adding a header on one side and forgetting `api.py` fails in Python
+  rather than in production.
+
+That covers the bug that happened and the next one of its shape.
+
+### What cannot be automated here, and so is a manual gate
+
+Everything that needs a real browser engine. Driving one would mean adding
+Playwright or Selenium to a repo that has neither, and a headless browser
+would still not exercise CanvasKit, the Firebase JS SDK, or anonymous
+sign-in against a real project. So this stays a person, and it is five
+minutes:
+
+**Before pressing deploy on `intrinsic-web`, against a LOCAL api:**
+
+```
+# 1. the API under test
+python -m uvicorn api:app --host 127.0.0.1 --port 8000
+
+# 2. the web build, pointed at it (NOT at production)
+cd app && flutter build web --dart-define=BACKEND_BASE_URL=http://localhost:8000
+
+# 3. serve it from an allowed origin - 8080 is in DEFAULT_ALLOWED_ORIGINS
+cd build/web && python -m http.server 8080
+```
+
+Then open `http://localhost:8080` in a browser and check, in order:
+
+1. **Value one company.** It must return a valuation, not "Unexpected
+   problem". That one request is the whole cross-origin path: preflight,
+   signed request, response.
+2. **The counter pill shows a number.** If the valuation works but the
+   pill is blank or absent, the request passed and `expose_headers` is
+   wrong - the page was sent the allowance and is not allowed to read it.
+3. **The console is clean.** Open devtools before loading. A CORS failure
+   appears there as a blocked-by-policy error and NOWHERE ELSE: the app
+   itself cannot tell it apart from the server being down, and will say
+   so, which is how this one was first misread as a backend outage.
+4. **Reload on a pushed route** (`/delete`) - the SPA rewrite.
+
+Only then deploy the web build. Do the same four on the live site
+afterwards, because the live origin is not `localhost` and only the live
+origin proves the live allow-list.
+
+---
+
 ## After every release
 
 - [ ] Confirm the deployed commit matches `HEAD` (`/health` returns it).
