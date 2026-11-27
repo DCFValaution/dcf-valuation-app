@@ -1,0 +1,16 @@
+{
+  "name": "intrinsic-firestore-rules",
+  "private": true,
+  "type": "module",
+  "description": "The Firestore security rules and the suite that proves they hold.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore \"node --test rules.test.mjs\"",
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "rules:diff": "firebase firestore:rules:list"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "4.0.1",
+    "firebase": "11.10.0",
+    "firebase-tools": "14.11.1"
+  }
+}

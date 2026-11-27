@@ -1,0 +1,313 @@
+rules_version = '2';
+
+// Who may read and write what.
+//
+// This file is the ONLY thing standing between one user's saved work and
+// everybody else's, because the app talks to Firestore directly: there is
+// no server in the path to re-check anything. The backend never writes
+// here and holds no Firebase credential, which is deliberate - see
+// identity.py - so these rules are not a second line of defence. They are
+// the line.
+//
+// Two jobs, and they are different:
+//
+//   OWNERSHIP   nobody reaches a document under somebody else's uid. This
+//               is the part that matters, and it is one condition.
+//
+//   SHAPE       a signed-in user cannot store arbitrary fields, or a
+//               megabyte of them, under their own uid. Not a security
+//               boundary in the same sense - they are only hurting
+//               themselves - but it keeps the stored data matching what
+//               the app and the migrations expect, and it stops a
+//               compromised or curious client turning our Firestore into
+//               their free database.
+//
+// Default deny is the last rule in the file and applies to every path not
+// named above it, including ones added later. A new collection is
+// unreachable until somebody writes a rule for it on purpose.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ---------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function owner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // How they signed in, from the token rather than from anything the
+    // client chose. `get` with a default because a token without the
+    // claim must read as "unknown" rather than error - an error denies,
+    // and denying a legitimate reader is the one failure mode worse than
+    // the rule not firing.
+    function provider() {
+      return request.auth.token.get('firebase', {})
+                 .get('sign_in_provider', 'unknown');
+    }
+
+    // An anonymous account is a real account - every installation has one
+    // - but it is not one that may keep work. The app never offers saving
+    // to a signed-out reader; this is what makes that true rather than
+    // merely intended, and it is what lets the privacy policy say that an
+    // anonymous installation holds nothing but a counter.
+    function realAccount(uid) {
+      return owner(uid) && provider() != 'anonymous';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Exactly these keys, no others. `hasOnly` permits a subset, so the
+    // required ones are checked separately.
+    function onlyKeys(allowed) {
+      return incoming().keys().hasOnly(allowed);
+    }
+
+    function isTimestamp(field) {
+      return incoming()[field] is timestamp;
+    }
+
+    function shortString(field, maxLength) {
+      return incoming()[field] is string
+          && incoming()[field].size() > 0
+          && incoming()[field].size() <= maxLength;
+    }
+
+    // ---- the user record -------------------------------------------------
+    //
+    // Email is stored because it is what the account screen shows and what
+    // a deletion request is checked against. Nothing else from the Google
+    // profile is kept: no display name, no photo URL, no locale. The
+    // data-safety form says so, and this rule is what makes that true
+    // rather than merely intended.
+
+    match /users/{uid} {
+      allow read: if owner(uid);
+
+      allow create, update: if realAccount(uid)
+        && onlyKeys(['email', 'created_at', 'last_seen_at'])
+        && incoming().keys().hasAll(['email', 'created_at', 'last_seen_at'])
+        && shortString('email', 320)
+        && isTimestamp('created_at')
+        && isTimestamp('last_seen_at');
+
+      // Deletion is the user's right and a Play requirement, so it is
+      // never conditional on anything but ownership.
+      allow delete: if owner(uid);
+
+      // ---- the watchlist -------------------------------------------------
+      //
+      // ONE document, not one per ticker. Firestore bills per document
+      // read, so a ten-company watchlist opened three times a day is
+      // thirty reads per user per day as a collection and three as a
+      // single document. At a thousand users that is the difference
+      // between brushing the free quota and using six per cent of it.
+      //
+      // `rows` holds each ticker's last known value, price and date, so
+      // the watchlist paints before the network is touched. It is this
+      // user's own copy of their own screen - nobody else reads it, and
+      // nothing trusts it as a source of truth.
+
+      match /lists/watchlist {
+        allow read: if owner(uid);
+
+        allow create, update: if realAccount(uid)
+          && onlyKeys(['tickers', 'rows', 'updated_at'])
+          && incoming().keys().hasAll(['tickers', 'updated_at'])
+          && incoming().tickers is list
+          && incoming().tickers.size() <= 50
+          && (!('rows' in incoming().keys()) || incoming().rows is map)
+          && isTimestamp('updated_at');
+
+        allow delete: if owner(uid);
+      }
+
+      // Nothing else under /lists. Named explicitly rather than left to
+      // the default, because a future list added without a rule should
+      // fail loudly in development rather than quietly in production.
+      match /lists/{other} {
+        allow read, write: if false;
+      }
+
+      // ---- saved valuations ----------------------------------------------
+      //
+      // Belt and braces, on purpose. Listing schema_version in hasAll is
+      // redundant - the `is int` check below already refuses a write
+      // without it, because reading a missing key in a rule errors and an
+      // error denies. Mutation testing found the redundancy and it is kept:
+      // the alternative leans on a subtlety of the rules language in the
+      // one file standing between every user and everybody else.
+      //
+      // `schema_version` is required on every save and is what lets a
+      // slider added next year reopen a save made today. A write without
+      // it is refused here rather than discovered later by a migration
+      // that cannot tell which shape it is looking at.
+
+      match /saves/{saveId} {
+        allow read: if owner(uid);
+
+        allow create, update: if realAccount(uid)
+          && onlyKeys(['name', 'ticker', 'schema_version', 'assumptions',
+                       'saved_value', 'created_at', 'updated_at'])
+          && incoming().keys().hasAll(['name', 'ticker', 'schema_version',
+                                       'assumptions', 'created_at',
+                                       'updated_at'])
+          && shortString('name', 120)
+          && shortString('ticker', 12)
+          && incoming().schema_version is int
+          && incoming().schema_version >= 1
+          && incoming().assumptions is map
+          && incoming().assumptions.size() <= 40
+          && (!('saved_value' in incoming().keys())
+              || incoming().saved_value == null
+              || incoming().saved_value is number)
+          && isTimestamp('created_at')
+          && isTimestamp('updated_at');
+
+        allow delete: if owner(uid);
+      }
+    }
+
+
+    // ---- the valuation counter -------------------------------------------
+    //
+    // THE ONE PLACE THE BACKEND WRITES
+    //
+    // Everything else here is written by the app. This is written by the
+    // API, as the caller: the Firestore REST API accepts a Firebase ID
+    // token, so the server can write under this uid without a
+    // service-account key - see usage.py and identity.py. Which means
+    // these rules govern the server's write exactly as they govern the
+    // app's, and the server gets no special powers.
+    //
+    // THE COUNT AND THE MARKER ARE ONE WRITE OR NEITHER
+    //
+    // The counter is `lifetime` plus a per-day pair. The markers are one
+    // document per (ticker, UTC day), and they are what makes reopening a
+    // company, dragging a slider or switching to the relative view free:
+    // the marker is already there, so the commit fails its precondition
+    // and nothing is counted.
+    //
+    // The danger in that design is a client creating markers on its own -
+    // pre-seeding a marker for every ticker it is about to value, so the
+    // counter never moves. These rules close it from both ends, using
+    // getAfter/existsAfter to look at the state the whole commit leaves
+    // behind rather than at each write alone:
+    //
+    //   a marker may be created  ONLY IF the counter ends this commit
+    //                            exactly one higher, and names THIS marker
+    //   the counter may go up    ONLY IF the marker it names exists after
+    //
+    // Neither write is legal without the other, and Firestore applies a
+    // commit atomically, so there is no ordering in which a client gets
+    // one without the other.
+    //
+    // WHAT A CLIENT CAN STILL DO is increment its own counter, which
+    // spends its own allowance. That is not an attack.
+
+    match /usage/{uid} {
+      function marker(id) {
+        return /databases/$(database)/documents/usage/$(uid)/valued/$(id);
+      }
+      function named() {
+        return incoming().last_marker;
+      }
+
+      allow read: if owner(uid);
+
+      // The first valuation this installation has ever made.
+      allow create: if owner(uid)
+        && onlyKeys(['lifetime', 'day', 'day_count', 'last_marker'])
+        && incoming().keys().hasAll(['lifetime', 'day', 'day_count',
+                                     'last_marker'])
+        && incoming().lifetime == 1
+        && incoming().day_count == 1
+        && incoming().day is string
+        && incoming().last_marker is string
+        && existsAfter(marker(named()));
+
+      // Every one after it. Exactly +1 - never a jump, never a decrease -
+      // and the day counter restarts when the stored day is not the day
+      // being written, which is what makes a daily limit possible without
+      // anything running at midnight.
+      allow update: if owner(uid)
+        && onlyKeys(['lifetime', 'day', 'day_count', 'last_marker'])
+        && incoming().keys().hasAll(['lifetime', 'day', 'day_count',
+                                     'last_marker'])
+        && incoming().lifetime == resource.data.lifetime + 1
+        && incoming().day is string
+        && incoming().last_marker is string
+        && incoming().day_count == (resource.data.day == incoming().day
+                                    ? resource.data.day_count + 1
+                                    : 1)
+        && existsAfter(marker(named()));
+
+      // DELETION, AND WHY IT IS NOT SIMPLY owner()
+      //
+      // Two things are true at once and they pull in opposite directions.
+      // The deletion page promises that everything is removed, so this
+      // document must be deletable. And a document the holder can delete
+      // at will is a reset button on their own free allowance.
+      //
+      // So: deletable only in a commit that leaves no user record behind.
+      //
+      //   signed in, deleting the account - users/{uid} goes in the same
+      //       commit, existsAfter is false, allowed
+      //   signed in, trying to reset - users/{uid} survives, refused
+      //   anonymous - never had a users/{uid}, so always allowed, which
+      //       is correct: an anonymous installation IS its counter, and
+      //       resetting it is the reinstall we already decided to accept
+      //
+      // This is written for the limit that does not exist yet. Signed-in
+      // callers are unmetered today, so the middle case costs nothing
+      // now; it costs everything the day FREE_DAILY_VALUATIONS is set.
+      allow delete: if owner(uid)
+        && !existsAfter(/databases/$(database)/documents/users/$(uid));
+
+      // ---- the markers ---------------------------------------------------
+      //
+      // Create is the interesting one; see above. Update is refused
+      // outright, because a marker carries no information worth changing
+      // and a mutable marker is one more thing to reason about.
+      //
+      // Delete is plain ownership, and deliberately not guarded the way
+      // the counter is: deleting a marker does not lower the count. It
+      // only lets the same ticker be counted again today, which spends
+      // the holder's own allowance. Guarding it would buy nothing and
+      // would make deleting an account with hundreds of markers a single
+      // batch that could not be split.
+
+      match /valued/{markerId} {
+        function counter() {
+          return /databases/$(database)/documents/usage/$(uid);
+        }
+
+        allow read: if owner(uid);
+
+        allow create: if owner(uid)
+          && onlyKeys(['ticker'])
+          && incoming().ticker is string
+          && getAfter(counter()).data.last_marker == markerId
+          && getAfter(counter()).data.lifetime ==
+             (exists(counter()) ? get(counter()).data.lifetime + 1 : 1);
+
+        allow update: if false;
+
+        allow delete: if owner(uid);
+      }
+    }
+
+    // ---- everything else -------------------------------------------------
+    //
+    // Including any collection added after this file was last read.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
