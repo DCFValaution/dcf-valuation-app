@@ -73,6 +73,28 @@ services:
       - key: PUBLIC_DATA_CONTACT
         sync: false
 
+      # The Firebase project this API verifies ID tokens against.
+      #
+      # NOT A SECRET - it appears in the app's own config and in the
+      # audience of every token - but without it `identity.verify` cannot
+      # run at all: every request is treated as unattributable, nobody is
+      # counted, and every response comes back degraded. The app still
+      # works, which is exactly why this is easy to miss.
+      #
+      # It was missing from this file for as long as identity.py existed,
+      # and went unnoticed because nothing read the result until the free
+      # allowance shipped.
+      - key: FIREBASE_PROJECT_ID
+        value: intrinsic-e3abf
+
+      # The project NUMBER, for verifying App Check tokens. Also not a
+      # secret: it ships inside google-services.json. Without it the API
+      # logs a warning on every request and treats every caller as
+      # unattested - harmless until APP_CHECK_ENFORCED is turned on, and
+      # a total outage the moment it is.
+      - key: FIREBASE_PROJECT_NUMBER
+        value: "580314884974"
+
       # Which price provider to use. "yahoo" is the only implementation
       # today and is also the default in code, so this exists to make the
       # switch a dashboard change rather than a deploy: adding Twelve Data

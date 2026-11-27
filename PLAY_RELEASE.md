@@ -141,7 +141,7 @@ dashboard:
 
 | Variable | Value | Why |
 | --- | --- | --- |
-| `FIREBASE_PROJECT_ID` | your project id | Already set — it is what verifies ID tokens |
+| `FIREBASE_PROJECT_ID` | `intrinsic-e3abf` | **Was never actually set.** Without it `identity.verify` cannot run, every caller is unattributable, nobody is counted and every response is degraded — and the app keeps working, which is why it went unnoticed |
 | `FIREBASE_PROJECT_NUMBER` | the long numeric id | New. Without it no App Check token can be verified, and the log says so on every request |
 | `APP_CHECK_ENFORCED` | **leave unset** | **Must stay off.** See below |
 | `ANON_VALUATION_LIMIT` | unset (defaults to 3) | Set it only to change the number |
