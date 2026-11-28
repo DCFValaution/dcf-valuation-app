@@ -1074,6 +1074,34 @@ def assess_suitability(fin: CompanyFinancials, derived: DerivedAssumptions,
         # the refusal are one scale with two thresholds rather than two
         # unrelated tests. At 150% Amazon (124%) is valued and flagged;
         # Tesla (668%) is refused.
+        # --- Blocking: the whole business comes out worth nothing ---------
+        #
+        # This is the far side of the rule below, and the share cannot see
+        # it. `tv_pct_of_ev` divides by enterprise value, so as the
+        # terminal value grows against a forecast worth less than nothing
+        # the share runs up to infinity, crosses, and comes back as a
+        # NEGATIVE number - Oracle read -6951% - which sails under a
+        # `> 150%` test untouched and is reported as no concern at all.
+        #
+        # So the denominator is checked on its own terms. A company whose
+        # entire value, forecast and perpetuity together, is zero or less
+        # has nothing to report whatever the ratio says about it.
+        #
+        # It is NOT the same question as "the forecast contributes
+        # nothing". That rule was measured and rejected: it catches Amazon,
+        # whose forecast only turns negative because the derived capital
+        # spending outruns its margin, and whose enterprise value is
+        # solidly positive. Amazon keeps its serious warning at 136% and
+        # keeps being valued.
+        elif probe.enterprise_value <= 0:
+            codes.append("negative_enterprise_value")
+            reasons.append(
+                "Even counting everything after the forecast, this company "
+                "comes out worth nothing or less: the investment it is "
+                "assumed to make outweighs the cash it brings in. There is "
+                "no figure here worth reporting."
+            )
+
         elif probe.tv_pct_of_ev > TV_REFUSAL_SHARE:
             codes.append("terminal_value_dominates")
             reasons.append(
@@ -1940,6 +1968,12 @@ HYPOTHETICAL_REFUSAL_CODES = frozenset({
     # rule no longer catches it, so leaving it out would make that refusal
     # the dead end the whole route exists to remove.
     "terminal_value_dominates",
+    # The same complaint reaching the same reader, from the other side of
+    # the ratio: a company whose whole value comes out at zero or less is
+    # refused over its growth and its investment, which are two of the
+    # three figures the hypothetical screen hands them. Leaving it out
+    # would make this the dead end the route exists to remove.
+    "negative_enterprise_value",
 })
 
 # Codes that may accompany those without sending the reader to the generic
@@ -1966,7 +2000,8 @@ def hypothetical_framing_for(codes: "list[str] | set[str]") -> str:
     """
     # Both of these refuse a company that MAKES money, so neither gets the
     # loss-maker's words.
-    profitable = {"negative_fcf", "terminal_value_dominates"}
+    profitable = {"negative_fcf", "terminal_value_dominates",
+                  "negative_enterprise_value"}
     return (FRAMING_WHAT_WOULD_HAVE_TO_BE_TRUE if set(codes) & profitable
             else FRAMING_PATH_TO_PROFIT)
 

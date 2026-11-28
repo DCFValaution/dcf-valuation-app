@@ -73,14 +73,30 @@ BUILDERS = {
                              margin=-0.30, gross=0.30),
     DEEPLOSS: lambda: grower(DEEPLOSS, margin=-2.00, gross=0.20),
     UNDERWATER: lambda: grower(UNDERWATER, margin=-0.40, gross=-0.10),
-    # Shaped like Tesla as measured: a real profit (6% operating margin, 18%
-    # gross) on growing revenue, and capex at 10% of it, so the forecast never
-    # turns cash positive. Refused for `negative_fcf` alone - which is the
-    # refusal no earlier tier serves, since the speculative estimate exists
-    # for losses and this company is not making one.
+    # Shaped like Tesla: a real profit (6% operating margin, 18% gross) on
+    # growing revenue, and capital spending heavy enough that the answer
+    # stops being about the forecast. Refused for terminal dominance, which
+    # is the refusal no earlier tier serves - the speculative estimate
+    # exists for losses, and this company is not making one.
+    #
+    # Capex was 10% and is 11.5% because the figure it has to produce
+    # moved, not because the case did. Unifying return on capital onto the
+    # assets-side measure raised this company's long-run return, which
+    # raised its terminal value - and for a company whose forecast is worth
+    # less than nothing, a BIGGER terminal value makes the terminal SHARE
+    # smaller, because the share divides by a total the forecast is
+    # dragging down. It fell from 185% to 144% and slipped under the 150%
+    # line while being, in every way that matters, the same company.
+    #
+    # Tesla as measured today is capex 14.9% of revenue on a 5.1% margin,
+    # which is heavier than this. Those figures are not used because this
+    # synthetic pipeline has no capex glide and no depreciation catching
+    # up, so at that weight its LAST forecast year turns negative and
+    # `negative_fcf` claims it first - which is the refusal this fixture
+    # exists NOT to be.
     OUTSPENDER: lambda: grower(OUTSPENDER, margin=0.06, gross=0.18,
                                revenues=[90_000e6 / 1.05 ** i for i in range(4)],
-                               capex_share=0.10),
+                               capex_share=0.115),
     BANK: lambda: make_bank(BANK),
     LENDERLOSS: lambda: reshape(financial("Credit Services", interest_share=0.35,
                                           ticker=LENDERLOSS), margin=-0.30),
