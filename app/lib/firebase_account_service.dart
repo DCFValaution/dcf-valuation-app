@@ -27,6 +27,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'account_service.dart';
 import 'app_check_config.dart';
 import 'firebase_emulator.dart';
+import 'sign_in_recovery.dart';
 import 'release_log.dart';
 import 'sign_out_sequence.dart';
 
@@ -91,7 +92,36 @@ class FirebaseAccountService implements AccountService {
   @override
   Future<void> ensureSignedIn() async {
     if (_auth.currentUser != null) return;
+    if (kIsWeb) await _settleAnyRedirect();
+    if (_auth.currentUser != null) return;
     await _anonymouslyQuietly();
+  }
+
+  /// Read a returning redirect BEFORE anonymous sign-in can outrun it.
+  ///
+  /// Nothing in the app calls `signInWithRedirect` any more. This is not
+  /// for the flow; it is for the race, which is what turned a failed
+  /// sign-in into a lost identity.
+  ///
+  /// A reader coming back from a redirect arrives on a fresh page where
+  /// `currentUser` is null for as long as the result takes to resolve.
+  /// `ensureSignedIn` ran in that gap, created a NEW anonymous account,
+  /// and the identity they had just proved was discarded - their uid
+  /// replaced, their allowance reset. Reading the result first closes
+  /// the gap.
+  ///
+  /// It still matters with the fallback gone: a reader mid-redirect when
+  /// this ships comes back to a build that no longer starts one, and
+  /// this is what lets them land signed in rather than as a stranger.
+  ///
+  /// Quietly, because there is almost never a redirect to settle and
+  /// "there wasn't one" is not a failure worth a message.
+  Future<void> _settleAnyRedirect() async {
+    try {
+      await _auth.getRedirectResult();
+    } catch (e, stack) {
+      logFailure('redirect result', e, stack);
+    }
   }
 
   /// Anonymous sign-in, which never fails loudly.
@@ -211,36 +241,54 @@ class FirebaseAccountService implements AccountService {
       await user.linkWithCredential(credential);
       logStep('sign-in', 'linked; the uid and the valuation count are kept');
     } on fb.FirebaseAuthException catch (e) {
-      if (!_alreadyHasAnAccount(e.code)) rethrow;
-      await _switchToTheExistingAccount(stranded,
-          () => _auth.signInWithCredential(credential));
+      // The credential the error carries, or the one already in hand.
+      // This path was handed a credential to begin with, so there is
+      // always one here and never a reason to ask for a second gesture.
+      final recovered = e.credential ?? credential;
+      if (recoveryAfterLinkFailure(e.code, haveCredential: true) !=
+          LinkRecovery.signInWithTheCredential) {
+        rethrow;
+      }
+      await _switchToTheExistingAccount(stranded, recovered);
     }
   }
 
   /// They already had this Google account, so there is nothing to link to.
   ///
   /// They sign in to the account they had, and the anonymous identity is
-  /// discarded. Its counter goes with it - DELETED FIRST, while we are
-  /// still signed in as that uid, because the moment the identity changes
-  /// the rules will not let anybody reach those documents again, and they
+  /// discarded. Its counter goes with it - deleted while we are still
+  /// signed in as that uid, because the moment the identity changes the
+  /// rules will not let anybody reach those documents again, and they
   /// would sit there against a privacy policy that says they do not.
+  ///
+  /// WHEN THIS RUNS IS THE WHOLE DESIGN.
+  ///
+  /// It used to run on the way to a second pop-up that the browser then
+  /// blocked, so a reader who never finished signing in lost their free
+  /// valuations anyway. Nothing reaches this function now until the
+  /// pop-up has SUCCEEDED and the credential is in hand, so a cancelled,
+  /// closed or failed sign-in cannot touch the counter at all.
+  ///
+  /// The remaining window is one call wide: between the delete and
+  /// `signInWithCredential` returning. A credential Google has just
+  /// issued and Firebase has just validated is about as close to certain
+  /// as this gets, but it is not certain, and a reader who loses that
+  /// race loses their remaining free valuations. The alternative - delete
+  /// afterwards - trades a rare loss of allowance for a permanent orphan
+  /// no one can read or erase, which is the worse of the two. Reaping
+  /// those orphans needs an admin credential, and this deployment
+  /// deliberately keeps no Firebase secret on the server.
   ///
   /// Nothing else needs migrating: an anonymous installation cannot save
   /// a valuation or keep a watchlist, which the Firestore rules enforce
   /// rather than merely assume.
   Future<void> _switchToTheExistingAccount(
-      String stranded, Future<void> Function() signIn) async {
+      String stranded, fb.AuthCredential credential) async {
     logStep('sign-in',
         'that Google account already exists; discarding the anonymous one');
     await _deleteUsageQuietly(stranded);
-    await signIn();
+    await _auth.signInWithCredential(credential);
   }
-
-  static bool _alreadyHasAnAccount(String code) =>
-      code == 'credential-already-in-use' ||
-      code == 'email-already-in-use' ||
-      code == 'account-exists-with-different-credential' ||
-      code == 'provider-already-linked';
 
   /// Google sign-in on the web, through Firebase Auth's own pop-up.
   ///
@@ -286,42 +334,38 @@ class FirebaseAccountService implements AccountService {
       // one cost a round trip to find out what it even was.
       debugPrint('Firebase sign-in failed: code=${e.code} '
           'message=${e.message}');
-      switch (e.code) {
+      // THERE IS NO REDIRECT FALLBACK, AND THERE CANNOT BE ONE HERE.
+      //
+      // `signInWithRedirect` used to catch four codes. It could never
+      // have worked on this deployment. Firebase's own guidance is that
+      // the redirect helper runs in a cross-origin iframe on the
+      // `authDomain`, and "this mechanism doesn't work with browsers that
+      // block third-party storage access" - Chrome M115+, Firefox 109+,
+      // Safari 16.1+. This app is served from a host that is not Firebase
+      // Hosting while its authDomain is a firebaseapp.com subdomain,
+      // which is exactly the configuration that breaks. A reader sent
+      // down that path proved their identity to Google a second time and
+      // came back anonymous.
+      //
+      // Firebase's Option 2 is to use the pop-up and nothing else, which
+      // is what this does. Bringing the redirect back would mean
+      // proxying /__/auth/ to the firebaseapp.com domain (Option 3) or
+      // self-hosting the handler files (Option 4) first.
+      switch (classifyPopupFailure(e.code)) {
         // They shut the window, or a second attempt superseded the first.
         // Neither is a failure, and neither deserves a red message.
-        case 'popup-closed-by-user':
-        case 'cancelled-popup-request':
-        case 'user-cancelled':
+        case PopupFailure.cancelled:
           throw const AccountError(cancelled);
 
-        // The pop-up could not be opened, or it opened and could not
-        // report back. The second is the Cross-Origin-Opener-Policy case:
-        // Google's own sign-in pages send COOP: same-origin, which severs
-        // the opener link, so the app cannot see the window close and
-        // Firebase gives up on it. A redirect has no window to watch and
-        // no opener to lose, so it is immune to all of this - it costs
-        // the page, which is why it is the fallback rather than the
-        // default.
-        case 'popup-blocked':
-        case 'web-storage-unsupported':
-        case 'internal-error':
-        case 'timeout':
-          debugPrint('Firebase sign-in: falling back to redirect.');
-          await _auth.signInWithRedirect(provider);
-          return;
+        // The one case where naming a setting is useful advice rather
+        // than a shrug.
+        case PopupFailure.blocked:
+          throw const AccountError(popupBlockedMessage);
 
-        case 'unauthorized-domain':
-          // The one failure a redirect will not fix, and the one with a
-          // precise remedy - so it says the remedy rather than "try
-          // again", which would be advice to repeat a thing that cannot
-          // work.
-          throw const AccountError(
-            'This address is not an authorised domain for sign-in. Add it '
-            'in Firebase console → Authentication → Settings → Authorised '
-            'domains.',
-          );
+        case PopupFailure.unauthorisedDomain:
+          throw const AccountError(unauthorisedDomainMessage);
 
-        default:
+        case PopupFailure.other:
           throw AccountError('${_plain(e.message ?? e.code)} (${e.code})');
       }
     }
@@ -344,9 +388,19 @@ class FirebaseAccountService implements AccountService {
       await user.linkWithPopup(provider);
       logStep('sign-in', 'linked; the uid and the valuation count are kept');
     } on fb.FirebaseAuthException catch (e) {
-      if (!_alreadyHasAnAccount(e.code)) rethrow;
-      await _switchToTheExistingAccount(
-          stranded, () => _auth.signInWithPopup(provider));
+      // The credential comes OUT OF THE ERROR, and a second pop-up is
+      // never opened. The pop-up has already done its work - the reader
+      // proved who they are to Google - and `credential-already-in-use`
+      // carries that proof back. Asking again would need a user gesture
+      // this code does not have, which is precisely how this path used
+      // to end in a blocked pop-up and a doomed redirect.
+      final credential = e.credential;
+      if (recoveryAfterLinkFailure(e.code,
+              haveCredential: credential != null) !=
+          LinkRecovery.signInWithTheCredential) {
+        rethrow;
+      }
+      await _switchToTheExistingAccount(stranded, credential!);
     }
   }
 

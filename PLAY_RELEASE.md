@@ -698,8 +698,23 @@ Then open `http://localhost:8080` in a browser and check, in order:
    itself cannot tell it apart from the server being down, and will say
    so, which is how this one was first misread as a backend outage.
 4. **Reload on a pushed route** (`/delete`) - the SPA rewrite.
+5. **Sign in with a Google account that ALREADY EXISTS in Auth**, in a
+   normal window - not incognito - on a fresh browser profile. One
+   pop-up, one account chooser, and you come back signed in. If the page
+   itself navigates to Google, that is the old bug: a second pop-up was
+   opened without a gesture, the browser blocked it, and the redirect
+   that followed cannot complete on this deployment at all.
+6. **Cancel a sign-in and check the pill did not move.** Open the
+   chooser, close it, and count the free valuations again. They must be
+   the number they were. A cancelled sign-in that resets the allowance
+   means the anonymous counter is being deleted before the sign-in has
+   succeeded.
 
-Only then deploy the web build. Do the same four on the live site
+Steps 5 and 6 need a real Google account, so they cannot be scripted
+here and cannot be done by an agent - signing in means handling a
+password. They are the owner's to run.
+
+Only then deploy the web build. Do the same six on the live site
 afterwards, because the live origin is not `localhost` and only the live
 origin proves the live allow-list.
 
