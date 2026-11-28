@@ -19,11 +19,12 @@ import 'sensitivity_table.dart';
 import 'speculative_screen.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 
 import 'account_service.dart';
 import 'allowance.dart';
+import 'app_check_config.dart';
 import 'delete_account_page.dart';
 import 'firebase_account_service.dart';
 import 'firebase_emulator.dart';
@@ -40,18 +41,6 @@ import 'delete_account_route.dart';
 import 'theme.dart';
 import 'ticker_search.dart';
 import 'valuation_api.dart';
-
-/// The reCAPTCHA Enterprise site key, for App Check on the web.
-///
-/// A public key - it ships in the page either way - but environment
-/// specific, so it is a define rather than a constant. Empty means "do not
-/// activate the web provider", which is the right behaviour for a local
-/// build: activating with no key throws, and a developer build that
-/// refuses to start because of an anti-abuse measure helps nobody.
-///
-///     flutter build web --dart-define=RECAPTCHA_SITE_KEY=6Lxxxxx
-const String kRecaptchaSiteKey =
-    String.fromEnvironment('RECAPTCHA_SITE_KEY');
 
 /// Which analysis of a valued company is on screen.
 enum _Lens { intrinsic, relative }
@@ -191,7 +180,7 @@ Future<void> main() async {
     //
     // Skipping the call outright is what this constant's documentation has
     // claimed all along.
-    if (kIsWeb && kRecaptchaSiteKey.isEmpty) {
+    if (!kAppCheckConfigured) {
       logStep('app-check', 'skipped: the web build has no site key');
     } else {
       try {

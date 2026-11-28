@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'account_service.dart';
+import 'app_check_config.dart';
 import 'firebase_emulator.dart';
 import 'release_log.dart';
 import 'sign_out_sequence.dart';
@@ -124,11 +125,21 @@ class FirebaseAccountService implements AccountService {
     // unavailable for reasons that have nothing to do with the reader -
     // an unregistered debug build, a Play Integrity hiccup - and losing
     // the attestation must not also lose the identity.
+    //
+    // Where startup skipped `activate()` there is nothing to ask for, and
+    // asking throws rather than returning null: "Before using other
+    // Firebase App Check APIs, FirebaseAppCheck.instance.activate() must
+    // be called first", on every single request. That is not a failure
+    // worth logging - it is this build's own decision, read back. Best
+    // effort means trying what might work, not asking a question whose
+    // answer is already known.
     String? attestation;
-    try {
-      attestation = await FirebaseAppCheck.instance.getToken();
-    } catch (e) {
-      logFailure('app check token', e);
+    if (kAppCheckConfigured) {
+      try {
+        attestation = await FirebaseAppCheck.instance.getToken();
+      } catch (e) {
+        logFailure('app check token', e);
+      }
     }
 
     if (id == null && attestation == null) return null;
