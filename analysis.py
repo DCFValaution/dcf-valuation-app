@@ -510,6 +510,38 @@ def input_source_warnings(derived, *, dcf: bool,
                       "because this company's own could not be worked out; "
                       "the figure says little about this company.")))
 
+    # --- A return on capital the filings would not give --------------------
+    #
+    # When the company's own return cannot be measured, the long-run return
+    # falls back to the cost of capital. That is the conservative choice and
+    # the right one - it says growth creates no value rather than inventing
+    # a figure - but it is a large, silent haircut to the terminal value,
+    # and silence is the problem. The reader sees a valuation that looks
+    # like any other while one of its biggest assumptions was not derived
+    # from this company at all.
+    #
+    # The same absence hides the return-on-capital box, so this note stands
+    # where that box would have been rather than adding to the page.
+    roic_prov = defaulted("terminal_roic")
+    if (dcf and roic_prov is not None
+            and diagnostics.get("current_roic") is None):
+        out.append(Warning(
+            "This company's filings do not give enough to work out what it "
+            "earns on the money tied up in it. The valuation therefore "
+            "assumes it earns exactly its cost of capital once it matures, "
+            "which means growth beyond the forecast adds nothing to what "
+            "the company is worth.",
+            # Caution, not serious. Serious means the figure does not mean
+            # what it appears to; this one does. It is a deliberately
+            # conservative assumption, applied because the alternative was
+            # to invent a number, and the reader needs to know it was made
+            # rather than to be told the answer is unreliable.
+            severity=SEVERITY_CAUTION, kind="roic_unmeasurable",
+            detail={"terminal_roic": roic_prov.value,
+                    "why": roic_prov.detail},
+            headline=("Return on capital could not be measured, so growth "
+                      "beyond the forecast is assumed to add nothing.")))
+
     # --- A margin that followed a steep trend ------------------------------
     #
     # The rule takes the latest year where the margin has moved one way for
