@@ -1683,8 +1683,23 @@ def derive_assumptions(fin: CompanyFinancials,
             "could not be measured; growth then creates no value")
     else:
         halfway = (roic_now + wacc) / 2
-        floored = max(halfway, wacc)
-        capped, bit = _clamp(floored, (0.0, TERMINAL_ROIC_CAP))
+        capped, bit = _clamp(halfway, (0.0, TERMINAL_ROIC_CAP))
+        # The floor outranks the ceiling, and the order is the whole point.
+        #
+        # Below a cost of capital of TERMINAL_ROIC_CAP the two orders agree,
+        # and that is everywhere the app can currently reach: a measured beta
+        # is capped at 4.00, which puts the build-up's ceiling near 22%, and
+        # the slider stops at 20%. Above it they disagree. Flooring first and
+        # capping second - which is what this did - settles the long-run
+        # return BELOW the cost of capital, so a company would be assumed to
+        # destroy value by growing, forever. That is the one outcome the
+        # floor exists to prevent.
+        #
+        # The ceiling is a claim about how long a competitive advantage can
+        # last. The floor is a claim about whether the arithmetic means
+        # anything at all. The second outranks the first.
+        if wacc > capped:
+            capped, bit = wacc, False
         terminal_roic = record(
             "terminal_roic", capped,
             "derived (clamped)" if bit else "derived",
@@ -1696,7 +1711,7 @@ def derive_assumptions(fin: CompanyFinancials,
              f"halfway from the {roic_now:.1%} it earns now to its "
              f"{wacc:.1%} cost of capital, on the view that competition "
              f"takes about half the excess"),
-            **({"raw": floored, "limit": capped, "why": "range"} if bit else {}))
+            **({"raw": halfway, "limit": capped, "why": "range"} if bit else {}))
     diagnostics["current_roic"] = roic_now
 
     # --- Where investment and depreciation settle ---------------------------

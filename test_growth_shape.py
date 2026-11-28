@@ -411,3 +411,24 @@ class TestTheTerminalReturnAtItsEdges:
         assert d.assumptions.terminal_roic == pytest.approx(
             (roic_now + wacc) / 2)
         assert d.assumptions.terminal_roic < roic_now
+
+    def test_the_floor_outranks_the_cap(self):
+        """The two limits only disagree above a 25% cost of capital, which
+        the build-up cannot reach today - beta is capped at 4.00 and the
+        slider at 20%. The order still has to be right. Capping last would
+        settle the long-run return BELOW the cost of capital, which says the
+        company destroys value by growing, forever: the exact outcome the
+        floor exists to prevent, arrived at through the ceiling."""
+        wacc = TERMINAL_ROIC_CAP + 0.05
+        d = derive_assumptions(steady(0.10, margin=0.70),
+                               overrides={"wacc": wacc})
+        assert d.assumptions.wacc == pytest.approx(wacc), "fixture sanity"
+        assert d.diagnostics["current_roic"] is not None, "fixture sanity"
+
+        assert d.assumptions.terminal_roic == pytest.approx(wacc)
+        assert d.assumptions.terminal_roic >= d.assumptions.wacc, \
+            "growth must never be assumed to destroy value"
+        # Not recorded as clamped: the floor decided this, not the ceiling,
+        # and a reader told it was capped at 25% would be reading a figure
+        # that is 30%.
+        assert d.provenance["terminal_roic"].source == "derived"
