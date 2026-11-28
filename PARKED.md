@@ -195,6 +195,14 @@ that does not - so this has to be set in the Render dashboard before the
 EDGAR fetcher does anything in production. It is deliberately not hard-coded
 in the repo; see `SOURCES.md`.
 
+**A valuation working is not evidence that this is set.** It was once read
+that way - a company valued cleanly in production, therefore the contact
+must be configured - and the inference is empty: nothing in production
+reads `edgar_data` at all, so no amount of successful valuing exercises the
+SEC path. `test_edgar_data.py` asserts that no production module imports
+it. The only thing that would test this variable is the EDGAR fetcher
+running in production, which is exactly what has not happened yet.
+
 ## If the app ever charges, the ECB imposes a second obligation
 
 The ECB permits free use of its reference rates, cited. But: "Where the
