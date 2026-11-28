@@ -718,25 +718,41 @@ def _invested_capital(fin: CompanyFinancials) -> float | None:
 
 
 def _current_roic(fin: CompanyFinancials, tax_rate: float) -> float | None:
-    """Operating profit after tax over invested capital, from the filings.
+    """What the company earns on its capital now, on ONE definition.
 
-    Invested capital is equity plus debt less cash - what the business has
-    been given to work with, excluding the cash it is sitting on. None where
-    the books do not support it: a company with negative invested capital
-    (years of buybacks) or no operating profit has no return to measure, and
-    a made-up one would be worse than the absence.
+    This is `roic.py`'s figure - the same one shown beside the valuation -
+    and it is deliberately no longer a second derivation of the same idea.
+
+    It used to be operating profit after tax over equity plus debt less
+    cash, from the latest year alone. That is the FINANCING basis, which
+    `roic.py` rejects by name and on measurement: buybacks shrink book
+    equity and so flatter the return, and a single year lets one bad year
+    decide a perpetual assumption. Apple read 96.8% on the financing basis
+    against 69.4% on the assets basis; 3M read 33.6% against 16.0%.
+
+    That mattered because the two were on screen together - this figure
+    beside the terminal-return slider, `roic.py`'s in the box above it -
+    both labelled return on capital, disagreeing by tens of points. They
+    now agree because there is only one of them.
+
+    None where no year has usable invested capital, because a made-up
+    figure would be worse than the absence; the caller then falls back to
+    the cost of capital, which says growth creates no value.
+
+    `roic` is imported inside the function because `roic` imports
+    RATIO_WINDOW from this module. The cycle is real, and the local import
+    is what keeps it from biting.
     """
-    if not fin.income or not fin.balance:
-        return None
-    income, balance = fin.income[0], fin.balance[0]
-    ebit = num(income, "operatingIncome")
-    invested = (num(balance, "commonStockEquity")
-                + num(balance, "shortTermDebt") + num(balance, "longTermDebt")
-                - num(balance, "cashAndCashEquivalents")
-                - num(balance, "shortTermInvestments"))
-    if invested <= 0 or ebit <= 0:
-        return None
-    return ebit * (1 - tax_rate) / invested
+    import roic as _roic
+
+    rates = []
+    window = min(RATIO_WINDOW, len(fin.income), len(fin.balance))
+    for i in range(window):
+        capital = _roic.invested_capital(fin.balance[i])
+        if capital <= 0:
+            continue
+        rates.append(_roic.nopat(fin.income[i], tax_rate) / capital)
+    return median(rates) if rates else None
 
 
 def capital_values(fin: CompanyFinancials) -> tuple[float, float]:

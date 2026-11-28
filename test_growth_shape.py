@@ -58,6 +58,12 @@ def make_fin(revenues, *, margin=0.25, ticker="TEST"):
         })
         balance.append({
             "fiscalYear": str(year),
+            # Current assets plus a non-current base. `totalAssets` is what
+            # return on capital is measured against - invested capital is
+            # built from the assets side - so a fixture without it cannot
+            # express a return at all, and every terminal-return test below
+            # would read None rather than the edge it is aiming at.
+            "totalAssets": revenue * 1.20,
             "totalCurrentAssets": revenue * 0.40,
             "totalCurrentLiabilities": revenue * 0.25,
             "cashAndCashEquivalents": revenue * 0.10,
